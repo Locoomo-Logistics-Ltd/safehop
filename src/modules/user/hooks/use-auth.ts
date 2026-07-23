@@ -7,6 +7,7 @@ import { authService } from "@/core/api/services";
 import { QUERY_KEYS, ROUTES } from "@/core/config/constants";
 import { useAuthStore } from "@/store/auth.store";
 import type { OtpChannel } from "@/core/types";
+import { RegisterConsumerPayload } from "@/core/types/auth.types";
 
 /**
  * Auth flow for the User (Consumer) module — matches the real API's
@@ -41,7 +42,7 @@ export function useAuth() {
   //   },
   // });
   const registerMutation = useMutation({
-    mutationFn: (payload: { email: string; firstName: string; lastName: string; password: string; }) =>
+    mutationFn: (payload: RegisterConsumerPayload) =>
       authService.registerConsumer({  ...payload }),
     onSuccess: (session) => {
       setSession(session);
