@@ -2,7 +2,7 @@ import { env } from "@/core/config/env";
 import { httpClient } from "@/core/api/client";
 import { ENDPOINTS } from "@/core/api/endpoints";
 import { ApiError } from "@/core/api/errors";
-import { mockDelay, generateId } from "@/core/mocks/mock-utils";
+
 import type {
   AuthSession,
   ConsumerOnboardingPayload,
@@ -14,9 +14,9 @@ import type {
   RegisterRiderPayload,
   RequestOtpPayload,
   RiderOnboardingPayload,
-  SignUpPayload,
+ 
   User,
-  LoginMockPayload,
+
 } from "@/core/types";
 
 
