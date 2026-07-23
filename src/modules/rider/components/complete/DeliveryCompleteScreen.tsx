@@ -16,7 +16,7 @@ export function DeliveryCompleteScreen() {
 
   // The completed job is now in history — pull it from there.
   const { jobs, isLoading } = useJobHistory();
-  const completedJob = jobs.find((j) => j.id === params.jobId);
+  const completedJob = jobs.find((j: any) => j.id === params.jobId);
 
   return (
     <div className="min-h-screen bg-bg-canvas flex flex-col items-center justify-center px-6 text-center">
