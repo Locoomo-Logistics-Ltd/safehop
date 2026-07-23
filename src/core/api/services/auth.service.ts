@@ -1,4 +1,4 @@
-import { env } from "@/core/config/env";
+
 import { httpClient } from "@/core/api/client";
 import { ENDPOINTS } from "@/core/api/endpoints";
 import { ApiError } from "@/core/api/errors";
@@ -16,7 +16,6 @@ import type {
   RiderOnboardingPayload,
  
   User,
-
 } from "@/core/types";
 
 
@@ -228,4 +227,4 @@ async refreshSession(): Promise<AuthSession> {
 }
 };
 
-export const authService = env.useMockApi ? "" : realAuthService;
+export const authService = realAuthService;

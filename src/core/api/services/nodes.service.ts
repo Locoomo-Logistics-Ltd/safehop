@@ -63,4 +63,4 @@ const realNodesService = {
   },
 };
 
-export const nodesService = env.useMockApi ? mockNodesService : realNodesService;
+export const nodesService = env.useMockApi ? "": realNodesService;

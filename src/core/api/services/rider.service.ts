@@ -261,4 +261,4 @@ const realRiderService = {
   },
 };
 
-export const riderService = env.useMockApi ? mockRiderService : realRiderService;
+export const riderService = env.useMockApi ? "" : realRiderService;
