@@ -1,0 +1,134 @@
+@import "tailwindcss";
+
+/* ============================================================
+   LOCOOMO APP — DESIGN TOKENS
+   Continuity with the marketing site's brand palette, tuned for
+   operational software: calmer surfaces, blue reserved for action
+   and status rather than decoration.
+   ============================================================ */
+
+:root {
+  /* Brand */
+  --brand-blue: #006CDF;
+  --brand-blue-dark: #005CBE;
+  --brand-blue-light: #3D93E0;
+  --brand-navy: #000E2E;
+
+  /* Status colors */
+  --status-success: #16A34A;
+  --status-success-bg: #ECFDF3;
+  --status-warning: #D97706;
+  --status-warning-bg: #FFFAEB;
+  --status-info: #006CDF;
+  --status-info-bg: #EBF4FF;
+  --status-danger: #DC2626;
+  --status-danger-bg: #FEF3F2;
+  --status-neutral: #6B7A99;
+  --status-neutral-bg: #F1F4F9;
+
+  /* Surfaces */
+  --bg-canvas: #F7F9FC;
+  --bg-card: #FFFFFF;
+  --bg-subtle: #EEF3FA;
+  --bg-inset: #F1F5FB;
+
+  /* Text */
+  --text-primary: #0B1530;
+  --text-secondary: #4A5C7D;
+  --text-muted: #8A98B5;
+  --text-on-brand: #FFFFFF;
+
+  /* Borders */
+  --border-default: #E4EAF4;
+  --border-strong: #CBD7EA;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(11, 21, 48, 0.04);
+  --shadow-card: 0 2px 12px rgba(11, 21, 48, 0.06);
+  --shadow-raised: 0 8px 32px rgba(0, 108, 223, 0.14);
+  --shadow-nav: 0 -2px 16px rgba(11, 21, 48, 0.06);
+
+  /* Layout */
+  --app-max-width: 1180px;
+  --bottom-nav-height: 64px;
+  --top-bar-height: 64px;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+@theme inline {
+  --color-brand-blue: var(--brand-blue);
+  --color-brand-blue-dark: var(--brand-blue-dark);
+  --color-brand-blue-light: var(--brand-blue-light);
+  --color-brand-navy: var(--brand-navy);
+
+  --color-status-success: var(--status-success);
+  --color-status-success-bg: var(--status-success-bg);
+  --color-status-warning: var(--status-warning);
+  --color-status-warning-bg: var(--status-warning-bg);
+  --color-status-info: var(--status-info);
+  --color-status-info-bg: var(--status-info-bg);
+  --color-status-danger: var(--status-danger);
+  --color-status-danger-bg: var(--status-danger-bg);
+  --color-status-neutral: var(--status-neutral);
+  --color-status-neutral-bg: var(--status-neutral-bg);
+
+  --color-bg-canvas: var(--bg-canvas);
+  --color-bg-card: var(--bg-card);
+  --color-bg-subtle: var(--bg-subtle);
+  --color-bg-inset: var(--bg-inset);
+
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+  --color-text-on-brand: var(--text-on-brand);
+
+  --color-border-default: var(--border-default);
+  --color-border-strong: var(--border-strong);
+
+  --font-display: "Sora", sans-serif;
+  --font-sans: "DM Sans", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background: var(--bg-canvas);
+  color: var(--text-primary);
+  font-family: "DM Sans", sans-serif;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: "Sora", sans-serif;
+  letter-spacing: -0.02em;
+}
+
+/* Hide scrollbars on horizontally-scrolling chip rows, keep functionality */
+.scrollbar-none {
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+/* Tap feedback for interactive cards (mobile-first) */
+.tap-shrink {
+  transition: transform 0.15s ease;
+}
+.tap-shrink:active {
+  transform: scale(0.97);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
