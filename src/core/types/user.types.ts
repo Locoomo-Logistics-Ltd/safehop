@@ -41,6 +41,7 @@ export interface LoginPayload {
   password: string;
 }
 
+
 // ── Real API-aligned consumer (User) auth flow ──────────────────
 // Matches: POST /auth/consumer/request-otp → register → (optional) onboarding
 
