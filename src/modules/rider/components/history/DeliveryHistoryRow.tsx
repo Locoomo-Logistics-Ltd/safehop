@@ -21,7 +21,7 @@ export function DeliveryHistoryRow({ job }: DeliveryHistoryRowProps) {
   return (
     <div
       className={cn(
-        "flex items-center gap-3 p-3.5 rounded-[12px] bg-bg-card border border-border-default",
+        "flex items-center gap-3 p-3.5 rounded-xl bg-bg-card border border-border-default",
         "border-l-[3px]"
       )}
       style={{ borderLeftColor: config.color }}

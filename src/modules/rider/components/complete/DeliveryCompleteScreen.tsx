@@ -16,7 +16,7 @@ export function DeliveryCompleteScreen() {
 
   // The completed job is now in history — pull it from there.
   const { jobs, isLoading } = useJobHistory();
-  const completedJob = jobs.find((j: any) => j.id === params.jobId);
+  const completedJob = jobs.find((j) => j.id === params.jobId);
 
   return (
     <div className="min-h-screen bg-bg-canvas flex flex-col items-center justify-center px-6 text-center">
@@ -47,7 +47,7 @@ export function DeliveryCompleteScreen() {
       </div>
 
       {!isLoading && completedJob && (
-        <Card padding="md" className="w-full max-w-[360px] text-left mb-6">
+        <Card padding="md" className="w-full max-w-90 text-left mb-6">
           {/* Route dots */}
           <div className="flex items-start gap-3 mb-3">
             <div className="flex flex-col items-center pt-1">
@@ -85,7 +85,7 @@ export function DeliveryCompleteScreen() {
         fullWidth
         size="lg"
         onClick={() => router.push(ROUTES.riderHome)}
-        className="max-w-[360px]"
+        className="max-w-90"
       >
         Back to Dashboard
       </Button>

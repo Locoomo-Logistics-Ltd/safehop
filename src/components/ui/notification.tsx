@@ -1,12 +1,11 @@
 "use client";
 
-
 import { useNotificationStore } from "@/store/notification.store";
 import { CheckCircle, XCircle } from "lucide-react";
 
 export function Notification() {
   const notification = useNotificationStore(
-    (state: any) => state.notification
+    (state) => state.notification
   );
 
   if (!notification) return null;
@@ -18,7 +17,7 @@ export function Notification() {
         top-5
         right-5
         z-50
-        w-[350px]
+        w-87.5
         rounded-xl
         border
         bg-white

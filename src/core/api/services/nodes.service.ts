@@ -1,4 +1,4 @@
-import { env } from "@/core/config/env";
+
 import { httpClient } from "@/core/api/client";
 import { ENDPOINTS } from "@/core/api/endpoints";
 import { ApiError } from "@/core/api/errors";
@@ -63,4 +63,4 @@ const realNodesService = {
   },
 };
 
-export const nodesService = env.useMockApi ? "": realNodesService;
+export const nodesService = realNodesService;

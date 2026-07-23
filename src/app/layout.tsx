@@ -6,15 +6,7 @@ import { ServiceWorkerRegistration } from "./providers/service-worker-registrati
 // Self-hosted font weights — bundled via @fontsource, no runtime
 // network dependency (required for offline PWA + this sandbox's
 // restricted network egress to fonts.googleapis.com).
-import "@fontsource/sora/400.css";
-import "@fontsource/sora/500.css";
-import "@fontsource/sora/600.css";
-import "@fontsource/sora/700.css";
-import "@fontsource/sora/800.css";
-import "@fontsource/dm-sans/400.css";
-import "@fontsource/dm-sans/500.css";
-import "@fontsource/dm-sans/600.css";
-import "@fontsource/dm-sans/700.css";
+
 
 
 import { Notification } from "@/components/ui/notification";
