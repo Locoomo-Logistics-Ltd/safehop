@@ -6,8 +6,10 @@ import Link from "next/link";
 import { Button, Input } from "@/components/ui";
 import { Eye, EyeOff } from "lucide-react";
 import { useAuth } from "@/modules/user/hooks/use-auth";
-import { getErrorMessage } from "@/core/api/errors";
+import { getErrorMessage, getFriendlyError } from "@/core/api/errors";
 import { ROUTES } from "@/core/config/constants";
+import { ErrorAlert } from "@/components/ui/error-alert";
+import { useSearchParams } from "next/navigation";
 
 // type LoginMethod = "password" | "otp";
 // const OTP_LENGTH = 6;
@@ -38,21 +40,7 @@ export function LoginScreen() {
 const [password, setPassword] = useState("");
 const [showPassword, setShowPassword] = useState(false);
 
-  // const handleContinue = () => {
-  //   if (method === "otp") {
-  //     requestLoginOtp(contact);
-  //   }
-    // For password method there's nothing to "send" — login() below
-    // is called directly once both contact + password are entered.
-  // };
 
-  // const handleLogin = () => {
-  //   if (method === "password") {
-  //     login({ password });
-  //   } else {
-  //     login({ code });
-  //   }
-  // };
 
   const handleLogin = () => {
   login({
@@ -61,11 +49,16 @@ const [showPassword, setShowPassword] = useState(false);
   });
 };
 
+
+
+
+
+
   // const showCredentialStep = method === "password" || loginOtpSent;
 
   return (
     <div className="min-h-screen flex flex-col bg-bg-canvas">
-      <div className="flex-1 px-6 py-10 max-w-[420px] w-full mx-auto">
+      <div className="flex-1 px-6 py-10 max-w-105 w-full mx-auto">
         <div className="flex items-center gap-2 mb-1.5">
           <span className="text-[20px]" aria-hidden="true">📍</span>
           <h1 className="font-display text-[22px] font-bold text-text-primary">Log in</h1>
@@ -125,7 +118,7 @@ const [showPassword, setShowPassword] = useState(false);
   <button
     type="button"
     onClick={() => setShowPassword(!showPassword)}
-    className="absolute right-4 top-[42px] text-text-secondary"
+    className="absolute right-4 top-10.5 text-text-secondary"
   >
     {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
   </button>
@@ -166,11 +159,25 @@ const [showPassword, setShowPassword] = useState(false);
               {getErrorMessage(requestLoginOtpError ?? loginError)}
             </p>
           )} */}
-          {loginError && (
+          {/* {loginError && (
   <p className="text-[13px] text-status-danger" role="alert">
     {getErrorMessage(loginError)}
   </p>
-)}
+)} */}
+
+{loginError && (()=>{
+
+const error = getFriendlyError(loginError);
+
+return (
+<ErrorAlert
+ title={error.title}
+ message={error.message}
+ action={error.action}
+/>
+)
+
+})()}
         </div>
 
         {/* {showCredentialStep ? (

@@ -4,10 +4,11 @@ import { useState } from "react";
 import Link from "next/link";
 import { Button, Input, OtpInputBoxes } from "@/components/ui";
 import { useAuth } from "@/modules/user/hooks/use-auth";
-import { getErrorMessage } from "@/core/api/errors";
+import { getErrorMessage, getFriendlyError } from "@/core/api/errors";
 import { ROUTES } from "@/core/config/constants";
 import type { OtpChannel } from "@/core/types";
 import { Eye, EyeOff } from "lucide-react";
+import { ErrorAlert } from "@/components/ui/error-alert";
 
 // const OTP_LENGTH = 6;
 
@@ -38,17 +39,57 @@ const [lastName, setLastName] = useState("");
 const [email, setEmail] = useState("");
 const [password, setPassword] = useState("");
 const [confirmPassword, setConfirmPassword] = useState("");
+const [phone, setPhone] = useState("");
+const [consentAccepted, setConsentAccepted] = useState(false);
 
 const [showPassword, setShowPassword] = useState(false);
 const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  // const handleSendCode = () => {
-  //   requestSignUpOtp({ target: contact, channel });
-  // };
+const formatNigerianPhone = (value: string) => {
+  // Remove everything except digits and +
+  const phone = value.replace(/[^\d+]/g, "");
 
-  // const handleCreateAccount = () => {
-  //   registerConsumer({ fullName, code, password: password || undefined });
-  // };
+  // Already correct
+  if (phone.startsWith("+234")) {
+    return phone;
+  }
+
+  // Starts with 234
+  if (phone.startsWith("234")) {
+    return `+${phone}`;
+  }
+
+  // Starts with 0
+  if (phone.startsWith("0")) {
+    return `+234${phone.slice(1)}`;
+  }
+
+  // Starts with local number (e.g. 817...)
+  if (/^\d{10}$/.test(phone)) {
+    return `+234${phone}`;
+  }
+
+  return phone;
+};
+
+//Password check
+const passwordChecks = {
+  length: password.length >= 12,
+  uppercase: /[A-Z]/.test(password),
+  lowercase: /[a-z]/.test(password),
+  number: /\d/.test(password),
+  special: /[^A-Za-z0-9]/.test(password),
+  match: password === confirmPassword && confirmPassword.length === password.length,
+};
+
+const isPasswordValid =
+  passwordChecks.length &&
+  passwordChecks.uppercase &&
+  passwordChecks.lowercase &&
+  passwordChecks.number &&
+  passwordChecks.special &&
+  passwordChecks.match;
+
   const handleCreateAccount = () => {
   if (password !== confirmPassword) return;
 
@@ -56,7 +97,10 @@ const [showConfirmPassword, setShowConfirmPassword] = useState(false);
     firstName,
     lastName,
     email,
+    phone,
     password,
+    passwordConfirmation: confirmPassword,
+    consentAccepted,
   });
 };
 
@@ -226,6 +270,17 @@ const [showConfirmPassword, setShowConfirmPassword] = useState(false);
       onChange={(e) => setEmail(e.target.value)}
     />
 
+   <Input
+  label="Phone Number"
+  type="tel"
+  inputMode="tel"
+  autoComplete="tel"
+  placeholder="08173456789"
+  value={phone}
+  onChange={(e) => setPhone(e.target.value)}
+  onBlur={() => setPhone(formatNigerianPhone(phone))}
+/>
+
     <div className="relative">
       <Input
         label="Password"
@@ -247,6 +302,9 @@ const [showConfirmPassword, setShowConfirmPassword] = useState(false);
         )}
       </button>
     </div>
+
+    {/* Password error message */}
+  
 
     <div className="relative">
       <Input
@@ -272,30 +330,69 @@ const [showConfirmPassword, setShowConfirmPassword] = useState(false);
       </button>
     </div>
 
-    {confirmPassword && password !== confirmPassword && (
-      <p className="text-[13px] text-status-danger">
-        Passwords do not match
-      </p>
-    )}
+   
+     {password.length > 0 && (
+      <div className="text-[13px] space-y-1 mt-2">
+  <p className={passwordChecks.length ? "text-green-600" : "text-status-danger"}>
+    {passwordChecks.length ? "✓" : "○"} At least 12 characters
+  </p>
 
-    {registerError && (
-      <p className="text-[13px] text-status-danger" role="alert">
-        {getErrorMessage(registerError)}
-      </p>
-    )}
+  <p className={passwordChecks.uppercase ? "text-green-600" : "text-status-danger"}>
+    {passwordChecks.uppercase ? "✓" : "○"} One uppercase letter
+  </p>
+
+  <p className={passwordChecks.lowercase ? "text-green-600" : "text-status-danger"}>
+    {passwordChecks.lowercase ? "✓" : "○"} One lowercase letter
+  </p>
+
+  <p className={passwordChecks.number ? "text-green-600" : "text-status-danger"}>
+    {passwordChecks.number ? "✓" : "○"} One number
+  </p>
+
+  <p className={passwordChecks.special ? "text-green-600" : "text-status-danger"}>
+    {passwordChecks.special ? "✓" : "○"} One special character
+  </p>
+  <p className={passwordChecks.match ? "text-green-600" : "text-status-danger"}>
+    {passwordChecks.match ? "✓" : "○"} Password  match
+  </p>
+</div>
+     )}
+    <label className="flex items-center text-sm gap-3 w-full">
+  <input
+    type="checkbox"
+    checked={consentAccepted}
+    onChange={(e) => setConsentAccepted(e.target.checked)}
+  />
+  <span>I accept the Terms of Service and Privacy Policy</span>
+</label>
+
+    {registerError && (()=>{
+    
+    const error = getFriendlyError(registerError);
+    
+    return (
+    <ErrorAlert
+     title={error.title}
+     message={error.message}
+     action={error.action}
+    />
+    )
+    
+    })()}
   </div>
 
   <Button
     fullWidth
     size="lg"
     className="mt-6"
-    disabled={
-      !firstName.trim() ||
-      !lastName.trim() ||
-      !email.trim() ||
-      password.length < 8 ||
-      password !== confirmPassword
-    }
+   disabled={
+  !firstName.trim() ||
+  !lastName.trim() ||
+  !email.trim() ||
+  !phone.trim() ||
+  !isPasswordValid ||
+  !consentAccepted
+}
     isLoading={isRegistering}
     onClick={handleCreateAccount}
   >

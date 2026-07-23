@@ -7,21 +7,22 @@
 export type UserRole = "user" | "rider" | "vendor" | "admin";
 
 export interface User {
+
   id: string;
   firstName: string;
   lastName: string;
   email: string;
   phone: string;
   role: UserRole;
-  avatarUrl?: string;
+  status?: string;
+  emailVerifiedAt?: string | null;
   createdAt: string;
+  avatarUrl?: string;
+
 }
 
 export interface AuthSession {
   user: User;
-  accessToken: string;
-  refreshToken?: string;
-  expiresAt: number;
 }
 
 /** @deprecated single-shot signup — real API is multi-step, see RequestOtpPayload/RegisterConsumerPayload below. Kept for the mock service. */
@@ -60,12 +61,14 @@ export interface RequestOtpPayload {
 //   password?: string;
 // }
 
-export interface RegisterConsumerPayload {
-  target?: string;
-  email: string;
-  password: string;
+export interface RegisterConsumerPayload { 
   firstName: string;
   lastName: string;
+  email: string;
+  phone: string;
+  password: string;
+  passwordConfirmation: string;
+  consentAccepted: boolean;
 }
 
 // export interface LoginConsumerPayload {
@@ -75,8 +78,7 @@ export interface RegisterConsumerPayload {
 //   code?: string;
 // }
 export interface LoginConsumerPayload {
-  target?: string;
-  email: string;
+ email: string;
   password: string;
 }
 
