@@ -6,7 +6,7 @@ export const ENDPOINTS = {
     consumerRequestOtp: "/auth/consumer/request-otp",
     consumerRegister: "/auth/register",
     consumerRequestLoginOtp: "/auth/consumer/request-login-otp",
-    consumerLogin: "/auth/consumer/login/password",
+    consumerLogin: "/auth/login",
     
 
     // Rider
@@ -19,8 +19,8 @@ export const ENDPOINTS = {
     nodeStaffFirstLoginReset: "/auth/node-staff/first-login-reset",
 
     // Session (shared across all roles)
-    sessionRefresh: "/auth/session/refresh",
-    sessionLogout: "/auth/session/logout",
+    sessionRefresh: "/auth/refresh",
+    sessionLogout: "/auth/logout",
   },
 
   // ── Identity Module (KYC / profile completion, step 3 of signup) ──

@@ -1,12 +1,7 @@
 import { ValidationDetail } from "./types";
 
 
-/**
- * Normalized error shape. Every service throws this, never a raw fetch
- * error or a raw Response — so every component that calls a service can
- * rely on a single, predictable error contract regardless of whether the
- * underlying call hit the mock layer or the real network.
- */
+
 export class ApiError extends Error {
   readonly status: number;
   readonly code: string;

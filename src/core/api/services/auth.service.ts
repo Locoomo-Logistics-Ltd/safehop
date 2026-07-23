@@ -7,9 +7,8 @@ import type {
   AuthSession,
   ConsumerOnboardingPayload,
   FirstLoginResetPayload,
-  LoginConsumerPayload,
   LoginNodeStaffPayload,
-  LoginPayload,
+ LoginConsumerPayload,
   LoginRiderPayload,
   RegisterConsumerPayload,
   RegisterRiderPayload,
@@ -18,6 +17,7 @@ import type {
   SignUpPayload,
   User,
 } from "@/core/types";
+
 
 /**
  * Auth service — covers all three roles' real auth flows:
@@ -43,41 +43,45 @@ const SESSION_STORAGE_KEY = "locoomo_session";
 
 /** Adjust this mapping once you've confirmed the real response shape. */
 function mapSessionResponse(raw: unknown): AuthSession {
-  const data = raw as {
-    user?: Partial<User>;
-    accessToken?: string;
-    access_token?: string;
-    refreshToken?: string;
-    refresh_token?: string;
+  const response = raw as {
+    success?: boolean;
+    data?: Partial<User>;
   };
 
-  const user = data.user;
-  if (!user) {
+
+
+  const user = response.data ?? (raw as Partial<User>);
+
+  if (!user?.id) {
     throw new ApiError({
-      message: "Unexpected response from server — missing user data.",
+      message: "Unexpected response from server; missing user data.",
       code: "MALFORMED_RESPONSE",
     });
   }
 
+
   return {
     user: {
-      id: user.id ?? "",
+      id: user.id,
       firstName: user.firstName ?? "",
       lastName: user.lastName ?? "",
       email: user.email ?? "",
       phone: user.phone ?? "",
       role: user.role ?? "user",
+      status: user.status,
+      emailVerifiedAt: user.emailVerifiedAt,
       createdAt: user.createdAt ?? new Date().toISOString(),
     },
-    accessToken: data.accessToken ?? data.access_token ?? "",
-    refreshToken: data.refreshToken ?? data.refresh_token,
-    expiresAt: Date.now() + 1000 * 60 * 60 * 24, // real expiry should come from the JWT itself
   };
 }
 
 function persistSession(session: AuthSession) {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
+
+  window.localStorage.setItem(
+    SESSION_STORAGE_KEY,
+    JSON.stringify(session)
+  );
 }
 
 function readPersistedSession(): AuthSession | null {
@@ -312,11 +316,10 @@ const realAuthService = {
     return { sent: true };
   },
 
-  async registerConsumer(payload: RegisterConsumerPayload): Promise<AuthSession> {
+  async registerConsumer(payload: RegisterConsumerPayload): Promise<User> {
     const raw = await httpClient.post(ENDPOINTS.auth.consumerRegister, payload, { skipAuth: true });
-    const session = mapSessionResponse(raw);
-    persistSession(session);
-    return session;
+
+    return (raw as { data: User }).data;
   },
 
   async requestConsumerLoginOtp(target: string): Promise<{ sent: true }> {
@@ -324,12 +327,21 @@ const realAuthService = {
     return { sent: true };
   },
 
-  async loginConsumer(payload: LoginConsumerPayload): Promise<AuthSession> {
-    const raw = await httpClient.post(ENDPOINTS.auth.consumerLogin, payload, { skipAuth: true });
-    const session = mapSessionResponse(raw);
-    persistSession(session);
-    return session;
-  },
+ async loginConsumer(payload: LoginConsumerPayload): Promise<AuthSession> {
+  const raw = await httpClient.post(
+    ENDPOINTS.auth.consumerLogin,
+    payload,
+    {
+      skipAuth: true,
+      credentials: "include",
+    }
+  );
+console.log("LOGIN RAW RESPONSE:", raw);
+  const session = mapSessionResponse(raw);
+  persistSession(session);
+
+  return session;
+},
 
   async submitConsumerOnboarding(userId: string, payload: ConsumerOnboardingPayload): Promise<User> {
     return httpClient.post<User>(ENDPOINTS.identity.consumerOnboarding(userId), payload);
@@ -367,12 +379,20 @@ const realAuthService = {
     return session;
   },
 
-  async refreshSession(refreshToken: string): Promise<AuthSession> {
-    const raw = await httpClient.post(ENDPOINTS.auth.sessionRefresh, { refreshToken }, { skipAuth: true });
-    const session = mapSessionResponse(raw);
-    persistSession(session);
-    return session;
-  },
+async refreshSession(): Promise<AuthSession> {
+  const raw = await httpClient.get(
+    ENDPOINTS.auth.sessionRefresh,
+    {
+      credentials: "include",
+    }
+  );
+
+  const session = mapSessionResponse(raw);
+
+  persistSession(session);
+
+  return session;
+},
 
   async getSession(): Promise<AuthSession | null> {
     // The real API has no session-validation endpoint (no /auth/me) —
@@ -381,17 +401,21 @@ const realAuthService = {
     return readPersistedSession();
   },
 
-  async logout(): Promise<void> {
-    const session = readPersistedSession();
-    if (session?.refreshToken) {
-      try {
-        await httpClient.post(ENDPOINTS.auth.sessionLogout, { refreshToken: session.refreshToken });
-      } catch {
-        // Best-effort — clear the local session regardless.
+ async logout(): Promise<void> {
+  try {
+    await httpClient.post(
+      ENDPOINTS.auth.sessionLogout,
+      {},
+      {
+        credentials: "include",
       }
-    }
-    clearPersistedSession();
-  },
+    );
+  } catch {
+    // ignore
+  }
+
+  clearPersistedSession();
+}
 };
 
 export const authService = env.useMockApi ? mockAuthService : realAuthService;

@@ -1,8 +1,4 @@
-/**
- * App-wide constants. Centralizing route paths and query keys here
- * means renaming a route or a cache key never requires a multi-file
- * find-and-replace across components.
- */
+
 
 export const ROUTES = {
   // Auth

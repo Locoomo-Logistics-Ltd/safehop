@@ -6,8 +6,8 @@ import { useRouter } from "next/navigation";
 import { authService } from "@/core/api/services";
 import { QUERY_KEYS, ROUTES } from "@/core/config/constants";
 import { useAuthStore } from "@/store/auth.store";
-import type { OtpChannel } from "@/core/types";
-import { RegisterConsumerPayload } from "@/core/types/auth.types";
+import type { AuthSession, LoginConsumerPayload, OtpChannel, RegisterConsumerPayload, User } from "@/core/types";
+
 
 /**
  * Auth flow for the User (Consumer) module — matches the real API's
@@ -41,13 +41,13 @@ export function useAuth() {
   //     router.push(ROUTES.dashboard);
   //   },
   // });
-  const registerMutation = useMutation({
+  const registerMutation = useMutation<AuthSession, Error, RegisterConsumerPayload>({
     mutationFn: (payload: RegisterConsumerPayload) =>
       authService.registerConsumer({  ...payload }),
     onSuccess: (session) => {
       setSession(session);
       queryClient.setQueryData(QUERY_KEYS.session, session);
-      router.push(ROUTES.dashboard);
+      router.push(ROUTES.login);
     },
   });
 
@@ -60,7 +60,7 @@ export function useAuth() {
   });
 
   const loginMutation = useMutation({
-    mutationFn: (payload: { password: string; email: string }) =>
+    mutationFn: (payload: LoginConsumerPayload) =>
       authService.loginConsumer({ ...payload }),
     onSuccess: (session) => {
       setSession(session);
