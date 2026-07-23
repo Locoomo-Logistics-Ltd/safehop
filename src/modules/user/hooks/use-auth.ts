@@ -7,6 +7,8 @@ import { authService } from "@/core/api/services";
 import { QUERY_KEYS, ROUTES } from "@/core/config/constants";
 import { useAuthStore } from "@/store/auth.store";
 import type { AuthSession, LoginConsumerPayload, OtpChannel, RegisterConsumerPayload, User } from "@/core/types";
+import { useNotificationStore } from "@/store/notification.store";
+import { getErrorMessage } from "@/core/api/errors";
 
 
 /**
@@ -23,6 +25,9 @@ export function useAuth() {
   const queryClient = useQueryClient();
   const setSession = useAuthStore((s) => s.setSession);
   const [target, setTarget] = useState("");
+  const showNotification = useNotificationStore(
+  (state) => state.showNotification
+);
 
   // ── Sign up ──────────────────────────────────────────────────
   const requestSignUpOtpMutation = useMutation({
@@ -47,6 +52,13 @@ export function useAuth() {
     onSuccess: (session) => {
       setSession(session);
       queryClient.setQueryData(QUERY_KEYS.session, session);
+      
+ showNotification({
+  type: "success",
+  title: "Account created 🎉",
+  message:
+    "Your Locoomo account is ready. You can now log in and start sending parcels.",
+});
       router.push(ROUTES.login);
     },
   });
@@ -65,8 +77,24 @@ export function useAuth() {
     onSuccess: (session) => {
       setSession(session);
       queryClient.setQueryData(QUERY_KEYS.session, session);
-      router.push(ROUTES.dashboard);
+      showNotification({
+  type: "success",
+  title: `Welcome back, ${session.user.firstName}! 👋`,
+  message:
+    "You are successfully logged in. Let's get your delivery moving.",
+});
+      router.push(
+ ROUTES.dashboard
+);
+
     },
+    onError: (error) => {
+    showNotification({
+      type: "error",
+      title: "Login failed 🔐",
+      message: getErrorMessage(error),
+    });
+  },
   });
 
   // ── Log out (shared) ─────────────────────────────────────────

@@ -4,10 +4,11 @@ import { useState } from "react";
 import Link from "next/link";
 import { Button, Input, OtpInputBoxes } from "@/components/ui";
 import { useAuth } from "@/modules/user/hooks/use-auth";
-import { getErrorMessage } from "@/core/api/errors";
+import { getErrorMessage, getFriendlyError } from "@/core/api/errors";
 import { ROUTES } from "@/core/config/constants";
 import type { OtpChannel } from "@/core/types";
 import { Eye, EyeOff } from "lucide-react";
+import { ErrorAlert } from "@/components/ui/error-alert";
 
 // const OTP_LENGTH = 6;
 
@@ -365,11 +366,19 @@ const isPasswordValid =
   <span>I accept the Terms of Service and Privacy Policy</span>
 </label>
 
-    {registerError && (
-      <p className="text-[13px] text-status-danger" role="alert">
-        {getErrorMessage(registerError)}
-      </p>
-    )}
+    {registerError && (()=>{
+    
+    const error = getFriendlyError(registerError);
+    
+    return (
+    <ErrorAlert
+     title={error.title}
+     message={error.message}
+     action={error.action}
+    />
+    )
+    
+    })()}
   </div>
 
   <Button
