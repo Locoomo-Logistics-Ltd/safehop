@@ -1,10 +1,10 @@
 import { env } from "@/core/config/env";
 import { httpClient } from "@/core/api/client";
 import { ENDPOINTS } from "@/core/api/endpoints";
-import { ApiError } from "@/core/api/errors";
-import { mockDelay, generateId } from "@/core/mocks/mock-utils";
-import { MOCK_DELIVERIES } from "@/core/mocks/mock-deliveries";
-import { MOCK_NODES } from "@/core/mocks/mock-nodes";
+// import { ApiError } from "@/core/api/errors";
+// import { mockDelay, generateId } from "@/core/mocks/mock-utils";
+// import { MOCK_DELIVERIES } from "@/core/mocks/mock-deliveries";
+// import { MOCK_NODES } from "@/core/mocks/mock-nodes";
 import {
   toApiParcelSize,
   type BookOrderPayload,
@@ -42,13 +42,13 @@ function buildFarePayload(draft: Pick<CreateDeliveryDraft, "originNodeId" | "des
 }
 
 /** Local fallback pricing — used only by the mock service (no server to ask). */
-function mockCalculateQuote(draft: Pick<CreateDeliveryDraft, "method" | "parcel">): DeliveryQuote {
-  const sizeFare: Record<string, number> = { small: 1800, medium: 2500, large: 3500, xl: 5000 };
-  const baseFare = sizeFare[draft.parcel.size] ?? 2500;
-  const expressSurcharge = draft.method === "express" ? 1000 : 0;
-  const insurance = 200;
-  return { baseFare, expressSurcharge, insurance, total: baseFare + expressSurcharge + insurance, currency: "NGN" };
-}
+// function mockCalculateQuote(draft: Pick<CreateDeliveryDraft, "method" | "parcel">): DeliveryQuote {
+//   const sizeFare: Record<string, number> = { small: 1800, medium: 2500, large: 3500, xl: 5000 };
+//   const baseFare = sizeFare[draft.parcel.size] ?? 2500;
+//   const expressSurcharge = draft.method === "express" ? 1000 : 0;
+//   const insurance = 200;
+//   return { baseFare, expressSurcharge, insurance, total: baseFare + expressSurcharge + insurance, currency: "NGN" };
+// }
 
 /** Maps the real calculate-fare response into our DeliveryQuote shape — adjust if the real field names differ. */
 function mapFareResponse(raw: unknown, method: CreateDeliveryDraft["method"]): DeliveryQuote {
@@ -69,90 +69,90 @@ function mapFareResponse(raw: unknown, method: CreateDeliveryDraft["method"]): D
 
 // ── In-memory mock store (persists for the session only) ───────
 
-let mockDeliveryStore: Delivery[] = [...MOCK_DELIVERIES];
+// let mockDeliveryStore: Delivery[] = [...MOCK_DELIVERIES];
 
-const mockDeliveryService = {
-  async list(): Promise<Delivery[]> {
-    await mockDelay();
-    return [...mockDeliveryStore].sort(
-      (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-    );
-  },
+// const mockDeliveryService = {
+//   async list(): Promise<Delivery[]> {
+//     await mockDelay();
+//     return [...mockDeliveryStore].sort(
+//       (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+//     );
+//   },
 
-  async getById(id: string): Promise<Delivery> {
-    await mockDelay(300);
-    const delivery = mockDeliveryStore.find((d) => d.id === id);
-    if (!delivery) {
-      throw new ApiError({ message: "Delivery not found.", status: 404, code: "NOT_FOUND" });
-    }
-    return delivery;
-  },
+//   async getById(id: string): Promise<Delivery> {
+//     await mockDelay(300);
+//     const delivery = mockDeliveryStore.find((d) => d.id === id);
+//     if (!delivery) {
+//       throw new ApiError({ message: "Delivery not found.", status: 404, code: "NOT_FOUND" });
+//     }
+//     return delivery;
+//   },
 
-  async calculateFare(draft: Pick<CreateDeliveryDraft, "method" | "parcel" | "originNodeId" | "destinationAddress">): Promise<DeliveryQuote> {
-    await mockDelay(400);
-    return mockCalculateQuote(draft);
-  },
+//   async calculateFare(draft: Pick<CreateDeliveryDraft, "method" | "parcel" | "originNodeId" | "destinationAddress">): Promise<DeliveryQuote> {
+//     await mockDelay(400);
+//     return mockCalculateQuote(draft);
+//   },
 
-  async create(draft: CreateDeliveryDraft): Promise<Delivery> {
-    await mockDelay();
+//   async create(draft: CreateDeliveryDraft): Promise<Delivery> {
+//     await mockDelay();
 
-    const originNode = MOCK_NODES.find((n) => n.id === draft.originNodeId);
-    if (!originNode) {
-      throw new ApiError({ message: "Please select a pickup node.", status: 400, code: "VALIDATION_ERROR" });
-    }
+//     const originNode = MOCK_NODES.find((n) => n.id === draft.originNodeId);
+//     if (!originNode) {
+//       throw new ApiError({ message: "Please select a pickup node.", status: 400, code: "VALIDATION_ERROR" });
+//     }
 
-    const quote = mockCalculateQuote(draft);
-    const id = generateId("del");
-    const trackingCode = `LCM-2026-${Math.floor(1000 + Math.random() * 9000)}`;
+//     const quote = mockCalculateQuote(draft);
+//     const id = generateId("del");
+//     const trackingCode = `LCM-2026-${Math.floor(1000 + Math.random() * 9000)}`;
 
-    const delivery: Delivery = {
-      id,
-      trackingCode,
-      status: "draft",
-      method: draft.method,
-      receiver: draft.receiver,
-      parcel: draft.parcel,
-      originNode,
-      destinationAddress: draft.destinationAddress,
-      route: { originLabel: originNode.area, destinationLabel: draft.destinationAddress },
-      quote,
-      trackingHistory: [],
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
+//     const delivery: Delivery = {
+//       id,
+//       trackingCode,
+//       status: "draft",
+//       method: draft.method,
+//       receiver: draft.receiver,
+//       parcel: draft.parcel,
+//       originNode,
+//       destinationAddress: draft.destinationAddress,
+//       route: { originLabel: originNode.area, destinationLabel: draft.destinationAddress },
+//       quote,
+//       trackingHistory: [],
+//       createdAt: new Date().toISOString(),
+//       updatedAt: new Date().toISOString(),
+//     };
 
-    mockDeliveryStore = [delivery, ...mockDeliveryStore];
-    return delivery;
-  },
+//     mockDeliveryStore = [delivery, ...mockDeliveryStore];
+//     return delivery;
+//   },
 
-  async pay(id: string, paymentMethod: PaymentMethod): Promise<Delivery> {
-    await mockDelay(900);
-    const index = mockDeliveryStore.findIndex((d) => d.id === id);
-    if (index === -1) {
-      throw new ApiError({ message: "Delivery not found.", status: 404, code: "NOT_FOUND" });
-    }
-    const updated: Delivery = {
-      ...mockDeliveryStore[index],
-      status: "package_dropped",
-      paymentMethod,
-      collectionQrCode: mockDeliveryStore[index].trackingCode,
-      qrNonce: generateId("nonce"),
-      trackingHistory: [
-        {
-          id: generateId("evt"),
-          status: "package_dropped",
-          label: "Package Dropped",
-          description: "Sender dropped off the package at the origin hub.",
-          location: mockDeliveryStore[index].route.originLabel,
-          timestamp: new Date().toISOString(),
-        },
-      ],
-      updatedAt: new Date().toISOString(),
-    };
-    mockDeliveryStore[index] = updated;
-    return updated;
-  },
-};
+//   async pay(id: string, paymentMethod: PaymentMethod): Promise<Delivery> {
+//     await mockDelay(900);
+//     const index = mockDeliveryStore.findIndex((d) => d.id === id);
+//     if (index === -1) {
+//       throw new ApiError({ message: "Delivery not found.", status: 404, code: "NOT_FOUND" });
+//     }
+//     const updated: Delivery = {
+//       ...mockDeliveryStore[index],
+//       status: "package_dropped",
+//       paymentMethod,
+//       collectionQrCode: mockDeliveryStore[index].trackingCode,
+//       qrNonce: generateId("nonce"),
+//       trackingHistory: [
+//         {
+//           id: generateId("evt"),
+//           status: "package_dropped",
+//           label: "Package Dropped",
+//           description: "Sender dropped off the package at the origin hub.",
+//           location: mockDeliveryStore[index].route.originLabel,
+//           timestamp: new Date().toISOString(),
+//         },
+//       ],
+//       updatedAt: new Date().toISOString(),
+//     };
+//     mockDeliveryStore[index] = updated;
+//     return updated;
+//   },
+// };
 
 // ── Real implementation ─────────────────────────────────────────
 
@@ -204,9 +204,9 @@ const realDeliveryService = {
   },
 };
 
-export const deliveryService = env.useMockApi ? mockDeliveryService : realDeliveryService;
+export const deliveryService = env.useMockApi ? "" : realDeliveryService;
 
 /** @deprecated pure client-side math — use `deliveryService.calculateFare()` (now async, hits the real server) instead. Kept only so old imports don't hard-crash; always returns the mock estimate. */
-export function calculateQuote(draft: Pick<CreateDeliveryDraft, "method" | "parcel">): DeliveryQuote {
-  return mockCalculateQuote(draft);
-}
+// export function calculateQuote(draft: Pick<CreateDeliveryDraft, "method" | "parcel">): DeliveryQuote {
+//   return mockCalculateQuote(draft);
+// }

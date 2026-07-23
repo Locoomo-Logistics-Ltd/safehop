@@ -41,123 +41,123 @@ import type {
 
 // ── Mock implementation (unchanged — full offline dev experience) ──
 
-let mockAvailability: RiderAvailability = "online";
-let mockActiveJob: DeliveryJob | null = null;
-let mockJobOfferAvailable = true;
-const mockJobHistory: DeliveryJob[] = [...MOCK_JOB_HISTORY];
+// let mockAvailability: RiderAvailability = "online";
+// let mockActiveJob: DeliveryJob | null = null;
+// let mockJobOfferAvailable = true;
+// const mockJobHistory: DeliveryJob[] = [...MOCK_JOB_HISTORY];
 
-const MOCK_RIDER_SESSION_KEY = "locoomo_mock_rider_session";
+// const MOCK_RIDER_SESSION_KEY = "locoomo_mock_rider_session";
 
-function buildMockRiderSession(phone: string): AuthSession {
-  return {
-    user: {
-      id: generateId("rdr"),
-      firstName: "Emeka",
-      lastName: "Nwosu",
-      email: "emeka.nwosu@rider.locoomo.com",
-      phone,
-      role: "rider",
-      createdAt: new Date().toISOString(),
-    },
-    accessToken: generateId("mock_rider_token"),
-    expiresAt: Date.now() + 1000 * 60 * 60 * 24,
-  };
-}
+// function buildMockRiderSession(phone: string): AuthSession {
+//   return {
+//     user: {
+//       id: generateId("rdr"),
+//       firstName: "Emeka",
+//       lastName: "Nwosu",
+//       email: "emeka.nwosu@rider.locoomo.com",
+//       phone,
+//       role: "rider",
+//       createdAt: new Date().toISOString(),
+//     },
+//     accessToken: generateId("mock_rider_token"),
+//     expiresAt: Date.now() + 1000 * 60 * 60 * 24,
+//   };
+// }
 
-const mockRiderService = {
-  async sendLoginOtp(phone: string): Promise<{ sent: true }> {
-    await mockDelay(500);
-    if (phone.replace(/\D/g, "").length < 10) {
-      throw new ApiError({ message: "Enter a valid mobile number.", status: 400, code: "VALIDATION_ERROR" });
-    }
-    return { sent: true };
-  },
+// const mockRiderService = {
+//   async sendLoginOtp(phone: string): Promise<{ sent: true }> {
+//     await mockDelay(500);
+//     if (phone.replace(/\D/g, "").length < 10) {
+//       throw new ApiError({ message: "Enter a valid mobile number.", status: 400, code: "VALIDATION_ERROR" });
+//     }
+//     return { sent: true };
+//   },
 
-  async verifyLoginOtp(phone: string, otpCode: string): Promise<AuthSession> {
-    await mockDelay(600);
-    if (otpCode.length !== 6) {
-      throw new ApiError({ message: "Enter the 6-digit code sent to your phone.", status: 400, code: "INVALID_OTP" });
-    }
-    const session = buildMockRiderSession(phone);
-    if (typeof window !== "undefined") window.localStorage.setItem(MOCK_RIDER_SESSION_KEY, JSON.stringify(session));
-    return session;
-  },
+//   async verifyLoginOtp(phone: string, otpCode: string): Promise<AuthSession> {
+//     await mockDelay(600);
+//     if (otpCode.length !== 6) {
+//       throw new ApiError({ message: "Enter the 6-digit code sent to your phone.", status: 400, code: "INVALID_OTP" });
+//     }
+//     const session = buildMockRiderSession(phone);
+//     if (typeof window !== "undefined") window.localStorage.setItem(MOCK_RIDER_SESSION_KEY, JSON.stringify(session));
+//     return session;
+//   },
 
-  async getAvailability(): Promise<RiderAvailability> {
-    await mockDelay(200);
-    return mockAvailability;
-  },
+//   async getAvailability(): Promise<RiderAvailability> {
+//     await mockDelay(200);
+//     return mockAvailability;
+//   },
 
-  async setAvailability(status: RiderAvailability): Promise<RiderAvailability> {
-    await mockDelay(300);
-    mockAvailability = status;
-    return mockAvailability;
-  },
+//   async setAvailability(status: RiderAvailability): Promise<RiderAvailability> {
+//     await mockDelay(300);
+//     mockAvailability = status;
+//     return mockAvailability;
+//   },
 
-  async getEarningsSummary(): Promise<RiderEarningsSummary> {
-    await mockDelay();
-    return { todayEarnings: 142.5, todayDeliveries: 12, totalEarnings: 243534, totalDeliveries: 1265, rating: 4.9 };
-  },
+//   async getEarningsSummary(): Promise<RiderEarningsSummary> {
+//     await mockDelay();
+//     return { todayEarnings: 142.5, todayDeliveries: 12, totalEarnings: 243534, totalDeliveries: 1265, rating: 4.9 };
+//   },
 
-  async getCurrentJobOffer(): Promise<DeliveryJob | null> {
-    await mockDelay(400);
-    if (mockActiveJob || !mockJobOfferAvailable) return null;
-    return MOCK_JOB_OFFER;
-  },
+//   async getCurrentJobOffer(): Promise<DeliveryJob | null> {
+//     await mockDelay(400);
+//     if (mockActiveJob || !mockJobOfferAvailable) return null;
+//     return MOCK_JOB_OFFER;
+//   },
 
-  async getActiveJob(): Promise<DeliveryJob | null> {
-    await mockDelay(300);
-    return mockActiveJob;
-  },
+//   async getActiveJob(): Promise<DeliveryJob | null> {
+//     await mockDelay(300);
+//     return mockActiveJob;
+//   },
 
-  async acceptJob(jobId: string): Promise<DeliveryJob> {
-    await mockDelay(400);
-    const offer = jobId === MOCK_JOB_OFFER.id ? MOCK_JOB_OFFER : MOCK_ACTIVE_JOB;
-    mockActiveJob = { ...offer, status: "accepted", acceptedAt: new Date().toISOString() };
-    mockJobOfferAvailable = false;
-    return mockActiveJob;
-  },
+//   async acceptJob(jobId: string): Promise<DeliveryJob> {
+//     await mockDelay(400);
+//     const offer = jobId === MOCK_JOB_OFFER.id ? MOCK_JOB_OFFER : MOCK_ACTIVE_JOB;
+//     mockActiveJob = { ...offer, status: "accepted", acceptedAt: new Date().toISOString() };
+//     mockJobOfferAvailable = false;
+//     return mockActiveJob;
+//   },
 
-  async declineJob(): Promise<{ success: true }> {
-    await mockDelay(300);
-    mockJobOfferAvailable = false;
-    return { success: true };
-  },
+//   async declineJob(): Promise<{ success: true }> {
+//     await mockDelay(300);
+//     mockJobOfferAvailable = false;
+//     return { success: true };
+//   },
 
-  async scanPickup(jobId: string, code: string): Promise<DeliveryJob> {
-    await mockDelay(500);
-    if (!mockActiveJob || mockActiveJob.id !== jobId) throw new ApiError({ message: "No active job found.", status: 404, code: "NOT_FOUND" });
-    if (code.trim().toUpperCase() !== mockActiveJob.pickupQrCode) {
-      throw new ApiError({ message: "This QR code doesn't match the expected parcel for this job.", status: 400, code: "QR_MISMATCH" });
-    }
-    mockActiveJob = { ...mockActiveJob, status: "picked_up", pickedUpAt: new Date().toISOString() };
-    return mockActiveJob;
-  },
+//   async scanPickup(jobId: string, code: string): Promise<DeliveryJob> {
+//     await mockDelay(500);
+//     if (!mockActiveJob || mockActiveJob.id !== jobId) throw new ApiError({ message: "No active job found.", status: 404, code: "NOT_FOUND" });
+//     if (code.trim().toUpperCase() !== mockActiveJob.pickupQrCode) {
+//       throw new ApiError({ message: "This QR code doesn't match the expected parcel for this job.", status: 400, code: "QR_MISMATCH" });
+//     }
+//     mockActiveJob = { ...mockActiveJob, status: "picked_up", pickedUpAt: new Date().toISOString() };
+//     return mockActiveJob;
+//   },
 
-  async scanDropoff(jobId: string): Promise<DeliveryJob> {
-    await mockDelay(500);
-    if (!mockActiveJob || mockActiveJob.id !== jobId) throw new ApiError({ message: "No active job found.", status: 404, code: "NOT_FOUND" });
-    const completedJob: DeliveryJob = { ...mockActiveJob, status: "delivered", deliveredAt: new Date().toISOString() };
-    mockJobHistory.unshift(completedJob);
-    mockActiveJob = null;
-    mockJobOfferAvailable = true;
-    return completedJob;
-  },
+//   async scanDropoff(jobId: string): Promise<DeliveryJob> {
+//     await mockDelay(500);
+//     if (!mockActiveJob || mockActiveJob.id !== jobId) throw new ApiError({ message: "No active job found.", status: 404, code: "NOT_FOUND" });
+//     const completedJob: DeliveryJob = { ...mockActiveJob, status: "delivered", deliveredAt: new Date().toISOString() };
+//     mockJobHistory.unshift(completedJob);
+//     mockActiveJob = null;
+//     mockJobOfferAvailable = true;
+//     return completedJob;
+//   },
 
-  async getJobHistory(): Promise<DeliveryJob[]> {
-    await mockDelay();
-    return [...mockJobHistory].sort((a, b) => new Date(b.deliveredAt ?? b.createdAt).getTime() - new Date(a.deliveredAt ?? a.createdAt).getTime());
-  },
+//   async getJobHistory(): Promise<DeliveryJob[]> {
+//     await mockDelay();
+//     return [...mockJobHistory].sort((a, b) => new Date(b.deliveredAt ?? b.createdAt).getTime() - new Date(a.deliveredAt ?? a.createdAt).getTime());
+//   },
 
-  async getProfileDetails(): Promise<RiderProfileDetails> {
-    await mockDelay(300);
-    return { vehicle: { type: "Honda CG125", plateNumber: "LAG-043-XY", isVerified: true } };
-  },
+//   async getProfileDetails(): Promise<RiderProfileDetails> {
+//     await mockDelay(300);
+//     return { vehicle: { type: "Honda CG125", plateNumber: "LAG-043-XY", isVerified: true } };
+//   },
 
-  async sendTelemetryPing(): Promise<void> {
-    await mockDelay(100);
-  },
-};
+//   async sendTelemetryPing(): Promise<void> {
+//     await mockDelay(100);
+//   },
+// };
 
 // ── Real implementation ─────────────────────────────────────────
 
@@ -261,4 +261,4 @@ const realRiderService = {
   },
 };
 
-export const riderService = env.useMockApi ? mockRiderService : realRiderService;
+export const riderService = env.useMockApi ? "" : realRiderService;
