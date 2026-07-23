@@ -1,15 +1,15 @@
-import { env } from "@/core/config/env";
+
 import { httpClient } from "@/core/api/client";
 import { ENDPOINTS } from "@/core/api/endpoints";
 import { ApiError } from "@/core/api/errors";
-import { mockDelay, generateId } from "@/core/mocks/mock-utils";
+import { generateId } from "@/core/mocks/mock-utils";
 import { MOCK_NODES } from "@/core/mocks/mock-nodes";
-import {
-  MOCK_NODE_PARCELS,
-  MOCK_OCCUPIED_SHELVES,
-  MOCK_SHELF_LOCATIONS,
-} from "@/core/mocks/mock-vendor";
-import { MOCK_ACTIVITY_LOG } from "@/core/mocks/mock-activity";
+// import {
+//   MOCK_NODE_PARCELS,
+//   MOCK_OCCUPIED_SHELVES,
+//   MOCK_SHELF_LOCATIONS,
+// } from "@/core/mocks/mock-vendor";
+// import { MOCK_ACTIVITY_LOG } from "@/core/mocks/mock-activity";
 import { useAuthStore } from "@/store/auth.store";
 import type {
   ActivityLogEntry,
@@ -86,119 +86,119 @@ function currentUserId(): string {
 
 // ── In-memory mock store ────────────────────────────────────────
 
-const mockParcelStore: NodeParcel[] = [...MOCK_NODE_PARCELS];
-let mockActivityStore: ActivityLogEntry[] = [...MOCK_ACTIVITY_LOG];
-const mockOccupiedShelves = new Set(MOCK_OCCUPIED_SHELVES);
+// const mockParcelStore: NodeParcel[] = [...MOCK_NODE_PARCELS];
+// let mockActivityStore: ActivityLogEntry[] = [...MOCK_ACTIVITY_LOG];
+// const mockOccupiedShelves = new Set(MOCK_OCCUPIED_SHELVES);
 
-function buildShelfList(): ShelfLocation[] {
-  const all: ShelfLocation[] = [];
-  for (const id of MOCK_SHELF_LOCATIONS.rackA) all.push({ id, rackLabel: "Rack A", isOccupied: mockOccupiedShelves.has(id) });
-  for (const id of MOCK_SHELF_LOCATIONS.rackB) all.push({ id, rackLabel: "Rack B", isOccupied: mockOccupiedShelves.has(id) });
-  return all;
-}
+// function buildShelfList(): ShelfLocation[] {
+//   const all: ShelfLocation[] = [];
+//   for (const id of MOCK_SHELF_LOCATIONS.rackA) all.push({ id, rackLabel: "Rack A", isOccupied: mockOccupiedShelves.has(id) });
+//   for (const id of MOCK_SHELF_LOCATIONS.rackB) all.push({ id, rackLabel: "Rack B", isOccupied: mockOccupiedShelves.has(id) });
+//   return all;
+// }
 
-const mockVendorService = {
-  async getNodeProfile(): Promise<VendorNodeProfile> {
-    await mockDelay();
-    const baseNode = MOCK_NODES[1];
-    const occupied = mockParcelStore.length;
-    return { ...baseNode, capacity: { total: 50, occupied }, isHighFull: occupied / 50 >= 0.6 };
-  },
+// const mockVendorService = {
+//   async getNodeProfile(): Promise<VendorNodeProfile> {
+//     await mockDelay();
+//     const baseNode = MOCK_NODES[1];
+//     const occupied = mockParcelStore.length;
+//     return { ...baseNode, capacity: { total: 50, occupied }, isHighFull: occupied / 50 >= 0.6 };
+//   },
 
-  async listParcels(): Promise<NodeParcel[]> {
-    await mockDelay();
-    return [...mockParcelStore].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  },
+//   async listParcels(): Promise<NodeParcel[]> {
+//     await mockDelay();
+//     return [...mockParcelStore].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+//   },
 
-  async lookupParcelByCode(code: string): Promise<NodeParcel> {
-    await mockDelay(500);
-    const parcel = mockParcelStore.find((p) => p.trackingCode.toLowerCase() === code.trim().toLowerCase());
-    if (!parcel) throw new ApiError({ message: `No parcel found for code "${code}".`, status: 404, code: "NOT_FOUND" });
-    return parcel;
-  },
+//   async lookupParcelByCode(code: string): Promise<NodeParcel> {
+//     await mockDelay(500);
+//     const parcel = mockParcelStore.find((p) => p.trackingCode.toLowerCase() === code.trim().toLowerCase());
+//     if (!parcel) throw new ApiError({ message: `No parcel found for code "${code}".`, status: 404, code: "NOT_FOUND" });
+//     return parcel;
+//   },
 
-  async checkIn(trackingCodeOrParcelId: string, position?: GeoPoint, qrNonce?: string): Promise<NodeParcel> {
-    void position;
-    void qrNonce;
-    await mockDelay(400);
-    const index = mockParcelStore.findIndex(
-      (p) => p.id === trackingCodeOrParcelId || p.trackingCode.toLowerCase() === trackingCodeOrParcelId.trim().toLowerCase()
-    );
-    if (index === -1) throw new ApiError({ message: `No parcel found for "${trackingCodeOrParcelId}".`, status: 404, code: "NOT_FOUND" });
+//   async checkIn(trackingCodeOrParcelId: string, position?: GeoPoint, qrNonce?: string): Promise<NodeParcel> {
+//     void position;
+//     void qrNonce;
+//     await mockDelay(400);
+//     const index = mockParcelStore.findIndex(
+//       (p) => p.id === trackingCodeOrParcelId || p.trackingCode.toLowerCase() === trackingCodeOrParcelId.trim().toLowerCase()
+//     );
+//     if (index === -1) throw new ApiError({ message: `No parcel found for "${trackingCodeOrParcelId}".`, status: 404, code: "NOT_FOUND" });
 
-    const updated: NodeParcel = { ...mockParcelStore[index], status: "checked_in", checkedInAt: new Date().toISOString() };
-    mockParcelStore[index] = updated;
-    mockActivityStore = [
-      { id: generateId("act"), type: "parcel_checked_in", title: "Parcel Checked In", description: `${updated.trackingCode} scanned and checked in.`, timestamp: new Date().toISOString(), isException: false },
-      ...mockActivityStore,
-    ];
-    return updated;
-  },
+//     const updated: NodeParcel = { ...mockParcelStore[index], status: "checked_in", checkedInAt: new Date().toISOString() };
+//     mockParcelStore[index] = updated;
+//     mockActivityStore = [
+//       { id: generateId("act"), type: "parcel_checked_in", title: "Parcel Checked In", description: `${updated.trackingCode} scanned and checked in.`, timestamp: new Date().toISOString(), isException: false },
+//       ...mockActivityStore,
+//     ];
+//     return updated;
+//   },
 
-  async listShelves(): Promise<ShelfLocation[]> {
-    await mockDelay(200);
-    return buildShelfList();
-  },
+//   async listShelves(): Promise<ShelfLocation[]> {
+//     await mockDelay(200);
+//     return buildShelfList();
+//   },
 
-  async assignShelf(parcelId: string, shelfId: string): Promise<NodeParcel> {
-    await mockDelay(400);
-    const index = mockParcelStore.findIndex((p) => p.id === parcelId);
-    if (index === -1) throw new ApiError({ message: "Parcel not found.", status: 404, code: "NOT_FOUND" });
-    if (mockOccupiedShelves.has(shelfId)) throw new ApiError({ message: "That shelf is already occupied.", status: 409, code: "SHELF_OCCUPIED" });
+//   async assignShelf(parcelId: string, shelfId: string): Promise<NodeParcel> {
+//     await mockDelay(400);
+//     const index = mockParcelStore.findIndex((p) => p.id === parcelId);
+//     if (index === -1) throw new ApiError({ message: "Parcel not found.", status: 404, code: "NOT_FOUND" });
+//     if (mockOccupiedShelves.has(shelfId)) throw new ApiError({ message: "That shelf is already occupied.", status: 409, code: "SHELF_OCCUPIED" });
 
-    mockOccupiedShelves.add(shelfId);
-    const updated: NodeParcel = { ...mockParcelStore[index], status: "ready_for_collection", shelfLocationId: shelfId };
-    mockParcelStore[index] = updated;
-    return updated;
-  },
+//     mockOccupiedShelves.add(shelfId);
+//     const updated: NodeParcel = { ...mockParcelStore[index], status: "ready_for_collection", shelfLocationId: shelfId };
+//     mockParcelStore[index] = updated;
+//     return updated;
+//   },
 
-  async sendReleaseOtp(parcelId: string): Promise<{ sent: true }> {
-    await mockDelay(500);
-    const parcel = mockParcelStore.find((p) => p.id === parcelId);
-    if (!parcel) throw new ApiError({ message: "Parcel not found.", status: 404, code: "NOT_FOUND" });
-    return { sent: true };
-  },
+//   async sendReleaseOtp(parcelId: string): Promise<{ sent: true }> {
+//     await mockDelay(500);
+//     const parcel = mockParcelStore.find((p) => p.id === parcelId);
+//     if (!parcel) throw new ApiError({ message: "Parcel not found.", status: 404, code: "NOT_FOUND" });
+//     return { sent: true };
+//   },
 
-  async releaseParcel(parcelId: string, otpCode: string, position?: GeoPoint, qrNonce?: string): Promise<NodeParcel> {
-    void position;
-    void qrNonce;
-    await mockDelay(600);
-    const index = mockParcelStore.findIndex((p) => p.id === parcelId);
-    if (index === -1) throw new ApiError({ message: "Parcel not found.", status: 404, code: "NOT_FOUND" });
-    if (!otpCode.startsWith("492") || otpCode.length !== 6) {
-      throw new ApiError({ message: "Incorrect code. 2 attempts remaining.", status: 400, code: "INVALID_OTP" });
-    }
-    const updated: NodeParcel = { ...mockParcelStore[index], status: "released" };
-    mockParcelStore[index] = updated;
-    mockActivityStore = [
-      { id: generateId("act"), type: "parcel_released", title: "Parcel Released", description: `${updated.trackingCode} released to ${updated.receiver.name}.`, timestamp: new Date().toISOString(), isException: false },
-      ...mockActivityStore,
-    ];
-    return updated;
-  },
+//   async releaseParcel(parcelId: string, otpCode: string, position?: GeoPoint, qrNonce?: string): Promise<NodeParcel> {
+//     void position;
+//     void qrNonce;
+//     await mockDelay(600);
+//     const index = mockParcelStore.findIndex((p) => p.id === parcelId);
+//     if (index === -1) throw new ApiError({ message: "Parcel not found.", status: 404, code: "NOT_FOUND" });
+//     if (!otpCode.startsWith("492") || otpCode.length !== 6) {
+//       throw new ApiError({ message: "Incorrect code. 2 attempts remaining.", status: 400, code: "INVALID_OTP" });
+//     }
+//     const updated: NodeParcel = { ...mockParcelStore[index], status: "released" };
+//     mockParcelStore[index] = updated;
+//     mockActivityStore = [
+//       { id: generateId("act"), type: "parcel_released", title: "Parcel Released", description: `${updated.trackingCode} released to ${updated.receiver.name}.`, timestamp: new Date().toISOString(), isException: false },
+//       ...mockActivityStore,
+//     ];
+//     return updated;
+//   },
 
-  async flagParcel(payload: FlagParcelPayload): Promise<{ success: true }> {
-    await mockDelay(500);
-    const parcel = mockParcelStore.find((p) => p.id === payload.parcelId);
-    if (!parcel) throw new ApiError({ message: "Parcel not found.", status: 404, code: "NOT_FOUND" });
-    mockActivityStore = [
-      { id: generateId("act"), type: "scan_exception", title: "Issue Flagged", description: `${parcel.trackingCode} flagged: ${payload.reason.replace("_", " ")}.`, timestamp: new Date().toISOString(), isException: true },
-      ...mockActivityStore,
-    ];
-    return { success: true };
-  },
+//   async flagParcel(payload: FlagParcelPayload): Promise<{ success: true }> {
+//     await mockDelay(500);
+//     const parcel = mockParcelStore.find((p) => p.id === payload.parcelId);
+//     if (!parcel) throw new ApiError({ message: "Parcel not found.", status: 404, code: "NOT_FOUND" });
+//     mockActivityStore = [
+//       { id: generateId("act"), type: "scan_exception", title: "Issue Flagged", description: `${parcel.trackingCode} flagged: ${payload.reason.replace("_", " ")}.`, timestamp: new Date().toISOString(), isException: true },
+//       ...mockActivityStore,
+//     ];
+//     return { success: true };
+//   },
 
-  async listActivity(): Promise<ActivityLogEntry[]> {
-    await mockDelay();
-    return [...mockActivityStore].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-  },
+//   async listActivity(): Promise<ActivityLogEntry[]> {
+//     await mockDelay();
+//     return [...mockActivityStore].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+//   },
 
-  async setPin(pin: string): Promise<{ success: true }> {
-    await mockDelay(400);
-    if (pin.length !== 4) throw new ApiError({ message: "PIN must be 4 digits.", status: 400, code: "VALIDATION_ERROR" });
-    return { success: true };
-  },
-};
+//   async setPin(pin: string): Promise<{ success: true }> {
+//     await mockDelay(400);
+//     if (pin.length !== 4) throw new ApiError({ message: "PIN must be 4 digits.", status: 400, code: "VALIDATION_ERROR" });
+//     return { success: true };
+//   },
+// };
 
 // ── Real implementation ─────────────────────────────────────────
 
@@ -309,4 +309,4 @@ const realVendorService = {
   },
 };
 
-export const vendorService = env.useMockApi ? mockVendorService : realVendorService;
+export const vendorService = realVendorService;

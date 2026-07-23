@@ -1,4 +1,4 @@
-import { env } from "@/core/config/env";
+
 import { httpClient } from "@/core/api/client";
 import { ENDPOINTS } from "@/core/api/endpoints";
 // import { ApiError } from "@/core/api/errors";
@@ -204,7 +204,7 @@ const realDeliveryService = {
   },
 };
 
-export const deliveryService = env.useMockApi ? "" : realDeliveryService;
+export const deliveryService = realDeliveryService;
 
 /** @deprecated pure client-side math — use `deliveryService.calculateFare()` (now async, hits the real server) instead. Kept only so old imports don't hard-crash; always returns the mock estimate. */
 // export function calculateQuote(draft: Pick<CreateDeliveryDraft, "method" | "parcel">): DeliveryQuote {

@@ -1,9 +1,8 @@
-import { env } from "@/core/config/env";
+
 import { httpClient } from "@/core/api/client";
 import { ENDPOINTS } from "@/core/api/endpoints";
 import { ApiError } from "@/core/api/errors";
-import { mockDelay, generateId } from "@/core/mocks/mock-utils";
-import { MOCK_JOB_OFFER, MOCK_ACTIVE_JOB, MOCK_JOB_HISTORY } from "@/core/mocks/mock-rider";
+
 import type {
   AuthSession,
   DeliveryJob,
@@ -261,4 +260,4 @@ const realRiderService = {
   },
 };
 
-export const riderService = env.useMockApi ? "" : realRiderService;
+export const riderService = realRiderService;

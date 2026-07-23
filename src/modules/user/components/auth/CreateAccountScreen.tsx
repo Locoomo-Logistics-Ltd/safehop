@@ -2,11 +2,11 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Button, Input, OtpInputBoxes } from "@/components/ui";
+import { Button, Input } from "@/components/ui";
 import { useAuth } from "@/modules/user/hooks/use-auth";
-import { getErrorMessage, getFriendlyError } from "@/core/api/errors";
+import { getFriendlyError } from "@/core/api/errors";
 import { ROUTES } from "@/core/config/constants";
-import type { OtpChannel } from "@/core/types";
+// import type { OtpChannel } from "@/core/types";
 import { Eye, EyeOff } from "lucide-react";
 import { ErrorAlert } from "@/components/ui/error-alert";
 

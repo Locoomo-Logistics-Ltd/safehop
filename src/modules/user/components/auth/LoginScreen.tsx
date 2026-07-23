@@ -6,10 +6,10 @@ import Link from "next/link";
 import { Button, Input } from "@/components/ui";
 import { Eye, EyeOff } from "lucide-react";
 import { useAuth } from "@/modules/user/hooks/use-auth";
-import { getErrorMessage, getFriendlyError } from "@/core/api/errors";
+import { getFriendlyError } from "@/core/api/errors";
 import { ROUTES } from "@/core/config/constants";
 import { ErrorAlert } from "@/components/ui/error-alert";
-import { useSearchParams } from "next/navigation";
+// import { useSearchParams } from "next/navigation";
 
 // type LoginMethod = "password" | "otp";
 // const OTP_LENGTH = 6;

@@ -26,10 +26,10 @@ export const ROLE_OPTIONS: RoleOption[] = [
     description: "Manage a Node/site, facilitate transfers, and build business.",
     emoji: "🏬",
   },
-  {
-    role: "admin",
-    title: "Admin",
-    description: "Manage users, riders and vendors. Control the platform.",
-    emoji: "🛡️",
-  },
+  // {
+  //   role: "admin",
+  //   title: "Admin",
+  //   description: "Manage users, riders and vendors. Control the platform.",
+  //   emoji: "🛡️",
+  // },
 ];
