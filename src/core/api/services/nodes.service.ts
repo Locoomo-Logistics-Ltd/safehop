@@ -2,8 +2,8 @@ import { env } from "@/core/config/env";
 import { httpClient } from "@/core/api/client";
 import { ENDPOINTS } from "@/core/api/endpoints";
 import { ApiError } from "@/core/api/errors";
-import { mockDelay } from "@/core/mocks/mock-utils";
-import { MOCK_NODES } from "@/core/mocks/mock-nodes";
+// import { mockDelay } from "@/core/mocks/mock-utils";
+// import { MOCK_NODES } from "@/core/mocks/mock-nodes";
 import type { GeoPoint, LocoomoNode } from "@/core/types";
 
 /**
@@ -13,27 +13,27 @@ import type { GeoPoint, LocoomoNode } from "@/core/types";
  * useGeolocation), replacing the old client-side haversine sort.
  */
 
-const mockNodesService = {
-  async list(): Promise<LocoomoNode[]> {
-    await mockDelay();
-    return MOCK_NODES;
-  },
+// const mockNodesService = {
+//   async list(): Promise<LocoomoNode[]> {
+//     await mockDelay();
+//     return MOCK_NODES;
+//   },
 
-  async listNearby(position: GeoPoint): Promise<LocoomoNode[]> {
-    void position;
-    await mockDelay();
-    return MOCK_NODES;
-  },
+//   async listNearby(position: GeoPoint): Promise<LocoomoNode[]> {
+//     void position;
+//     await mockDelay();
+//     return MOCK_NODES;
+//   },
 
-  async getById(id: string): Promise<LocoomoNode> {
-    await mockDelay(300);
-    const node = MOCK_NODES.find((n) => n.id === id);
-    if (!node) {
-      throw new ApiError({ message: "Node not found.", status: 404, code: "NOT_FOUND" });
-    }
-    return node;
-  },
-};
+//   async getById(id: string): Promise<LocoomoNode> {
+//     await mockDelay(300);
+//     const node = MOCK_NODES.find((n) => n.id === id);
+//     if (!node) {
+//       throw new ApiError({ message: "Node not found.", status: 404, code: "NOT_FOUND" });
+//     }
+//     return node;
+//   },
+// };
 
 const realNodesService = {
   /** @deprecated no longer meaningful without a reference point — use listNearby(). Kept so old call sites don't break; returns the same as listNearby with a Lagos-centered default. */
