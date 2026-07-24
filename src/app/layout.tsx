@@ -19,9 +19,10 @@ import "./globals.css";
 import { Notification } from "@/components/ui/notification";
 
 export const metadata: Metadata = {
-  title: "Locoomo — Send & Track Parcels",
+  title: "Locoomo | Send & Track Parcels",
   description: "Affordable, reliable parcel delivery across your city.",
   manifest: "/manifest.webmanifest",
+  
   icons: {
     icon: [{ url: "/icons/favicon-32.png", sizes: "32x32", type: "image/png" }],
     apple: [{ url: "/icons/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
