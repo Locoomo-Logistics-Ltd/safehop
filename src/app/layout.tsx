@@ -49,7 +49,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`h-full ${jakarta.variable}`}>
+    <html lang="en" className={`h-full ${jakarta.variable}`} suppressHydrationWarning>
       <body className="min-h-full antialiased">
         <QueryProvider>
           <AuthProvider>{children}</AuthProvider>
