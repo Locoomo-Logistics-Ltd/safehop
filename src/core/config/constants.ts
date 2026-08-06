@@ -5,6 +5,7 @@ export const ROUTES = {
   roleSelect: "/role-select",
   createAccount: "/create-account",
   login: "/login",
+  forgotPassword: "/forgot-password",
 
   // User
   dashboard: "/dashboard",

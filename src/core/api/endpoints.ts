@@ -21,6 +21,9 @@ export const ENDPOINTS = {
     // Session (shared across all roles)
     sessionRefresh: "/auth/refresh",
     sessionLogout: "/auth/logout",
+    passwordResetRequest: "/auth/password-reset/request",
+    passwordResetConfirm: "/auth/password-reset/confirm",
+    verifyEmail: "/auth/verify-email",
   },
 
   // ── Identity Module (KYC / profile completion, step 3 of signup) ──

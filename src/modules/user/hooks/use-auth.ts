@@ -6,21 +6,14 @@ import { useRouter } from "next/navigation";
 import { authService } from "@/core/api/services";
 import { QUERY_KEYS, ROUTES } from "@/core/config/constants";
 import { useAuthStore } from "@/store/auth.store";
-import type { AuthSession, LoginConsumerPayload, OtpChannel, RegisterConsumerPayload} from "@/core/types";
+import type { AuthSession, LoginConsumerPayload, OtpChannel, PasswordResetConfirmPayload, PasswordResetRequestPayload, RegisterConsumerPayload, VerifyEmailPayload} from "@/core/types";
 import { useNotificationStore } from "@/store/notification.store";
 import { getErrorMessage } from "@/core/api/errors";
 
 
-/**
- * Auth flow for the User (Consumer) module — matches the real API's
- * multi-step shape: request-otp → register (verify code + name,
- * password optional) → dashboard. Login mirrors it: request-login-otp
- * → login (password or code).
- *
- * Replaces the old single-shot signup form — the real backend can't
- * create an account without OTP verification first.
- */
+
 export function useAuth() {
+ 
   const router = useRouter();
   const queryClient = useQueryClient();
   const setSession = useAuthStore((s) => s.setSession);
@@ -37,15 +30,7 @@ export function useAuth() {
     },
   });
 
-  // const registerMutation = useMutation({
-  //   mutationFn: (payload: { fullName: string; code: string; password?: string }) =>
-  //     authService.registerConsumer({ target, ...payload }),
-  //   onSuccess: (session) => {
-  //     setSession(session);
-  //     queryClient.setQueryData(QUERY_KEYS.session, session);
-  //     router.push(ROUTES.dashboard);
-  //   },
-  // });
+
   const registerMutation = useMutation<AuthSession, Error, RegisterConsumerPayload>({
     mutationFn: async (payload: RegisterConsumerPayload) => {
       const user = await authService.registerConsumer({ ...payload });
@@ -108,6 +93,21 @@ export function useAuth() {
     },
   });
 
+const requestPasswordResetMutation = useMutation({
+  mutationFn: (payload: PasswordResetRequestPayload) =>
+    authService.requestPasswordReset(payload),
+});
+
+const confirmPasswordResetMutation = useMutation({
+  mutationFn: (payload: PasswordResetConfirmPayload 
+  ) => authService.confirmPasswordReset(payload),
+});
+
+const verifyEmailMutation = useMutation({
+  mutationFn: (payload: VerifyEmailPayload) =>
+    authService.verifyEmail(payload),
+});
+
   return {
     target,
 
@@ -131,5 +131,18 @@ export function useAuth() {
 
     logout: logoutMutation.mutate,
     isLoggingOut: logoutMutation.isPending,
+
+    requestPasswordReset:requestPasswordResetMutation.mutate,
+    isRequestingReset:requestPasswordResetMutation.isPending,
+    requestResetError:requestPasswordResetMutation.error,isResetRequestSuccessful:requestPasswordResetMutation.isSuccess,
+
+    confirmPasswordReset:confirmPasswordResetMutation.mutate,
+    isConfirmingReset:confirmPasswordResetMutation.isPending,
+    confirmResetError:confirmPasswordResetMutation.error,
+    isResetSuccessful:confirmPasswordResetMutation.isSuccess,
+    
+    verifyEmail:verifyEmailMutation.mutate,
+    isVerifyingEmail:verifyEmailMutation.isPending,
+
   };
 }

@@ -16,26 +16,12 @@ import type {
   RiderOnboardingPayload,
  
   User,
+  PasswordResetRequestPayload,
+  PasswordResetConfirmPayload,
+  VerifyEmailPayload,
 } from "@/core/types";
 
 
-/**
- * Auth service — covers all three roles' real auth flows:
- *   Consumer (User): request-otp → register → (optional) onboarding
- *   Rider:           register (password, no OTP) → onboarding (KYC)
- *   Node Staff (Vendor): admin-provisioned → login → first-login-reset
- *
- * Every screen calls these functions, never the network directly. The
- * exported object switches its implementation based on env.useMockApi.
- *
- * NOTE ON RESPONSE SHAPES: the live spec at dev.locoomo.com/api/v1/docs
- * does not document response bodies (no @ApiOkResponse schema on most
- * routes). The real* functions below assume a conventional
- * `{ user, accessToken, refreshToken }` shape — confirm against an
- * actual response once you can call the live API, and adjust the
- * `mapSessionResponse()` helper below if the real shape differs. That
- * one function is the only place a mismatch needs fixing.
- */
 
 const SESSION_STORAGE_KEY = "locoomo_session";
 
@@ -43,14 +29,15 @@ const SESSION_STORAGE_KEY = "locoomo_session";
 
 /** Adjust this mapping once you've confirmed the real response shape. */
 function mapSessionResponse(raw: unknown): AuthSession {
-  const response = raw as {
-    success?: boolean;
-    data?: Partial<User>;
-  };
+  // const response = raw as {
+  //   success?: boolean;
+  //   data?: Partial<User>;
+  // };
 
 
 
-  const user = response.data ?? (raw as Partial<User>);
+  // const user = response.data ?? (raw as Partial<User>);
+  const user = raw as User;
 
   if (!user?.id) {
     throw new ApiError({
@@ -60,18 +47,18 @@ function mapSessionResponse(raw: unknown): AuthSession {
   }
 
 
-  return {
-    user: {
-      id: user.id,
-      firstName: user.firstName ?? "",
-      lastName: user.lastName ?? "",
-      email: user.email ?? "",
-      phone: user.phone ?? "",
-      role: user.role ?? "user",
-      status: user.status,
-      emailVerifiedAt: user.emailVerifiedAt,
-      createdAt: user.createdAt ?? new Date().toISOString(),
-    },
+  return {user
+    // user: {
+    //   id: user.id,
+    //   firstName: user.firstName ?? "",
+    //   lastName: user.lastName ?? "",
+    //   email: user.email ?? "",
+    //   phone: user.phone ?? "",
+    //   role: user.role ?? "user",
+    //   status: user.status,
+    //   emailVerifiedAt: user.emailVerifiedAt,
+    //   createdAt: user.createdAt ?? new Date().toISOString(),
+    // },
   };
 }
 
@@ -125,19 +112,26 @@ const realAuthService = {
     return { sent: true };
   },
 
-  async registerConsumer(payload: RegisterConsumerPayload): Promise<User> {
-    const raw = await httpClient.post(ENDPOINTS.auth.consumerRegister, payload, { skipAuth: true });
 
-    return (raw as { data: User }).data;
-  },
+  async registerConsumer(
+  payload: RegisterConsumerPayload
+): Promise<User> {
+  return httpClient.post<User>(
+    ENDPOINTS.auth.consumerRegister,
+    payload,
+    { skipAuth: true }
+  );
+},
 
   async requestConsumerLoginOtp(target: string): Promise<{ sent: true }> {
     await httpClient.post(ENDPOINTS.auth.consumerRequestLoginOtp, { target }, { skipAuth: true });
     return { sent: true };
   },
 
+
+
  async loginConsumer(payload: LoginConsumerPayload): Promise<AuthSession> {
-  const raw = await httpClient.post(
+  const raw = await httpClient.post<User>(
     ENDPOINTS.auth.consumerLogin,
     payload,
     {
@@ -145,11 +139,47 @@ const realAuthService = {
       credentials: "include",
     }
   );
-console.log("LOGIN RAW RESPONSE:", raw);
+// console.log("LOGIN RAW RESPONSE:", raw);
   const session = mapSessionResponse(raw);
   persistSession(session);
 
   return session;
+},
+
+async requestPasswordReset(
+  payload: PasswordResetRequestPayload
+): Promise<void> {
+  await httpClient.post(
+    ENDPOINTS.auth.passwordResetRequest,
+    payload,
+    {
+      skipAuth: true,
+    }
+  );
+},
+
+async confirmPasswordReset(
+  payload: PasswordResetConfirmPayload
+): Promise<void> {
+  await httpClient.post(
+    ENDPOINTS.auth.passwordResetConfirm,
+    payload,
+    {
+      skipAuth: true,
+    }
+  );
+},
+
+async verifyEmail(
+  payload: VerifyEmailPayload
+): Promise<void> {
+  await httpClient.post(
+    ENDPOINTS.auth.verifyEmail,
+    payload,
+    {
+      skipAuth: true,
+    }
+  );
 },
 
   async submitConsumerOnboarding(userId: string, payload: ConsumerOnboardingPayload): Promise<User> {
@@ -189,8 +219,9 @@ console.log("LOGIN RAW RESPONSE:", raw);
   },
 
 async refreshSession(): Promise<AuthSession> {
-  const raw = await httpClient.get(
+  const raw = await httpClient.post<User>(
     ENDPOINTS.auth.sessionRefresh,
+    undefined,
     {
       credentials: "include",
     }
@@ -211,18 +242,13 @@ async refreshSession(): Promise<AuthSession> {
   },
 
  async logout(): Promise<void> {
-  try {
-    await httpClient.post(
-      ENDPOINTS.auth.sessionLogout,
-      {},
-      {
+ await httpClient.post(
+    ENDPOINTS.auth.sessionLogout,
+    undefined,
+    {
         credentials: "include",
-      }
-    );
-  } catch {
-    // ignore
-  }
-
+    }
+);
   clearPersistedSession();
 }
 };

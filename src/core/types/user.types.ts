@@ -24,6 +24,19 @@ export interface User {
 export interface AuthSession {
   user: User;
 }
+export interface PasswordResetRequestPayload {
+    email: string;
+}
+
+export interface PasswordResetConfirmPayload {
+    token: string;
+    password: string;
+    passwordConfirmation: string;
+}
+
+export interface VerifyEmailPayload {
+    token: string;
+}
 
 /** @deprecated single-shot signup — real API is multi-step, see RequestOtpPayload/RegisterConsumerPayload below. Kept for the mock service. */
 export interface SignUpPayload {
