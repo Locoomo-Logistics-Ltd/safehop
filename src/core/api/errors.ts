@@ -122,6 +122,28 @@ export function getFriendlyError(error: unknown) {
       };
 
 
+    case "INVALID_RESET_TOKEN":
+      return {
+        title: "This reset link expired 🔗",
+        message:
+          "Your password reset link is invalid, expired, or has already been used.",
+        action:
+          "Request a new link and try again.",
+        type: "error",
+      };
+
+
+    case "RATE_LIMITED":
+      return {
+        title: "Slow down a moment ⏳",
+        message:
+          "You've made too many attempts in a short time.",
+        action:
+          "Please wait a little while and try again.",
+        type: "warning",
+      };
+
+
     case "NETWORK_ERROR":
       return {
         title:

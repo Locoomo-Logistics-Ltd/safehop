@@ -10,19 +10,12 @@ import { useAuth } from "../../hooks/use-auth";
 
 
 export function ForgotPasswordScreen() {
-  // Uncomment and adapt this to your actual useAuth hook
-  
-  // const { 
-  //   requestPasswordReset, 
-  //   isRequestingReset, 
-  //   requestResetError,
-  //   isResetRequestSuccessful 
-  // } = useAuth();
+
 
 
   const auth = useAuth();
 
-// console.log("AUTH OBJECT:", auth);
+
 
 const { 
   requestPasswordReset,
@@ -35,9 +28,7 @@ const {
 
   const [email, setEmail] = useState("");
 
-//   const handleRequestReset = () => {
-//     requestPasswordReset({ email });
-// };
+
 
 const handleRequestReset = () => {
   console.log("RESET CLICKED", email);
