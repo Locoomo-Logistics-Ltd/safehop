@@ -4,8 +4,10 @@ import { useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button, Card, EmptyState } from "@/components/ui";
+import { ErrorAlert } from "@/components/ui/error-alert";
 import { TruckIcon, ClockIcon, BriefcaseIcon, ShieldCheckIcon } from "@/components/icons";
 import { formatCurrency } from "@/lib/format";
+import { getFriendlyError } from "@/core/api/errors";
 import { ROUTES } from "@/core/config/constants";
 import { useJobOffer } from "@/modules/rider/hooks/use-job-offer";
 import { useRiderVerification } from "@/modules/rider/hooks/use-rider-verification";
@@ -31,6 +33,7 @@ export function JobOfferScreen() {
   const {
     profile: verification,
     isLoadingProfile: isLoadingVerification,
+    profileError: verificationError,
   } = useRiderVerification();
 
   const handleExpire = useCallback(() => {
@@ -41,6 +44,18 @@ export function JobOfferScreen() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-bg-canvas">
         <div className="w-8 h-8 rounded-full border-2 border-border-default border-t-brand-blue animate-spin" />
+      </div>
+    );
+  }
+
+  // A real fetch failure (network/auth/server) is not the same as
+  // "not yet verified" — show the actual error instead of telling a
+  // Rider whose session just expired that they need to verify again.
+  if (verificationError) {
+    const error = getFriendlyError(verificationError);
+    return (
+      <div className="min-h-screen bg-bg-canvas flex flex-col items-center justify-center px-6">
+        <ErrorAlert title={error.title} message={error.message} action={error.action} />
       </div>
     );
   }

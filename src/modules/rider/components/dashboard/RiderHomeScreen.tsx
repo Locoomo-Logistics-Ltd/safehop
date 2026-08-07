@@ -32,14 +32,18 @@ function getGreeting(): string {
 export function RiderHomeScreen() {
   const user = useCurrentUser();
   const { availability } = useRiderAvailability();
-  const { profile: verification, isLoadingProfile: isLoadingVerification } = useRiderVerification();
+  const { profile: verification, isLoadingProfile: isLoadingVerification, notStarted } = useRiderVerification();
   const [reminderDismissed, setReminderDismissed] = useState(() => {
     if (typeof window === "undefined") return true;
     return window.sessionStorage.getItem(VERIFICATION_REMINDER_DISMISSED_KEY) === "true";
   });
 
-  const isVerified = verification?.status === "active";
-  const showReminder = !isLoadingVerification && !isVerified && !reminderDismissed;
+  // Only nudge when we positively know verification isn't done yet
+  // (never started, or submitted and pending) — not on a real fetch
+  // failure (network/auth/server error), where we simply don't know
+  // the status and shouldn't tell a Rider to re-verify.
+  const needsVerification = notStarted || verification?.status === "pending";
+  const showReminder = !isLoadingVerification && needsVerification && !reminderDismissed;
 
   const dismissReminder = () => {
     if (typeof window !== "undefined") {
