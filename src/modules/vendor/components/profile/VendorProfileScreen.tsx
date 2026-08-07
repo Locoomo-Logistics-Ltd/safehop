@@ -1,8 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { TopBar } from "@/components/layout";
 import { Card, Button } from "@/components/ui";
 import { PhoneIcon, MailIcon, MapPinIcon, ChevronRightIcon } from "@/components/icons";
+import { ROUTES } from "@/core/config/constants";
 import { useCurrentUser } from "@/store/auth.store";
 import { useVendorAuth } from "@/modules/vendor/hooks/use-vendor-auth";
 import { useVendorNode } from "@/modules/vendor/hooks/use-vendor-node";
@@ -49,6 +51,12 @@ export function VendorProfileScreen() {
           <div className="h-px bg-border-default" />
           <Row icon={<PhoneIcon size={17} />} label="Phone" value={user.phone} />
         </Card>
+
+        <Link href={ROUTES.vendorNodeSetup} className="block mt-4">
+          <Card padding="none" className="overflow-hidden" interactive>
+            <Row icon={<MapPinIcon size={17} />} label="Business" value="Node Setup & Approval Status" />
+          </Card>
+        </Link>
 
         <Button
           fullWidth

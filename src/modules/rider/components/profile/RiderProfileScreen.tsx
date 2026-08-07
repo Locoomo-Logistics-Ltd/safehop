@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Card, Button } from "@/components/ui";
 import { TopBar } from "@/components/layout";
 import {
@@ -7,6 +8,7 @@ import {
   PhoneIcon,
   StarIcon,
   ShieldCheckIcon,
+  ClockIcon,
   CreditCardIcon,
   BellRingIcon,
   LockIcon,
@@ -15,9 +17,11 @@ import {
   LogOutIcon,
 } from "@/components/icons";
 import { useCurrentUser } from "@/store/auth.store";
+import { ROUTES } from "@/core/config/constants";
 import { useRiderAuth } from "@/modules/rider/hooks/use-rider-auth";
 import { useRiderEarnings } from "@/modules/rider/hooks/use-rider-earnings";
 import { useRiderProfile } from "@/modules/rider/hooks/use-rider-profile";
+import { useRiderVerification } from "@/modules/rider/hooks/use-rider-verification";
 import { formatCurrency } from "@/lib/format";
 
 const SETTINGS_ITEMS = [
@@ -33,6 +37,7 @@ export function RiderProfileScreen() {
   const { logout, isLoggingOut } = useRiderAuth();
   const { earnings } = useRiderEarnings();
   const { details } = useRiderProfile();
+  const { profile: verification, isLoadingProfile: isLoadingVerification } = useRiderVerification();
 
   if (!user) return null;
 
@@ -119,6 +124,55 @@ export function RiderProfileScreen() {
             </div>
           </div>
         </Card>
+
+        {/* KYC verification status */}
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-text-muted mb-2">
+          Verification
+        </p>
+        <Link href={ROUTES.riderVerification} className="block mb-6">
+          <Card
+            padding="md"
+            interactive
+            className={
+              "flex items-center gap-3 border-l-[3px] " +
+              (verification?.status === "active"
+                ? "border-l-status-success"
+                : "border-l-status-warning")
+            }
+          >
+            <span
+              className={
+                "w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0 " +
+                (verification?.status === "active"
+                  ? "bg-status-success-bg text-status-success"
+                  : "bg-status-warning-bg text-status-warning")
+              }
+            >
+              {verification?.status === "active" ? (
+                <ShieldCheckIcon size={16} />
+              ) : (
+                <ClockIcon size={16} />
+              )}
+            </span>
+            <div className="flex-1 min-w-0">
+              <p className="text-[13px] font-semibold text-text-primary">
+                {isLoadingVerification
+                  ? "Checking status…"
+                  : verification?.status === "active"
+                    ? "Verified"
+                    : verification?.status === "pending"
+                      ? "Under review"
+                      : "Complete your verification"}
+              </p>
+              <p className="text-[12px] text-text-muted truncate">
+                {verification?.status === "active"
+                  ? "You're eligible for job offers."
+                  : "Required before you can accept delivery jobs."}
+              </p>
+            </div>
+            <ChevronRightIcon size={16} className="text-text-muted shrink-0" />
+          </Card>
+        </Link>
 
         {/* Account settings */}
         <p className="text-[11px] font-semibold uppercase tracking-wide text-text-muted mb-2">

@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { authService } from "@/core/api/services";
 import { QUERY_KEYS, ROUTES } from "@/core/config/constants";
 import { useAuthStore } from "@/store/auth.store";
-import type { AuthSession, InviteConfirmPayload, LoginConsumerPayload, OtpChannel, PasswordResetConfirmPayload, PasswordResetRequestPayload, RegisterConsumerPayload, VerifyEmailPayload} from "@/core/types";
+import type { InviteConfirmPayload, LoginConsumerPayload, OtpChannel, PasswordResetConfirmPayload, PasswordResetRequestPayload, RegisterConsumerPayload, User, VerifyEmailPayload} from "@/core/types";
 import { useNotificationStore } from "@/store/notification.store";
 import { getErrorMessage } from "@/core/api/errors";
 
@@ -31,20 +31,17 @@ export function useAuth() {
   });
 
 
-  const registerMutation = useMutation<AuthSession, Error, RegisterConsumerPayload>({
-    mutationFn: async (payload: RegisterConsumerPayload) => {
-      const user = await authService.registerConsumer({ ...payload });
-      return { user } as AuthSession;
-    },
-    onSuccess: (session) => {
-      setSession(session);
-      queryClient.setQueryData(QUERY_KEYS.session, session);
-      
-  showNotification({
-    type: "success",
-    title: "Account created 🎉",
-    message: "Your Locoomo account is ready. Please log in.",
-  });
+  // Per docs/API.md, registration does NOT log the user in — no
+  // session cookies are set. Don't call setSession here; send the
+  // user to login next.
+  const registerMutation = useMutation<User, Error, RegisterConsumerPayload>({
+    mutationFn: (payload: RegisterConsumerPayload) => authService.registerConsumer(payload),
+    onSuccess: () => {
+      showNotification({
+        type: "success",
+        title: "Account created 🎉",
+        message: "Your Locoomo account is ready. Please log in.",
+      });
       router.push(ROUTES.login);
     },
   });
@@ -69,10 +66,20 @@ export function useAuth() {
   message:
     "You are successfully logged in. Let's get your delivery moving.",
 });
-      router.push(
- ROUTES.dashboard
-);
-
+      // POST /auth/login is role-agnostic (docs/API.md) — route each
+      // role to its own post-login destination. NodeOperator lands on
+      // its onboarding/approval-status screen, which itself handles
+      // the pending → active states. Rider lands on Home (not forced
+      // into verification) — RiderHomeScreen nudges an unverified
+      // Rider with a dismissible reminder instead, and JobOfferScreen
+      // blocks the one feature that actually requires approval.
+      const roleRedirect: Record<typeof session.user.role, string> = {
+        consumer: ROUTES.dashboard,
+        rider: ROUTES.riderHome,
+        node_operator: ROUTES.vendorNodeSetup,
+        admin: ROUTES.dashboard,
+      };
+      router.push(roleRedirect[session.user.role] ?? ROUTES.dashboard);
     },
     onError: (error) => {
     showNotification({

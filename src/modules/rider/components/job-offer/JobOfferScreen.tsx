@@ -1,12 +1,14 @@
 "use client";
 
 import { useCallback } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button, Card, EmptyState } from "@/components/ui";
-import { TruckIcon, ClockIcon, BriefcaseIcon } from "@/components/icons";
+import { TruckIcon, ClockIcon, BriefcaseIcon, ShieldCheckIcon } from "@/components/icons";
 import { formatCurrency } from "@/lib/format";
 import { ROUTES } from "@/core/config/constants";
 import { useJobOffer } from "@/modules/rider/hooks/use-job-offer";
+import { useRiderVerification } from "@/modules/rider/hooks/use-rider-verification";
 import { RiderMapPlaceholder } from "@/modules/rider/components/active-job/RiderMapPlaceholder";
 import { JobRouteCard } from "./JobRouteCard";
 import { JobOfferCountdown } from "./JobOfferCountdown";
@@ -16,14 +18,49 @@ import { JobOfferCountdown } from "./JobOfferCountdown";
  * appears when a new job is available. Matches Figma frame 2 exactly:
  * map at top, countdown timer, distance/ETA stats, pickup→dropoff
  * route, accept/decline buttons.
+ *
+ * Jobs is the one Rider feature that actually requires verification
+ * approval — Home/Earnings/Profile stay browsable for an unverified
+ * Rider (see RiderHomeScreen's dismissible reminder), but this screen
+ * blocks outright since accepting a job as an unverified Rider isn't a
+ * real option per the verification/onboarding spec.
  */
 export function JobOfferScreen() {
   const router = useRouter();
   const { offer, isLoading, acceptJob, isAccepting, declineJob, isDeclining } = useJobOffer();
+  const {
+    profile: verification,
+    isLoadingProfile: isLoadingVerification,
+  } = useRiderVerification();
 
   const handleExpire = useCallback(() => {
     declineJob();
   }, [declineJob]);
+
+  if (isLoadingVerification) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-bg-canvas">
+        <div className="w-8 h-8 rounded-full border-2 border-border-default border-t-brand-blue animate-spin" />
+      </div>
+    );
+  }
+
+  if (verification?.status !== "active") {
+    return (
+      <div className="min-h-screen bg-bg-canvas flex flex-col items-center justify-center px-6">
+        <EmptyState
+          icon={<ShieldCheckIcon size={24} />}
+          title="Verification required"
+          description="You need to complete verification before you can view or take any job. It only takes a minute."
+          action={
+            <Link href={ROUTES.riderVerification}>
+              <Button size="md">Complete Verification</Button>
+            </Link>
+          }
+        />
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (

@@ -4,19 +4,14 @@ export const ENDPOINTS = {
   auth: {
     // Consumer (User)
     consumerRequestOtp: "/auth/consumer/request-otp",
+    // Shared self-registration for Consumer, Rider, and NodeOperator —
+    // POST /auth/register, differing only in the `role` field. Real,
+    // confirmed route per docs/API.md.
     consumerRegister: "/auth/register",
     consumerRequestLoginOtp: "/auth/consumer/request-login-otp",
+    // Shared login for every role (Consumer, Rider, NodeOperator,
+    // Admin) — POST /auth/login is role-agnostic per docs/API.md.
     consumerLogin: "/auth/login",
-    
-
-    // Rider
-    riderRegister: "/auth/rider/register",
-    riderLogin: "/auth/rider/login",
-
-    // Node Staff (Vendor)
-    nodeStaffProvision: "/auth/node-staff/provision",
-    nodeStaffLogin: "/auth/node-staff/login",
-    nodeStaffFirstLoginReset: "/auth/node-staff/first-login-reset",
 
     // Session (shared across all roles)
     sessionRefresh: "/auth/refresh",
@@ -28,8 +23,9 @@ export const ENDPOINTS = {
   },
 
   // ── Identity Module (KYC / profile completion, step 3 of signup) ──
+  // riderOnboarding removed — undocumented; real Rider onboarding is
+  // `riders.onboarding` below (POST /riders/onboarding, per API.md).
   identity: {
-    riderOnboarding: (userId: string) => `/identity/rider/${userId}/onboarding`,
     consumerOnboarding: (userId: string) => `/identity/consumer/${userId}/onboarding`,
   },
 
@@ -58,6 +54,15 @@ export const ENDPOINTS = {
     onboard: "/nodes/onboard",
     operatorInventory: "/nodes/operator/inventory",
     updateStatus: (id: string) => `/nodes/${id}/status`,
+  },
+
+  // ── Node Operators (Vendor self-service onboarding) ────────────
+  // Real, confirmed routes per docs/API.md. Requires an authenticated
+  // NodeOperator session. Distinct from `nodes.operatorInventory`
+  // above, which is the already-approved Node's live parcel data.
+  nodeOperators: {
+    onboarding: "/node-operators/onboarding",
+    me: "/node-operators/me",
   },
 
   // ── Admin Nodes / Franchise Network (onboarding, admin-only) ──
@@ -94,6 +99,16 @@ export const ENDPOINTS = {
     manifest: "/riders/manifest",
     scanPickup: "/riders/scan-pickup",
     scanDropoff: "/riders/scan-dropoff",
+  },
+
+  // ── Riders (KYC verification / onboarding) ──────────────────────
+  // Real, confirmed routes per docs/API.md. Requires an authenticated
+  // Rider session. Distinct from `riderOps` above, which is the
+  // already-approved Rider's live job-board/manifest data.
+  riders: {
+    uploadSignature: "/riders/verification/upload-signature",
+    onboarding: "/riders/onboarding",
+    me: "/riders/me",
   },
 
   // ── Payment Webhook Ingestion (backend-to-backend, not used by app) ──

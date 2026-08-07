@@ -78,6 +78,51 @@ export function getFriendlyError(error: unknown) {
       };
 
 
+    case "UNAUTHENTICATED":
+      return {
+        title: "You've been signed out 🔒",
+        message:
+          "Your session has expired or is no longer valid.",
+        action:
+          "Please log in again to continue.",
+        type: "error",
+      };
+
+
+    case "FORBIDDEN":
+      return {
+        title: "You don't have access 🚫",
+        message:
+          "Your account doesn't have permission to do this.",
+        action:
+          "Contact Locoomo support if you think this is a mistake.",
+        type: "error",
+      };
+
+
+    case "ACCOUNT_SUSPENDED":
+      return {
+        title: "Your account is suspended ⛔",
+        message:
+          "Your password was correct, but this account has been suspended.",
+        action:
+          "Contact Locoomo support for help restoring access.",
+        type: "error",
+      };
+
+
+    case "RIDER_ALREADY_ONBOARDED":
+    case "NODE_OPERATOR_ALREADY_ONBOARDED":
+      return {
+        title: "Already submitted ✅",
+        message:
+          "You've already completed this step — it's either awaiting approval or already active.",
+        action:
+          "Check your approval status below.",
+        type: "warning",
+      };
+
+
     case "USER_NOT_FOUND":
       return {
         title: "No account found 👋",
@@ -133,6 +178,17 @@ export function getFriendlyError(error: unknown) {
       };
 
 
+    case "INVALID_VERIFICATION_DOCUMENT":
+      return {
+        title: "That document didn't upload correctly 📄",
+        message:
+          "We couldn't confirm your verification document upload.",
+        action:
+          "Try uploading it again.",
+        type: "error",
+      };
+
+
     case "INVALID_INVITE_TOKEN":
       return {
         title: "This invite link expired 🔗",
@@ -169,6 +225,7 @@ export function getFriendlyError(error: unknown) {
 
     case "SERVER_ERROR":
     case "INTERNAL_SERVER_ERROR":
+    case "INTERNAL_ERROR":
       return {
         title:
           "Locoomo is getting things ready ⚙️",

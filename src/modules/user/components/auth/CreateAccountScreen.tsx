@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { Button, Input } from "@/components/ui";
 import { useAuth } from "@/modules/user/hooks/use-auth";
 import { getFriendlyError } from "@/core/api/errors";
@@ -9,16 +10,50 @@ import { ROUTES } from "@/core/config/constants";
 // import type { OtpChannel } from "@/core/types";
 import { Eye, EyeOff } from "lucide-react";
 import { ErrorAlert } from "@/components/ui/error-alert";
+import type { UserRole } from "@/core/types";
 
 // const OTP_LENGTH = 6;
 
+/** Only these three roles can self-register — Admin is provisioned via POST /users/invite. */
+type RegistrableRole = Extract<UserRole, "consumer" | "node_operator" | "rider">;
+
+const ROLE_COPY: Record<RegistrableRole, { emoji: string; heading: string; subheading: string }> = {
+  consumer: {
+    emoji: "🧑",
+    heading: "Create an account",
+    subheading: "Create your Locoomo account to get started.",
+  },
+  rider: {
+    emoji: "🛵",
+    heading: "Create your Rider account",
+    subheading:
+      "Sign up to start delivering. You'll complete a quick verification step after your first login.",
+  },
+  node_operator: {
+    emoji: "🏬",
+    heading: "Create your Node Operator account",
+    subheading:
+      "Sign up to run a Node. You'll set up your Node's details after your first login.",
+  },
+};
+
+function parseRole(value: string | null): RegistrableRole {
+  return value === "rider" || value === "node_operator" ? value : "consumer";
+}
+
 /**
- * "Create an account" — real API is a 2-step flow: request an OTP to
- * a phone/email, then verify it alongside your name (and an optional
- * password) to actually create the account. Replaces the old
- * single-shot form the mock API allowed.
+ * "Create an account" — shared by Consumer, Rider, and NodeOperator
+ * self-registration. All three hit the same documented
+ * `POST /auth/register` with identical fields, differing only in
+ * `role` (read from `?role=`, set by RoleSelectScreen). Role-specific
+ * steps (Rider KYC document upload, NodeOperator Node setup) happen
+ * post-login, per docs/API.md — see `/rider/verification` and
+ * `/vendor/node-setup`.
  */
 export function CreateAccountScreen() {
+  const searchParams = useSearchParams();
+  const role = parseRole(searchParams.get("role"));
+  const copy = ROLE_COPY[role];
   const {
     // requestSignUpOtp,
     // isRequestingSignUpOtp,
@@ -72,23 +107,16 @@ const formatNigerianPhone = (value: string) => {
   return phone;
 };
 
-//Password check
+// Password rules per docs/API.md: 12–128 chars, no composition rules
+// beyond length — a strength meter checking uppercase/number/symbol
+// would reject valid passwords the backend accepts, so length + match
+// is all we validate client-side.
 const passwordChecks = {
   length: password.length >= 12,
-  uppercase: /[A-Z]/.test(password),
-  lowercase: /[a-z]/.test(password),
-  number: /\d/.test(password),
-  special: /[^A-Za-z0-9]/.test(password),
   match: password === confirmPassword && confirmPassword.length === password.length,
 };
 
-const isPasswordValid =
-  passwordChecks.length &&
-  passwordChecks.uppercase &&
-  passwordChecks.lowercase &&
-  passwordChecks.number &&
-  passwordChecks.special &&
-  passwordChecks.match;
+const isPasswordValid = passwordChecks.length && passwordChecks.match;
 
   const handleCreateAccount = () => {
   if (password !== confirmPassword) return;
@@ -101,6 +129,7 @@ const isPasswordValid =
     password,
     passwordConfirmation: confirmPassword,
     consentAccepted,
+    role,
   });
 };
 
@@ -235,14 +264,14 @@ const isPasswordValid =
 
              <>
   <div className="flex items-center gap-2 mb-1.5">
-    <span className="text-[22px]" aria-hidden="true">🧑</span>
+    <span className="text-[22px]" aria-hidden="true">{copy.emoji}</span>
     <h1 className="font-display text-[22px] font-bold text-text-primary">
-      Create an account
+      {copy.heading}
     </h1>
   </div>
 
   <p className="text-[14px] text-text-secondary mb-7">
-    Create your Locoomo account to get started.
+    {copy.subheading}
   </p>
 
   <div className="flex flex-col gap-4">
@@ -336,24 +365,8 @@ const isPasswordValid =
   <p className={passwordChecks.length ? "text-green-600" : "text-status-danger"}>
     {passwordChecks.length ? "✓" : "○"} At least 12 characters
   </p>
-
-  <p className={passwordChecks.uppercase ? "text-green-600" : "text-status-danger"}>
-    {passwordChecks.uppercase ? "✓" : "○"} One uppercase letter
-  </p>
-
-  <p className={passwordChecks.lowercase ? "text-green-600" : "text-status-danger"}>
-    {passwordChecks.lowercase ? "✓" : "○"} One lowercase letter
-  </p>
-
-  <p className={passwordChecks.number ? "text-green-600" : "text-status-danger"}>
-    {passwordChecks.number ? "✓" : "○"} One number
-  </p>
-
-  <p className={passwordChecks.special ? "text-green-600" : "text-status-danger"}>
-    {passwordChecks.special ? "✓" : "○"} One special character
-  </p>
   <p className={passwordChecks.match ? "text-green-600" : "text-status-danger"}>
-    {passwordChecks.match ? "✓" : "○"} Password  match
+    {passwordChecks.match ? "✓" : "○"} Passwords match
   </p>
 </div>
      )}

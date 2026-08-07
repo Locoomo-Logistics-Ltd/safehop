@@ -15,6 +15,8 @@ import type {
   ActivityLogEntry,
   FlagParcelPayload,
   GeoPoint,
+  NodeOperatorOnboardingPayload,
+  NodeOperatorProfile,
   NodeParcel,
   ScanHandoffPayload,
   ScanCollectionPayload,
@@ -39,6 +41,11 @@ import type {
  *
  * Everything else (inventory, check-in scan, release-to-recipient
  * scan) maps directly to real endpoints.
+ *
+ * `onboardNode` / `getMyNodeOperatorProfile` wire the self-service
+ * Node setup routes (`POST /node-operators/onboarding`,
+ * `GET /node-operators/me`) — real, confirmed per docs/API.md, and
+ * previously unintegrated (see docs/API_INTEGRATION_STATUS.md).
  */
 
 // ── Real API response mapping helpers ───────────────────────────
@@ -302,10 +309,21 @@ const realVendorService = {
   },
 
   async setPin(): Promise<{ success: true }> {
-    // No PIN concept in the real API — Vendor auth is now
-    // email+password + first-login-reset, handled entirely by
-    // authService.loginNodeStaff / firstLoginReset instead.
-    throw new ApiError({ message: "Use authService.firstLoginReset instead.", code: "NOT_IMPLEMENTED" });
+    // No PIN concept in the real API — NodeOperator auth is the same
+    // POST /auth/register (role: "node_operator") + POST /auth/login
+    // every role shares, handled entirely by
+    // authService.registerConsumer / loginConsumer instead.
+    throw new ApiError({ message: "Use authService.registerConsumer / loginConsumer instead.", code: "NOT_IMPLEMENTED" });
+  },
+
+  /** Real, confirmed route — self-service Node setup, the second step of NodeOperator registration. */
+  async onboardNode(payload: NodeOperatorOnboardingPayload): Promise<NodeOperatorProfile> {
+    return httpClient.post<NodeOperatorProfile>(ENDPOINTS.nodeOperators.onboarding, payload);
+  },
+
+  /** Real, confirmed route — the vendor's own profile + Node, including its approval status. */
+  async getMyNodeOperatorProfile(): Promise<NodeOperatorProfile> {
+    return httpClient.get<NodeOperatorProfile>(ENDPOINTS.nodeOperators.me);
   },
 };
 

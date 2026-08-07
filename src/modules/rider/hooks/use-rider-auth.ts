@@ -17,7 +17,7 @@ export function useRiderAuth() {
     onSuccess: () => {
       setSession(null);
       queryClient.setQueryData(QUERY_KEYS.session, null);
-      router.push(ROUTES.riderLogin);
+      router.push(ROUTES.roleSelect);
     },
   });
 

@@ -699,3 +699,398 @@ actually sees (`EmptyState` `description`s, placeholder copy, toasts,
 etc.). When adding a new `NOT_IMPLEMENTED`-backed screen, write its
 empty-state copy as if explaining it to the Admin, not to the next
 engineer.
+
+---
+
+## 2026-08-07 (later still — Vendor Node Setup)
+
+**Feature**: Integrated the two Vendor-facing `Node Operators` routes
+from `docs/API.md` that `docs/API_INTEGRATION_STATUS.md` listed as ❌
+not integrated: `POST /node-operators/onboarding` and
+`GET /node-operators/me`. Scope was deliberately limited to
+Vendor/Node — no Rider, Admin, or Authentication code was touched.
+`GET /node-operators/pending` and `PATCH /node-operators/:id/approve`
+are Admin-only and were left alone, same as the equivalent Rider
+approval-queue routes.
+
+**Files changed**:
+- `src/core/api/endpoints.ts` — added `nodeOperators: { onboarding,
+  me }`.
+- `src/core/types/vendor.types.ts` — added
+  `NodeOperatorOnboardingPayload`, `NodeOperatorNodeStatus`,
+  `NodeOperatorNode`, `NodeOperatorProfile` (the `{profileId, node}`
+  shape shared by both routes' responses per `docs/API.md`).
+- `src/core/api/services/vendor.service.ts` — added `onboardNode`
+  (POST) and `getMyNodeOperatorProfile` (GET); updated the file's
+  header comment to note the addition.
+- `src/core/config/constants.ts` — added `ROUTES.vendorNodeSetup`
+  (`/vendor/node-setup`) and `QUERY_KEYS.vendorNodeOperatorProfile`.
+- `src/modules/vendor/hooks/use-vendor-node-setup.ts` — new. Wraps
+  the profile query (`retry: false`, since a `404 NOT_FOUND` is an
+  expected "not onboarded yet" state, surfaced as `notOnboarded`
+  rather than folded into `profileError`) and the onboarding
+  mutation (writes the response straight into the query cache on
+  success so the screen re-renders into the pending/approved state
+  without a refetch).
+- `src/modules/vendor/components/node-setup/VendorNodeSetupScreen.tsx`
+  + `index.ts` — new. Three real states driven by `GET
+  /node-operators/me`: onboarding form (fields identical to Admin's
+  `OnboardNodeForm` minus `onboardingType`, which the backend forces
+  to `portal`), waiting-for-approval (`node.status: "pending"`), and
+  approved (`node.status: "active"`, links to `/vendor/home`). Plus
+  loading and error states (`getFriendlyError` + the existing
+  `ErrorAlert`).
+- `src/app/(vendor)/vendor/node-setup/page.tsx` — new route, inside
+  the `(vendor)` group so it's covered by the existing `AuthGuard`.
+- `src/modules/vendor/components/profile/VendorProfileScreen.tsx` —
+  added a "Node Setup" row linking to the new screen, so the
+  integration has a real entry point (no screenless integrations).
+
+**Deliberately not done**: the existing Vendor login flow
+(`useVendorLogin`, `/vendor-setup`) still redirects straight to
+`/vendor/home` after login/reset, regardless of Node onboarding/
+approval status — gating that redirect on `GET /node-operators/me`
+would touch Authentication, which was out of this session's scope by
+instruction. `/vendor/node-setup` is reachable (via Vendor Profile)
+but not yet enforced as a required step. Flagged in
+`docs/HANDOFF.md` for whoever owns the Vendor auth flow next.
+
+**Verification performed**: `npx tsc --noEmit` (clean), `npx eslint`
+on every changed/new file (clean), `npm run build` (clean;
+`/vendor/node-setup` appears in the route table at 4.98 kB). Updated
+`docs/API_INTEGRATION_STATUS.md` (Node Operators section, 2 rows
+❌ → ✅) and `docs/HANDOFF.md`. **Not performed**: browser
+verification against a live backend — no live NodeOperator session
+was available this session, same standing caveat as every other real-
+route integration in this log without one.
+
+---
+
+## 2026-08-07 (later still — Rider Verification / KYC onboarding)
+
+**Feature**: Integrated the three Rider-facing routes from
+`docs/API.md` that `docs/API_INTEGRATION_STATUS.md` listed as ❌ not
+integrated: `GET /riders/verification/upload-signature`,
+`POST /riders/onboarding`, `GET /riders/me`. This is the same "Rider
+self-registration + KYC onboarding UI" item that's been sitting on
+`HANDOFF.md`'s standing "Remaining work" list since the first session.
+Scope was deliberately limited to Rider — no Vendor/Node, Admin, or
+Authentication code was touched. `GET /riders/pending` and
+`PATCH /riders/:id/approve` are Admin-only and were left alone, same
+as the equivalent Node Operator approval-queue routes.
+
+**Mid-session correction**: the route/screen was first built as a
+standalone `/rider-onboarding` page outside any route group, with its
+own `AuthGuard(allowedRoles=["rider"])` wrapper — modeled on
+`/vendor-setup`. That was the wrong precedent: `/vendor-setup` is a
+*pre*-login screen (no session exists yet), whereas this flow requires
+an already-authenticated Rider session, same as the Vendor module's
+`/vendor/node-setup` (built earlier this same day by a concurrent
+session working the structurally identical problem: a self-onboarding
+form gated by a `GET .../me` approval-status check). Relocated to
+match that precedent — `/rider/verification` inside the `(rider)`
+route group, relying on the group layout's existing `AuthGuard`
+instead of a redundant custom one — and renamed
+`RiderOnboardingScreen`/`useRiderOnboarding` to
+`RiderVerificationScreen`/`useRiderVerification` to mirror
+`VendorNodeSetupScreen`/`useVendorNodeSetup`'s naming. Also switched
+`riderService.getVerificationProfile()` to let a `404 NOT_FOUND`
+propagate as an `ApiError` (was catching it and returning `null`) so
+the hook could detect "not started yet" via `isApiError` +
+`error.code`, matching `useVendorNodeSetup`'s `notOnboarded` pattern
+exactly rather than inventing a parallel convention.
+
+**Files changed**:
+- `src/core/types/rider.types.ts` — added `RiderVerificationDocumentType`
+  (`"rating_screenshot"`, the one value `API.md` documents),
+  `RiderVerificationStatus` (`"pending" | "active"`),
+  `RiderUploadSignature`, `RiderVerificationDocument`,
+  `RiderVerificationProfile`, `SubmitRiderVerificationPayload`.
+- `src/core/api/endpoints.ts` — added `riders: { uploadSignature,
+  onboarding, me }`, distinct from the existing `riderOps` group
+  (already-approved Rider's live job-board/manifest data) and from
+  `identity.riderOnboarding` (unrelated legacy/unconfirmed Auth-module
+  route, untouched).
+- `src/core/api/services/rider.service.ts` — added
+  `getVerificationUploadSignature`, `uploadVerificationDocument`
+  (direct-to-Cloudinary `fetch`, per `API.md`'s explicit "file bytes
+  never pass through this API" instruction — not routed through
+  `httpClient`, since it's a different origin/content-type entirely),
+  `submitVerification`, `getVerificationProfile`.
+- `src/core/api/errors.ts` — added an `INVALID_VERIFICATION_DOCUMENT`
+  case to `getFriendlyError` (the Rider-onboarding-specific error code
+  from `API.md`'s error table), alongside the existing token-based
+  cases.
+- `src/core/config/constants.ts` — added `ROUTES.riderVerification`
+  (`/rider/verification`) and `QUERY_KEYS.riderVerification`.
+- `src/modules/rider/hooks/use-rider-verification.ts` — new. Wraps the
+  profile query (`retry: false`, `404` surfaced as `notStarted` rather
+  than folded into `profileError`) and the submit mutation (signature
+  → Cloudinary upload → onboarding submit, writes the response
+  straight into the query cache on success).
+- `src/modules/rider/components/verification/RiderVerificationScreen.tsx`
+  + `index.ts` — new. Three real states driven by `GET /riders/me`:
+  verification form (employer + document upload), under-review
+  (`status: "pending"`, shows the uploaded document's signed
+  `viewUrl`), and verified (`status: "active"`, links to Rider
+  Dashboard). Plus loading and error states (`getFriendlyError` + the
+  existing `ErrorAlert`). Modeled directly on `VendorNodeSetupScreen`.
+- `src/app/(rider)/rider/verification/page.tsx` — new route, inside
+  the `(rider)` group so it's covered by the existing `AuthGuard` and
+  gets the standard Rider nav chrome.
+- `src/modules/rider/components/profile/RiderProfileScreen.tsx` —
+  added a "Verification" row (status-aware: checking/verified/under
+  review/needs verification) linking to the new screen, so the
+  integration has a real entry point (no screenless integrations).
+
+**Deliberately not done**: the existing Rider login flow
+(`useRiderLogin`, `/rider-login`) still redirects straight to
+`/rider/home` after login, regardless of verification status —
+gating that redirect on `GET /riders/me` would touch Authentication,
+out of this session's scope by instruction (same call the Vendor
+session made for the analogous `/vendor-setup` → `/vendor/home`
+redirect). `/rider/verification` is reachable (via Rider Profile) but
+not yet enforced as a required step before the job board. Flagged in
+`docs/HANDOFF.md` for whoever owns the Rider auth flow next.
+
+**Verification performed**: `npx tsc --noEmit` (clean after clearing a
+stale `.next/types` cache left over from the mid-session route move),
+`npx eslint` on every changed/new file (clean), `npm run build`
+(clean; `/rider/verification` appears in the route table at 5.18 kB,
+old `/rider-onboarding` confirmed gone). Dev-server smoke test:
+`curl`'d `/rider/verification` and confirmed a `200` with the expected
+`AuthGuard` loading-spinner markup (no session in this environment, so
+the form/pending/verified states themselves weren't rendered).
+**Not performed**: browser verification against a live backend — no
+live Rider session was available this session, same standing caveat as
+every other real-route integration in this log without one.
+
+---
+
+## 2026-08-07 (Rider + NodeOperator Authentication rewrite)
+
+**Feature**: Replaced the Rider and NodeOperator (Vendor) auth flows —
+which called five undocumented routes never confirmed against
+`docs/API.md` (`/auth/rider/register`, `/auth/rider/login`,
+`/auth/node-staff/provision`, `/auth/node-staff/login`,
+`/auth/node-staff/first-login-reset`) — with the real, documented,
+role-agnostic `POST /auth/register` / `POST /auth/login` every role
+shares. Scope was strictly Rider + NodeOperator auth/onboarding per
+instruction; Consumer auth, Admin auth/approval, and the already-real
+onboarding endpoints (`/riders/onboarding`, `/node-operators/onboarding`,
+built in prior sessions) were left alone except where role-based
+redirect logic needed to reach them.
+
+**Root cause of the drift**: `core/types/user.types.ts`'s `UserRole`
+was `"user" | "rider" | "vendor" | "admin"` — two of those four values
+(`"user"`, `"vendor"`) never matched the real backend's actual enum
+(`"consumer" | "node_operator" | "rider" | "admin"`, confirmed against
+`docs/API.md`'s `POST /auth/register` request body). That mismatch is
+almost certainly *why* Rider/Vendor auth was built against invented
+routes in the first place — with no correct `role` value to send, a
+previous session had no way to use the real, shared `/auth/register`
+for those two roles and built dedicated (fictional) endpoints instead.
+
+**Files changed**:
+- `src/core/types/user.types.ts` — `UserRole` corrected to
+  `"consumer" | "node_operator" | "rider" | "admin"` (the real
+  backend enum). Added optional `role` to `RegisterConsumerPayload`
+  (now genuinely shared by all three self-registerable roles, not
+  Consumer-only — kept the name to avoid an unnecessary rename ripple
+  through `auth.service.ts`/`use-auth.ts`). Removed
+  `RegisterRiderPayload`, `LoginRiderPayload`, `RiderOnboardingPayload`,
+  `LoginNodeStaffPayload`, `FirstLoginResetPayload` — all modeled
+  undocumented routes with no real backend equivalent.
+- `src/core/api/endpoints.ts` — removed `auth.riderRegister`,
+  `auth.riderLogin`, `auth.nodeStaffProvision`, `auth.nodeStaffLogin`,
+  `auth.nodeStaffFirstLoginReset`, and `identity.riderOnboarding`
+  (undocumented `/identity/rider/:userId/onboarding` — real Rider
+  onboarding is `riders.onboarding`, i.e. `POST /riders/onboarding`,
+  already wired in the prior Rider-scoped session). `identity.consumerOnboarding`
+  is untouched (Consumer-scoped, out of this session's remit).
+- `src/core/api/services/auth.service.ts` — removed `registerRider`,
+  `loginRider`, `submitRiderOnboarding`, `loginNodeStaff`,
+  `firstLoginReset` (all undocumented). Fixed `registerConsumer`'s
+  mutation caller to stop treating registration as a login (see bug
+  below) — the method itself was already correctly `POST /auth/register`.
+- `src/modules/user/hooks/use-auth.ts` — **bug fix**: `registerMutation`
+  previously called `setSession()`/`queryClient.setQueryData()` on a
+  successful registration, as if the register response carried a
+  session. Per `docs/API.md`: *"Registration does **not** log the user
+  in — no session cookies are set."* The old code was fabricating a
+  client-side session with no matching server-side cookie — any
+  subsequent authenticated call would silently 401 while the UI
+  believed it was logged in. Now only shows the success toast and
+  routes to `/login`, matching the documented contract. Also: `loginMutation`
+  now redirects by `session.user.role` (`consumer` → `/dashboard`,
+  `rider` → `/rider/verification`, `node_operator` → `/vendor/node-setup`,
+  `admin` → `/dashboard` as a safe fallback — Admin normally logs in via
+  the separate `/admin-login` → `loginAdmin`, not this path) instead of
+  hardcoding `/dashboard` for every role.
+- `src/modules/user/components/auth/CreateAccountScreen.tsx` — now
+  reads `?role=` (via `useSearchParams`, already wrapped in `<Suspense>`
+  by `app/create-account/page.tsx`) and passes it through to
+  `registerConsumer()`. Same fields for all three roles (matches
+  `docs/API.md` — registration has no per-role fields; the two roles'
+  actual differentiation happens post-login in their onboarding step),
+  just role-specific heading/subheading copy. **Also fixed**: removed
+  the client-side password strength meter (required uppercase +
+  lowercase + number + special character) that directly contradicted
+  `docs/API.md`'s explicit instruction — *"No composition rules beyond
+  length... don't build a strength meter... it'd reject valid passwords
+  this API accepts"* — replaced with the length-only check (≥12 chars)
+  `ResetPasswordScreen` already used correctly. This was flagged as
+  priority-4 in `docs/API_INTEGRATION_STATUS.md` before this session;
+  fixing it here because this screen now also gates Rider/NodeOperator
+  registration, so the bug's blast radius grew to include this
+  session's scope.
+- `src/modules/user/components/auth/RoleSelectScreen.tsx` — Rider and
+  NodeOperator options now push to `/create-account?role=rider` /
+  `/create-account?role=node_operator` instead of the retired
+  `/rider-login` and `/vendor-setup` routes.
+- `src/modules/user/constants/roles.ts` — `ROLE_OPTIONS` role values
+  corrected to the real enum (`"consumer"`, `"node_operator"`); the
+  Vendor option's label changed from "Vendor" to "Node Operator" to
+  match the role it now actually submits.
+- **Deleted** (undocumented-flow dead code, no longer reachable from
+  anywhere): `src/app/rider-login/`, `src/app/vendor-setup/`,
+  `src/modules/rider/components/auth/` (`RiderLoginScreen.tsx` +
+  barrel), `src/modules/rider/hooks/use-rider-login.ts`,
+  `src/modules/vendor/components/setup/` (`VendorSetupScreen.tsx`),
+  `src/modules/vendor/hooks/use-vendor-login.ts`.
+- `src/modules/rider/hooks/use-rider-auth.ts` — logout now redirects
+  to `/role-select` (was `/rider-login`, which no longer exists) —
+  matches the pattern `useVendorAuth`/`useAuth` (Consumer) already used.
+- `src/core/config/constants.ts` — removed the now-dead `ROUTES.riderLogin`
+  and `ROUTES.vendorSetup` entries.
+- `src/app/(rider)/layout.tsx`, `src/app/(vendor)/layout.tsx` — added
+  `allowedRoles={["rider"]}` / `allowedRoles={["node_operator"]}` to
+  `AuthGuard` (previously unrestricted — any authenticated session
+  could reach either shell). Same pattern `(admin)/layout.tsx` already
+  used. This only became meaningful once `UserRole` was corrected —
+  before the fix, a real `node_operator` session's role would never
+  have matched the (wrong) `"vendor"` check anyway.
+- `src/core/api/errors.ts` — `getFriendlyError` was missing cases for
+  three real `docs/API.md` error codes that now surface directly in
+  this session's flows: `ACCOUNT_SUSPENDED` (login), `RIDER_ALREADY_ONBOARDED`
+  / `NODE_OPERATOR_ALREADY_ONBOARDED` (onboarding resubmission), and
+  `INTERNAL_ERROR` (the real 500 code — the switch only had the
+  never-actually-returned `INTERNAL_SERVER_ERROR`/`SERVER_ERROR`
+  spellings). All three previously fell through to the generic "We hit
+  a small delay" default.
+- `src/core/api/services/rider.service.ts`, `vendor.service.ts` —
+  updated stale comments/error messages that referenced the now-removed
+  `authService.loginRider`/`loginNodeStaff`/`firstLoginReset`.
+
+**Not changed** (deliberately out of scope): Consumer registration/login
+mechanics beyond the shared bug fixes above; Admin login/approval
+flow; the already-correct post-login onboarding endpoints themselves
+(`GET/POST /riders/*`, `GET/POST /node-operators/*` — built and
+verified correct in prior sessions, only their entry point changed);
+`(user)/layout.tsx` was left without `allowedRoles` (adding Consumer
+route-gating is Consumer-scoped, not this session's remit).
+
+**Verification performed**: `npx tsc --noEmit` (clean, after clearing
+a stale `.next/types` cache referencing the deleted `/rider-login` and
+`/vendor-setup` routes), `npx eslint src` (clean), `npm run build`
+(clean — `/rider-login` and `/vendor-setup` confirmed gone from the
+route table, `/create-account` unchanged in size class). Dev-server
+smoke test: confirmed `/rider-login` and `/vendor-setup` now 404,
+`/role-select`/`/create-account`/`/create-account?role=rider`/
+`/create-account?role=node_operator`/`/login` all 200, and that each
+`?role=` variant renders its distinct heading server-side (`curl`'d
+and grepped for "Create your Rider account" / "Create your Node
+Operator account" / "Create an account").
+**Not performed**: end-to-end verification against a live backend (no
+real account was registered/logged in) — the registration → login →
+role-based redirect → onboarding-screen round trip is built strictly
+from `docs/API.md`'s documented contract, same standing caveat as
+every other real-route integration in this log without a live
+session to test against.
+
+---
+
+## 2026-08-07 (later still — Rider Verification gating pass)
+
+**Feature**: A previous session had already built `/rider/verification`
+end-to-end (upload-signature → direct-to-Cloudinary upload →
+`POST /riders/onboarding` → `GET /riders/me`, three-state screen —
+form/pending/active) and pointed the post-login redirect straight at
+it. This session was scoped to close the one real gap left in that
+work per the project owner's direction: **nothing actually enforced
+"a Rider can't access Rider features until verified"** beyond the
+one-time post-login redirect — a Rider could navigate to `/rider/home`
+or `/rider/jobs` directly by URL regardless of `GET /riders/me`'s
+`data.status`. Read `docs/API.md`, `docs/ARCHITECTURE.md`,
+`docs/PROJECT_CONTEXT.md`, `docs/API_INTEGRATION_STATUS.md`, and
+`docs/HANDOFF.md` before touching anything, per instructions. Auth
+itself (register/login/session/cookies), Node/Vendor, and Admin
+approval were explicitly out of scope and untouched.
+
+**Product direction confirmed with the project owner before
+implementing**: don't hard-block the whole Rider surface behind
+verification — Home, Earnings, and Profile should stay freely
+browsable for an unverified Rider so the app "feels usable" on first
+login, with a dismissible reminder nudging them to verify. **Jobs is
+the one screen that actually requires approval** (accepting a job as
+an unverified Rider isn't a real option) and blocks outright with a
+message + a link back to verification. This is a deliberate departure
+from a blanket route-group gate.
+
+**Files changed**:
+- `src/modules/user/hooks/use-auth.ts` — Rider's post-login redirect
+  changed from `ROUTES.riderVerification` to `ROUTES.riderHome`
+  (Consumer/NodeOperator/Admin redirects unchanged).
+- `src/modules/rider/components/dashboard/RiderHomeScreen.tsx` — reads
+  `GET /riders/me` via `useRiderVerification()`; shows a dismissible
+  `VerificationReminderSheet` when `data.status !== "active"`.
+  Dismissal is written to `sessionStorage` (key
+  `locoomo_rider_verification_reminder_dismissed`) so "Maybe Later"
+  doesn't re-nag on every visit within the same browser tab session,
+  but reappears on a fresh one.
+- `src/modules/rider/components/job-offer/JobOfferScreen.tsx` — now
+  checks `useRiderVerification()` before rendering job-board content;
+  anything other than `data.status === "active"` (not started, or
+  `pending`) renders an `EmptyState` — "Verification required" — with
+  a button linking to `/rider/verification`, instead of the job offer
+  UI.
+- `src/modules/rider/components/verification/VerificationReminderSheet.tsx`
+  (new) — bottom-sheet component for the Home reminder, modeled on the
+  existing `ManualCodeEntrySheet` overlay pattern (`fixed inset-0`
+  backdrop + `rounded-t-[24px]` sheet). Exported via
+  `src/modules/rider/components/verification/index.ts`.
+- `src/core/api/errors.ts` — added `getFriendlyError` cases for
+  `UNAUTHENTICATED` and `FORBIDDEN` (previously fell through to the
+  generic default message) — both explicitly called out as errors the
+  verification submission flow must handle.
+
+**Files reviewed, unchanged** (confirmed already correct against
+`docs/API.md`, no edit needed): `rider.service.ts`
+(`getVerificationUploadSignature` / `uploadVerificationDocument` /
+`submitVerification` / `getVerificationProfile`),
+`use-rider-verification.ts`, `RiderVerificationScreen.tsx`,
+`rider.types.ts`, `endpoints.ts`'s `riders.*` block,
+`(rider)/layout.tsx`'s `AuthGuard allowedRoles={["rider"]}`,
+`RiderProfileScreen.tsx`'s verification status row.
+
+**Verification performed**: `npx tsc --noEmit` (clean), `npx eslint
+src/modules/rider src/modules/user/hooks/use-auth.ts
+src/core/api/errors.ts` (clean, after fixing a `react-hooks/set-state-in-effect`
+violation by moving the `sessionStorage` read into `useState`'s lazy
+initializer instead of an effect), `npm run build` (clean after
+clearing a stale `.next` cache — `/rider/home`, `/rider/jobs`,
+`/rider/verification`, `/rider/profile` all present in the route
+table). Dev-server `curl` smoke test: `/`, `/rider/home`,
+`/rider/jobs`, `/rider/verification`, `/rider/profile`, `/login` all
+return `200`.
+
+**Not performed**: interactive browser verification of the actual
+gating behavior (reminder sheet dismiss/reappear, Jobs block →
+"Complete Verification" → verification screen → submit → pending →
+admin-approves → Jobs unblocks) — no live Rider account/session was
+available this session, same standing caveat as every other real-route
+integration in this log without a live backend session to test
+against. The `curl` smoke test above only confirms the routes compile
+and render (client-side `AuthGuard` blanks them without a session
+cookie) — it does not exercise the verification-status branches
+themselves.

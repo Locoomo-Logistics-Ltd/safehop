@@ -9,7 +9,7 @@ export interface RoleOption {
 
 export const ROLE_OPTIONS: RoleOption[] = [
   {
-    role: "user",
+    role: "consumer",
     title: "User",
     description: "Send and receive parcels securely across the network.",
     emoji: "🧑",
@@ -21,8 +21,8 @@ export const ROLE_OPTIONS: RoleOption[] = [
     emoji: "🛵",
   },
   {
-    role: "vendor",
-    title: "Vendor",
+    role: "node_operator",
+    title: "Node Operator",
     description: "Manage a Node/site, facilitate transfers, and build business.",
     emoji: "🏬",
   },

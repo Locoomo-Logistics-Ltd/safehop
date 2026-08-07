@@ -6,16 +6,10 @@ import { ApiError } from "@/core/api/errors";
 import type {
   AuthSession,
   ConsumerOnboardingPayload,
-  FirstLoginResetPayload,
   LoginAdminPayload,
-  LoginNodeStaffPayload,
- LoginConsumerPayload,
-  LoginRiderPayload,
+  LoginConsumerPayload,
   RegisterConsumerPayload,
-  RegisterRiderPayload,
   RequestOtpPayload,
-  RiderOnboardingPayload,
- 
   User,
   PasswordResetRequestPayload,
   PasswordResetConfirmPayload,
@@ -115,6 +109,13 @@ const realAuthService = {
   },
 
 
+  /**
+   * Self-registration for Consumer, Rider, or NodeOperator — one
+   * shared route (`POST /auth/register`), differing only in
+   * `payload.role`. Per docs/API.md, this does **not** log the user
+   * in (no session cookies are set) — callers must send the user to
+   * login next.
+   */
   async registerConsumer(
   payload: RegisterConsumerPayload
 ): Promise<User> {
@@ -200,37 +201,13 @@ async confirmInvite(
     return httpClient.post<User>(ENDPOINTS.identity.consumerOnboarding(userId), payload);
   },
 
-  async registerRider(payload: RegisterRiderPayload): Promise<AuthSession> {
-    const raw = await httpClient.post(ENDPOINTS.auth.riderRegister, payload, { skipAuth: true });
-    const session = mapSessionResponse(raw);
-    persistSession(session);
-    return session;
-  },
-
-  async loginRider(payload: LoginRiderPayload): Promise<AuthSession> {
-    const raw = await httpClient.post(ENDPOINTS.auth.riderLogin, payload, { skipAuth: true });
-    const session = mapSessionResponse(raw);
-    persistSession(session);
-    return session;
-  },
-
-  async submitRiderOnboarding(userId: string, payload: RiderOnboardingPayload): Promise<User> {
-    return httpClient.post<User>(ENDPOINTS.identity.riderOnboarding(userId), payload);
-  },
-
-  async loginNodeStaff(payload: LoginNodeStaffPayload): Promise<AuthSession> {
-    const raw = await httpClient.post(ENDPOINTS.auth.nodeStaffLogin, payload, { skipAuth: true });
-    const session = mapSessionResponse(raw);
-    persistSession(session);
-    return session;
-  },
-
-  async firstLoginReset(payload: FirstLoginResetPayload): Promise<AuthSession> {
-    const raw = await httpClient.post(ENDPOINTS.auth.nodeStaffFirstLoginReset, payload, { skipAuth: true });
-    const session = mapSessionResponse(raw);
-    persistSession(session);
-    return session;
-  },
+  // Rider and NodeOperator (Vendor) registration/login previously
+  // called undocumented routes (/auth/rider/register,
+  // /auth/rider/login, /auth/node-staff/login,
+  // /auth/node-staff/first-login-reset) — removed. Both roles now
+  // share `registerConsumer` (role: "rider" / "node_operator") and
+  // `loginConsumer` above, matching docs/API.md's single, role-agnostic
+  // /auth/register and /auth/login.
 
   /**
    * Admin has no dedicated backend login route — per docs/API.md,

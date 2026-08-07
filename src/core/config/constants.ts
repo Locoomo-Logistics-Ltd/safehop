@@ -18,8 +18,7 @@ export const ROUTES = {
   orderSuccess: (id: string) => `/delivery/${id}/success`,
   track: (id: string) => `/delivery/${id}/track`,
 
-  // Vendor (Shop Owner)
-  vendorSetup: "/vendor-setup",
+  // Vendor (Shop Owner / Node Operator)
   vendorHome: "/vendor/home",
   vendorScan: "/vendor-scan",
   vendorScanSuccess: (parcelId: string) => `/vendor/scan-success/${parcelId}`,
@@ -27,14 +26,15 @@ export const ROUTES = {
   vendorRelease: (parcelId: string) => `/vendor/parcels/${parcelId}/release`,
   vendorFlag: (parcelId: string) => `/vendor/parcels/${parcelId}/flag`,
   vendorProfile: "/vendor/profile",
+  vendorNodeSetup: "/vendor/node-setup",
 
   // Rider
-  riderLogin: "/rider-login",
   riderHome: "/rider/home",
   riderJobOffer: "/rider/jobs",
   riderActiveJob: (jobId: string) => `/rider/jobs/${jobId}`,
   riderScanPickup: (jobId: string) => `/rider-scan/${jobId}`,
   riderDeliveryComplete: (jobId: string) => `/rider/jobs/${jobId}/complete`,
+  riderVerification: "/rider/verification",
   riderDeliveries: "/rider/deliveries",
   riderProfile: "/rider/profile",
 
@@ -58,6 +58,7 @@ export const QUERY_KEYS = {
   delivery: (id: string) => ["deliveries", id] as const,
 
   vendorNodeProfile: ["vendor", "node-profile"] as const,
+  vendorNodeOperatorProfile: ["vendor", "node-operator-profile"] as const,
   vendorParcels: ["vendor", "parcels"] as const,
   vendorShelves: ["vendor", "shelves"] as const,
   vendorActivity: ["vendor", "activity"] as const,
@@ -66,6 +67,7 @@ export const QUERY_KEYS = {
   riderEarnings: ["rider", "earnings"] as const,
   riderJobOffer: ["rider", "job-offer"] as const,
   riderActiveJob: ["rider", "active-job"] as const,
+  riderVerification: ["rider", "verification"] as const,
   riderJobHistory: ["rider", "job-history"] as const,
 
   adminDashboardStats: ["admin", "dashboard-stats"] as const,

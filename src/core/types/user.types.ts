@@ -4,7 +4,8 @@
  * regardless of role. Role-specific profile data extends this base.
  */
 
-export type UserRole = "user" | "rider" | "vendor" | "admin";
+/** Matches the real backend's role enum exactly — see docs/API.md's `POST /auth/register`. */
+export type UserRole = "consumer" | "node_operator" | "rider" | "admin";
 
 export interface User {
 
@@ -82,7 +83,12 @@ export interface RequestOtpPayload {
 //   password?: string;
 // }
 
-export interface RegisterConsumerPayload { 
+/**
+ * Shared self-registration payload for `POST /auth/register` — one
+ * endpoint for Consumer, Rider, and NodeOperator per docs/API.md,
+ * differing only in `role` (optional, defaults to `consumer`).
+ */
+export interface RegisterConsumerPayload {
   firstName: string;
   lastName: string;
   email: string;
@@ -90,6 +96,7 @@ export interface RegisterConsumerPayload {
   password: string;
   passwordConfirmation: string;
   consentAccepted: boolean;
+  role?: Extract<UserRole, "consumer" | "node_operator" | "rider">;
 }
 
 // export interface LoginConsumerPayload {
@@ -111,45 +118,13 @@ export interface ConsumerOnboardingPayload {
   phone?: string;
 }
 
-// ── Real API-aligned Rider auth flow ────────────────────────────
-// Matches: POST /auth/rider/register (password-based, no OTP) → onboarding
-
-export interface RegisterRiderPayload {
-  phone: string;
-  firstName: string;
-  lastName: string;
-  email?: string;
-  password: string;
-}
-
-export interface LoginRiderPayload {
-  target: string;
-  password: string;
-}
-
-export interface RiderOnboardingPayload {
-  nin: string;
-  plateNumber: string;
-  vehicleModel: string;
-  vehicleType: string;
-  driversLicense: string;
-}
-
-// ── Real API-aligned Node Staff (Vendor) auth flow ──────────────
-// Matches: admin provisions the account → email+password login →
-// first-login-reset swaps a temporary password for a permanent one.
-
-export interface LoginNodeStaffPayload {
-  email: string;
-  /** Can be the temporary setup password or the permanent one. */
-  password: string;
-}
-
-export interface FirstLoginResetPayload {
-  email: string;
-  temporaryPassword: string;
-  newPassword: string;
-}
+// Rider and NodeOperator (Vendor) self-registration now go through
+// the same RegisterConsumerPayload/POST /auth/register above (with
+// `role: "rider"` / `role: "node_operator"`) and the same
+// LoginConsumerPayload/POST /auth/login below — see docs/API.md.
+// Post-login onboarding is handled separately: riders.onboarding
+// (core/types/rider.types.ts) and node-operators.onboarding
+// (core/types/vendor.types.ts).
 
 // ── Real API-aligned Admin auth flow ─────────────────────────────
 // Admin accounts are backend-provisioned (POST /users/invite by an

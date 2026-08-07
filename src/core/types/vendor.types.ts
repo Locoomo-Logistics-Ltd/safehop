@@ -74,3 +74,50 @@ export interface ReleaseParcelPayload {
   parcelId: string;
   otpCode: string;
 }
+
+// ── Node Operator self-onboarding ───────────────────────────────
+// POST /node-operators/onboarding and GET /node-operators/me are
+// real, confirmed routes per docs/API.md — the second, self-service
+// step of a NodeOperator (Vendor) account's registration: sets up the
+// Node they'll manage. Creates the Node in "pending" status; an Admin
+// must approve it (PATCH /node-operators/:id/approve, Admin-only)
+// before it appears in /nodes or is usable. Distinct from
+// `VendorNodeProfile` above, which is the already-approved Node's
+// live dashboard/inventory data.
+
+export interface NodeOperatorOnboardingPayload {
+  name: string;
+  address: string;
+  city: string;
+  state: string;
+  country?: string;
+  latitude: number;
+  longitude: number;
+  capacity: number;
+  operatingHours?: string;
+}
+
+export type NodeOperatorNodeStatus = "pending" | "active" | "inactive" | "suspended";
+
+/** Raw Node shape as returned nested in the onboarding/`me` response — see docs/API.md. */
+export interface NodeOperatorNode {
+  id: string;
+  name: string;
+  address: string;
+  city: string;
+  state: string;
+  country: string;
+  latitude: number;
+  longitude: number;
+  capacity: number;
+  status: NodeOperatorNodeStatus;
+  onboardingType: string;
+  operatingHours: string | null;
+  createdAt: string;
+}
+
+/** Response shape for both POST /node-operators/onboarding and GET /node-operators/me. */
+export interface NodeOperatorProfile {
+  profileId: string;
+  node: NodeOperatorNode;
+}

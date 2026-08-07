@@ -11,26 +11,27 @@ import type { UserRole } from "@/core/types";
 
 /**
  * "Choose your role" screen — first step of onboarding.
- * "user", "vendor", and "rider" all proceed into their respective
- * flows; "admin" is visually present (per the product's full role
- * system) but routed to a coming-soon state until that module ships.
+ * "consumer", "node_operator", and "rider" all proceed into their
+ * respective flows; "admin" is visually present (per the product's
+ * full role system) but routed to a coming-soon state until that
+ * module ships — Admin accounts are backend-provisioned, never
+ * self-registered.
  */
 export function RoleSelectScreen() {
   const router = useRouter();
-  const [selectedRole, setSelectedRole] = useState<UserRole>("user");
+  const [selectedRole, setSelectedRole] = useState<UserRole>("consumer");
 
   const handleContinue = () => {
-    if (selectedRole === "user") {
+    // Consumer, Rider, and NodeOperator all self-register through the
+    // same documented POST /auth/register, differing only in `role`
+    // — so they all land on the same create-account form, just told
+    // which role to submit via `?role=`.
+    if (selectedRole === "consumer") {
       router.push(ROUTES.createAccount);
-    } else if (selectedRole === "vendor") {
-      // Vendor accounts are admin-provisioned (auth/node-staff/provision)
-      // — there's no self-registration endpoint. Route straight to the
-      // vendor's own email+password login/first-login-reset screen.
-      router.push(ROUTES.vendorSetup);
+    } else if (selectedRole === "node_operator") {
+      router.push(`${ROUTES.createAccount}?role=node_operator`);
     } else if (selectedRole === "rider") {
-      // Rider has its own phone + password login (see RiderLoginScreen),
-      // matching the Figma "Welcome Back, Rider" screen's shape.
-      router.push(ROUTES.riderLogin);
+      router.push(`${ROUTES.createAccount}?role=rider`);
     }
     // Admin: no-op for now — the module doesn't exist yet.
   };
@@ -57,7 +58,7 @@ export function RoleSelectScreen() {
           {ROLE_OPTIONS.map((option) => {
             const isSelected = selectedRole === option.role;
             const isAvailable =
-              option.role === "user" || option.role === "vendor" || option.role === "rider";
+              option.role === "consumer" || option.role === "node_operator" || option.role === "rider";
 
             return (
               <button

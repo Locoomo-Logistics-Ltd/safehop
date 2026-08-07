@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { TopBar } from "@/components/layout";
 import { Card } from "@/components/ui";
@@ -7,9 +8,14 @@ import { BriefcaseIcon } from "@/components/icons";
 import { ROUTES } from "@/core/config/constants";
 import { useCurrentUser } from "@/store/auth.store";
 import { useRiderAvailability } from "@/modules/rider/hooks/use-rider-availability";
+import { useRiderVerification } from "@/modules/rider/hooks/use-rider-verification";
+import { VerificationReminderSheet } from "@/modules/rider/components/verification";
 import { OnlineToggle } from "./OnlineToggle";
 import { EarningsStatCards } from "./EarningsStatCards";
 import { SurgeAlertBanner } from "./SurgeAlertBanner";
+
+/** Sticks for the browser tab's session so "Maybe Later" doesn't nag on every visit to Home, but reappears on a fresh session. */
+const VERIFICATION_REMINDER_DISMISSED_KEY = "locoomo_rider_verification_reminder_dismissed";
 
 function getGreeting(): string {
   const h = new Date().getHours();
@@ -26,9 +32,25 @@ function getGreeting(): string {
 export function RiderHomeScreen() {
   const user = useCurrentUser();
   const { availability } = useRiderAvailability();
+  const { profile: verification, isLoadingProfile: isLoadingVerification } = useRiderVerification();
+  const [reminderDismissed, setReminderDismissed] = useState(() => {
+    if (typeof window === "undefined") return true;
+    return window.sessionStorage.getItem(VERIFICATION_REMINDER_DISMISSED_KEY) === "true";
+  });
+
+  const isVerified = verification?.status === "active";
+  const showReminder = !isLoadingVerification && !isVerified && !reminderDismissed;
+
+  const dismissReminder = () => {
+    if (typeof window !== "undefined") {
+      window.sessionStorage.setItem(VERIFICATION_REMINDER_DISMISSED_KEY, "true");
+    }
+    setReminderDismissed(true);
+  };
 
   return (
     <div className="min-h-screen bg-bg-canvas">
+      {showReminder && <VerificationReminderSheet onDismiss={dismissReminder} />}
       <TopBar hideOnDesktop={false} />
 
       <div className="px-4 md:px-6 pt-2 md:pt-6 pb-8 max-w-[480px] mx-auto flex flex-col gap-5">

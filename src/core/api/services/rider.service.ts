@@ -10,6 +10,10 @@ import type {
   RiderAvailability,
   RiderEarningsSummary,
   RiderProfileDetails,
+  RiderUploadSignature,
+  RiderVerificationDocumentType,
+  RiderVerificationProfile,
+  SubmitRiderVerificationPayload,
 } from "@/core/types";
 
 /**
@@ -161,15 +165,16 @@ import type {
 // ── Real implementation ─────────────────────────────────────────
 
 const realRiderService = {
-  // Rider login is password-based in the real API — see
-  // authService.registerRider / loginRider. These two stay only for
-  // interface parity with the mock; the UI now calls authService
-  // directly (modules/rider/hooks/use-rider-login.ts).
+  // Rider auth is the same password-based POST /auth/register and
+  // POST /auth/login every role shares — see authService.registerConsumer
+  // (role: "rider") / authService.loginConsumer, called directly from
+  // modules/user/hooks/use-auth.ts. These two stay only for interface
+  // parity with the mock; there's no OTP concept in the real API.
   async sendLoginOtp(): Promise<{ sent: true }> {
-    throw new ApiError({ message: "Rider login uses password auth — see authService.loginRider.", code: "NOT_IMPLEMENTED" });
+    throw new ApiError({ message: "Rider login uses password auth — see authService.loginConsumer.", code: "NOT_IMPLEMENTED" });
   },
   async verifyLoginOtp(): Promise<AuthSession> {
-    throw new ApiError({ message: "Rider login uses password auth — see authService.loginRider.", code: "NOT_IMPLEMENTED" });
+    throw new ApiError({ message: "Rider login uses password auth — see authService.loginConsumer.", code: "NOT_IMPLEMENTED" });
   },
 
   async getAvailability(): Promise<RiderAvailability> {
@@ -257,6 +262,73 @@ const realRiderService = {
       latitude: position.lat,
       longitude: position.lng,
     });
+  },
+
+  // ── Verification / KYC onboarding ───────────────────────────────
+  // Real, confirmed routes per docs/API.md: get an upload signature,
+  // upload the document straight to Cloudinary (not through this
+  // API), then submit the resulting public_id here.
+
+  async getVerificationUploadSignature(
+    documentType: RiderVerificationDocumentType = "rating_screenshot"
+  ): Promise<RiderUploadSignature> {
+    return httpClient.get<RiderUploadSignature>(
+      `${ENDPOINTS.riders.uploadSignature}?documentType=${documentType}`
+    );
+  },
+
+  /**
+   * Uploads the file directly to Cloudinary using the signed
+   * authorization from getVerificationUploadSignature() — per
+   * docs/API.md, the file bytes never pass through this API. Returns
+   * the `public_id` to pass to submitVerification().
+   */
+  async uploadVerificationDocument(
+    uploadSignature: RiderUploadSignature,
+    file: File
+  ): Promise<string> {
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("api_key", uploadSignature.apiKey);
+    formData.append("timestamp", String(uploadSignature.timestamp));
+    formData.append("signature", uploadSignature.signature);
+    formData.append("folder", uploadSignature.folder);
+    formData.append("type", "authenticated");
+
+    let response: Response;
+    try {
+      response = await fetch(
+        `https://api.cloudinary.com/v1_1/${uploadSignature.cloudName}/image/upload`,
+        { method: "POST", body: formData }
+      );
+    } catch {
+      throw new ApiError({
+        message: "Couldn't reach the upload server. Check your connection and try again.",
+        code: "NETWORK_ERROR",
+        status: 0,
+      });
+    }
+
+    const json = (await response.json().catch(() => null)) as { public_id?: string } | null;
+    if (!response.ok || !json?.public_id) {
+      throw new ApiError({
+        message: "We couldn't upload your document. Please try again.",
+        code: "UPLOAD_FAILED",
+        status: response.status,
+      });
+    }
+    return json.public_id;
+  },
+
+  async submitVerification(
+    payload: SubmitRiderVerificationPayload
+  ): Promise<RiderVerificationProfile> {
+    return httpClient.post<RiderVerificationProfile>(ENDPOINTS.riders.onboarding, payload);
+  },
+
+  /** Throws `404 NOT_FOUND` (via ApiError) if the rider hasn't started verification yet — callers check `error.code`, same pattern as `vendorService.getMyNodeOperatorProfile`. */
+  async getVerificationProfile(): Promise<RiderVerificationProfile> {
+    return httpClient.get<RiderVerificationProfile>(ENDPOINTS.riders.me);
   },
 };
 
