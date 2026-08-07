@@ -1,4 +1,18 @@
-import { HomeIcon, TrackIcon, UserIcon, QrCodeIcon, ActivityIcon, BriefcaseIcon, WalletIcon } from "@/components/icons";
+import {
+  HomeIcon,
+  TrackIcon,
+  UserIcon,
+  QrCodeIcon,
+  ActivityIcon,
+  BriefcaseIcon,
+  WalletIcon,
+  PackageIcon,
+  MapPinIcon,
+  UsersIcon,
+  AlertTriangleIcon,
+  BarChartIcon,
+  SettingsIcon,
+} from "@/components/icons";
 import { ROUTES } from "@/core/config/constants";
 
 export interface NavItem {
@@ -29,3 +43,24 @@ export const RIDER_NAV_ITEMS: NavItem[] = [
   { label: "Earnings", href: ROUTES.riderDeliveries, icon: WalletIcon },
   { label: "Profile", href: ROUTES.riderProfile, icon: UserIcon },
 ];
+
+/**
+ * Admin nav — Dashboard / Orders / Nodes / Team / Disputes / Analytics,
+ * matching the `admin_UI.png` design reference sidebar. "Settings"
+ * (Super Admin) is rendered separately, pinned to the bottom of the
+ * sidebar, same as the account footer pattern already used there.
+ */
+export const ADMIN_NAV_ITEMS: NavItem[] = [
+  { label: "Dashboard", href: ROUTES.adminDashboard, icon: HomeIcon },
+  { label: "Orders", href: ROUTES.adminOrders, icon: PackageIcon },
+  { label: "Nodes", href: ROUTES.adminNodes, icon: MapPinIcon },
+  { label: "Team", href: ROUTES.adminTeam, icon: UsersIcon },
+  { label: "Disputes", href: ROUTES.adminDisputes, icon: AlertTriangleIcon },
+  { label: "Analytics", href: ROUTES.adminAnalytics, icon: BarChartIcon },
+];
+
+export const ADMIN_SETTINGS_NAV_ITEM: NavItem = {
+  label: "Settings",
+  href: ROUTES.adminSettings,
+  icon: SettingsIcon,
+};

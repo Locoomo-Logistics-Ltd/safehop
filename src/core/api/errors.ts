@@ -133,6 +133,17 @@ export function getFriendlyError(error: unknown) {
       };
 
 
+    case "INVALID_INVITE_TOKEN":
+      return {
+        title: "This invite link expired 🔗",
+        message:
+          "Your invite link is invalid, expired, or has already been used.",
+        action:
+          "Contact whoever invited you for a new one.",
+        type: "error",
+      };
+
+
     case "RATE_LIMITED":
       return {
         title: "Slow down a moment ⏳",

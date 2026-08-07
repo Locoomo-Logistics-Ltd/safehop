@@ -7,6 +7,7 @@ import type {
   AuthSession,
   ConsumerOnboardingPayload,
   FirstLoginResetPayload,
+  LoginAdminPayload,
   LoginNodeStaffPayload,
  LoginConsumerPayload,
   LoginRiderPayload,
@@ -19,6 +20,7 @@ import type {
   PasswordResetRequestPayload,
   PasswordResetConfirmPayload,
   VerifyEmailPayload,
+  InviteConfirmPayload,
 } from "@/core/types";
 
 
@@ -182,6 +184,18 @@ async verifyEmail(
   );
 },
 
+async confirmInvite(
+  payload: InviteConfirmPayload
+): Promise<void> {
+  await httpClient.post(
+    ENDPOINTS.auth.inviteConfirm,
+    payload,
+    {
+      skipAuth: true,
+    }
+  );
+},
+
   async submitConsumerOnboarding(userId: string, payload: ConsumerOnboardingPayload): Promise<User> {
     return httpClient.post<User>(ENDPOINTS.identity.consumerOnboarding(userId), payload);
   },
@@ -213,6 +227,39 @@ async verifyEmail(
 
   async firstLoginReset(payload: FirstLoginResetPayload): Promise<AuthSession> {
     const raw = await httpClient.post(ENDPOINTS.auth.nodeStaffFirstLoginReset, payload, { skipAuth: true });
+    const session = mapSessionResponse(raw);
+    persistSession(session);
+    return session;
+  },
+
+  /**
+   * Admin has no dedicated backend login route — per docs/API.md,
+   * POST /auth/login is role-agnostic and returns whatever role the
+   * account has, so this reuses the same endpoint as `loginConsumer`.
+   * Since the admin login screen is a separate, URL-only entry point
+   * (not reachable via role-select), a non-admin account succeeding
+   * here would otherwise get real session cookies without ever
+   * landing in `useAuthStore` correctly scoped — so the role is
+   * checked client-side and the session is revoked server-side if it
+   * doesn't match, rather than silently persisting a mismatched role.
+   */
+  async loginAdmin(payload: LoginAdminPayload): Promise<AuthSession> {
+    const raw = await httpClient.post<User>(
+      ENDPOINTS.auth.consumerLogin,
+      payload,
+      { skipAuth: true, credentials: "include" }
+    );
+
+    if (raw?.role !== "admin") {
+      await httpClient
+        .post(ENDPOINTS.auth.sessionLogout, undefined, { credentials: "include" })
+        .catch(() => {});
+      throw new ApiError({
+        message: "This account doesn't have admin access.",
+        code: "INVALID_CREDENTIALS",
+      });
+    }
+
     const session = mapSessionResponse(raw);
     persistSession(session);
     return session;

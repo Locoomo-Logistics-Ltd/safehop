@@ -24,6 +24,7 @@ export const ENDPOINTS = {
     passwordResetRequest: "/auth/password-reset/request",
     passwordResetConfirm: "/auth/password-reset/confirm",
     verifyEmail: "/auth/verify-email",
+    inviteConfirm: "/auth/invite/confirm",
   },
 
   // ── Identity Module (KYC / profile completion, step 3 of signup) ──
@@ -34,8 +35,14 @@ export const ENDPOINTS = {
 
   // ── Corporate Operations Control (internal/admin — not used by app roles) ──
   corporateOps: {
-    provisionStaff: "/corporate-ops/staff/provision",
     elevateSuperAdmin: "/corporate-ops/staff/elevate-superadmin",
+  },
+
+  // ── Users Module ───────────────────────────────────────────────
+  users: {
+    // Real, confirmed route per docs/API.md — Admin-only, invites a
+    // node_operator/rider/admin account (never `consumer`).
+    invite: "/users/invite",
   },
 
   // ── Notifications Engine ──────────────────────────────────────
@@ -55,7 +62,10 @@ export const ENDPOINTS = {
 
   // ── Admin Nodes / Franchise Network (onboarding, admin-only) ──
   adminNodes: {
-    onboardPartner: "/admin/nodes/onboard-partner",
+    // Real routes per docs/API.md — the plain Nodes resource, Admin-scoped usage.
+    create: "/nodes",
+    list: "/nodes",
+    detail: (id: string) => `/nodes/${id}`,
   },
   franchiseNodes: {
     onboardOperator: "/franchise-nodes/onboard-operator",

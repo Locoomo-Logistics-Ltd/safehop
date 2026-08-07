@@ -38,6 +38,13 @@ export interface VerifyEmailPayload {
     token: string;
 }
 
+export interface InviteConfirmPayload {
+    token: string;
+    password: string;
+    passwordConfirmation: string;
+    consentAccepted: boolean;
+}
+
 /** @deprecated single-shot signup — real API is multi-step, see RequestOtpPayload/RegisterConsumerPayload below. Kept for the mock service. */
 export interface SignUpPayload {
   firstName: string;
@@ -142,4 +149,15 @@ export interface FirstLoginResetPayload {
   email: string;
   temporaryPassword: string;
   newPassword: string;
+}
+
+// ── Real API-aligned Admin auth flow ─────────────────────────────
+// Admin accounts are backend-provisioned (POST /users/invite by an
+// existing Admin, not self-registered) and log in via the same
+// generic POST /auth/login every other role uses — see
+// `authService.loginAdmin`.
+
+export interface LoginAdminPayload {
+  email: string;
+  password: string;
 }

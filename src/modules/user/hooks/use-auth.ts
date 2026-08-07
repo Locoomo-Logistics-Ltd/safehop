@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { authService } from "@/core/api/services";
 import { QUERY_KEYS, ROUTES } from "@/core/config/constants";
 import { useAuthStore } from "@/store/auth.store";
-import type { AuthSession, LoginConsumerPayload, OtpChannel, PasswordResetConfirmPayload, PasswordResetRequestPayload, RegisterConsumerPayload, VerifyEmailPayload} from "@/core/types";
+import type { AuthSession, InviteConfirmPayload, LoginConsumerPayload, OtpChannel, PasswordResetConfirmPayload, PasswordResetRequestPayload, RegisterConsumerPayload, VerifyEmailPayload} from "@/core/types";
 import { useNotificationStore } from "@/store/notification.store";
 import { getErrorMessage } from "@/core/api/errors";
 
@@ -108,6 +108,11 @@ const verifyEmailMutation = useMutation({
     authService.verifyEmail(payload),
 });
 
+const confirmInviteMutation = useMutation({
+  mutationFn: (payload: InviteConfirmPayload) =>
+    authService.confirmInvite(payload),
+});
+
   return {
     target,
 
@@ -143,6 +148,11 @@ const verifyEmailMutation = useMutation({
     
     verifyEmail:verifyEmailMutation.mutate,
     isVerifyingEmail:verifyEmailMutation.isPending,
+
+    confirmInvite: confirmInviteMutation.mutate,
+    isConfirmingInvite: confirmInviteMutation.isPending,
+    confirmInviteError: confirmInviteMutation.error,
+    isInviteConfirmed: confirmInviteMutation.isSuccess,
 
   };
 }

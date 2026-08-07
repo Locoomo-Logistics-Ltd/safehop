@@ -4,3 +4,4 @@ export { nodesService } from "./nodes.service";
 export { deliveryService} from "./delivery.service";
 export { vendorService } from "./vendor.service";
 export { riderService } from "./rider.service";
+export { adminService } from "./admin.service";

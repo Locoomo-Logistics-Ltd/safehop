@@ -7,6 +7,7 @@ export const ROUTES = {
   login: "/login",
   forgotPassword: "/forgot-password",
   resetPassword: "/reset-password",
+  acceptInvite: "/accept-invite",
 
   // User
   dashboard: "/dashboard",
@@ -36,6 +37,17 @@ export const ROUTES = {
   riderDeliveryComplete: (jobId: string) => `/rider/jobs/${jobId}/complete`,
   riderDeliveries: "/rider/deliveries",
   riderProfile: "/rider/profile",
+
+  // Admin
+  adminLogin: "/admin-login",
+  adminDashboard: "/admin/dashboard",
+  adminOrders: "/admin/orders",
+  adminOrderDetail: (id: string) => `/admin/orders/${id}`,
+  adminNodes: "/admin/nodes",
+  adminTeam: "/admin/team",
+  adminDisputes: "/admin/disputes",
+  adminAnalytics: "/admin/analytics",
+  adminSettings: "/admin/settings",
 } as const;
 
 export const QUERY_KEYS = {
@@ -55,6 +67,22 @@ export const QUERY_KEYS = {
   riderJobOffer: ["rider", "job-offer"] as const,
   riderActiveJob: ["rider", "active-job"] as const,
   riderJobHistory: ["rider", "job-history"] as const,
+
+  adminDashboardStats: ["admin", "dashboard-stats"] as const,
+  adminRecentOrders: ["admin", "recent-orders"] as const,
+  adminNetworkStatus: ["admin", "network-status"] as const,
+  adminOrders: ["admin", "orders"] as const,
+  adminOrderDetail: (id: string) => ["admin", "orders", id] as const,
+  adminNodes: ["admin", "nodes"] as const,
+  adminNodeDetail: (id: string) => ["admin", "nodes", id] as const,
+  adminTeam: ["admin", "team"] as const,
+  adminDisputes: ["admin", "disputes"] as const,
+  adminDisputeMetrics: ["admin", "dispute-metrics"] as const,
+  adminSuperAdminOverview: ["admin", "super-admin-overview"] as const,
+  adminAnalyticsSummary: ["admin", "analytics-summary"] as const,
+  adminTopNodes: ["admin", "top-nodes"] as const,
+  adminRiderPerformance: ["admin", "rider-performance"] as const,
+  adminOrdersTrend: ["admin", "orders-trend"] as const,
 };
 
 /** Business rules shared between UI validation and quote calculation */

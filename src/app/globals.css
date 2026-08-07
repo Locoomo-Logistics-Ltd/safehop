@@ -14,6 +14,14 @@
   --brand-blue-light: #3D93E0;
   --brand-navy: #000E2E;
 
+  /* Admin accent — the Admin module's design uses a distinct orange
+     accent (sidebar active state, CTAs) instead of brand-blue, kept
+     scoped to `admin-*` tokens so it never bleeds into the
+     User/Vendor/Rider surfaces that already rely on brand-blue. */
+  --admin-accent: #F0740A;
+  --admin-accent-dark: #C75F08;
+  --admin-accent-bg: #FFF1E6;
+
   /* Status colors */
   --status-success: #16A34A;
   --status-success-bg: #ECFDF3;
@@ -60,6 +68,10 @@
   --color-brand-blue-dark: var(--brand-blue-dark);
   --color-brand-blue-light: var(--brand-blue-light);
   --color-brand-navy: var(--brand-navy);
+
+  --color-admin-accent: var(--admin-accent);
+  --color-admin-accent-dark: var(--admin-accent-dark);
+  --color-admin-accent-bg: var(--admin-accent-bg);
 
   --color-status-success: var(--status-success);
   --color-status-success-bg: var(--status-success-bg);
