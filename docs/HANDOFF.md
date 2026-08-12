@@ -6,8 +6,42 @@
 
 ## Current objective
 
-**Latest session (2026-08-07, most recent — Rider Verification gating
-pass):** a prior session (see the "Rider-scoped session" note below)
+**Latest session (2026-08-12 — full integration pass: Admin Approvals,
+Admin Pricing, Consumer Checkout rebuild):** every endpoint
+`docs/API_INTEGRATION_STATUS.md` had flagged ❌ as of that morning's
+audit is now wired, plus a fix to the already-broken `GET
+/nodes/nearby`. In order: (1) `GET/PATCH node-operators/pending`+
+`/:id/approve` and the Rider equivalent, both landing in one new
+tabbed screen, `ApprovalsScreen` (`/admin/approvals`) — this closes the
+gap this file used to call "the single biggest functional gap in the
+app": a self-registered NodeOperator/Rider who finished onboarding had
+no path to ever reach `active`. (2) Admin Pricing (`POST`/`GET
+/admin/pricing`), a new `PricingScreen` (`/admin/pricing`) with an
+append-only "Add Rule" form over a rate-history table. (3) The big one:
+Checkout rebuilt on the real `POST /payments/intents` (fee calc + Node
+capacity reservation + Paystack `authorizationUrl`, one call) —
+replacing the old `orders/calculate-fare`/`orders/book` flow that
+targeted undocumented routes and, per this file's own long-standing
+"Potential risks" note, never actually collected real payment. This
+required a new `/orders/payment-callback` screen (polls `GET
+/payments/intents/:id` after the Paystack redirect), a real
+`destinationNodeId` in place of the old free-text destination address
+(so `SelectNodesScreen` now picks two Nodes, not one Node + an
+address), fixing `GET /nodes/nearby`'s wrong query param and response
+parsing (a standing 🟡 from a prior audit, now blocking this work
+directly), and rebuilding every screen that renders an order
+(`DeliveryCard`, `TrackPackageScreen`, `OrderSuccessScreen`, both
+dashboard sections) against the real `Order` shape (`GET
+/orders`(/:id)) instead of the old, fictional `Delivery` type. Full
+detail — every file touched and every design decision — is in
+`docs/IMPLEMENTATION_LOG.md`'s matching 2026-08-12 entry;
+`docs/API_INTEGRATION_STATUS.md` has the endpoint-by-endpoint
+before/after. **Not verified against a live backend or a real Paystack
+account** — see "Potential risks" below.
+
+**Previous session (2026-08-07, most recent before the above — Rider
+Verification gating pass):** a prior session (see the "Rider-scoped
+session" note below)
 had already built `/rider/verification` end-to-end and pointed the
 post-login redirect straight at it, but nothing actually *enforced*
 "a Rider can't use Rider features until verified" beyond that one-time
@@ -149,6 +183,52 @@ and a login/register bug fix that was blocking this work.
   this codebase that needs `consentAccepted` (the inviting Admin can't
   accept ToS on the invitee's behalf per `API.md`). See
   `IMPLEMENTATION_LOG.md`'s 2026-08-07 entry for the full file list.
+
+- **The Consumer order model changed shape entirely on 2026-08-12.**
+  The real `POST /payments/intents` requires a `destinationNodeId` (a
+  real Node), not the free-text `destinationAddress` the app used to
+  collect — delivery is Node-to-Node, same as the rest of the app's
+  Node-network model, not Node-to-arbitrary-address. `core/types/payment.types.ts`
+  (new file) has the real `PaymentIntent`/`Order` types;
+  `core/types/delivery.types.ts`'s `Delivery`/`DeliveryQuote`/
+  `CreateDeliveryDraft`/`CalculateFarePayload`/`BookOrderPayload` are
+  now dead in real-mode code (kept, `@deprecated`-tagged, only because
+  the commented-out mock delivery service still assumes their shape —
+  don't build new real-mode code against them). If you see a screen
+  importing `Delivery` from `core/types`, that's a regression — the
+  real type is `Order`.
+- **`Order.status` only has one confirmed value** (`"awaiting_drop_off"`,
+  per `docs/API.md`) — the full lifecycle enum isn't documented.
+  `OrderStatusBadge`/`getOrderProgress`/`isTerminalOrderStatus`
+  (`modules/user/components/tracking/OrderStatusBadge.tsx`) render any
+  status string via keyword heuristics rather than a fixed lookup
+  table, so an unrecognized value degrades gracefully (neutral
+  "in-progress" styling) instead of crashing. Replace the heuristic
+  with a real table once the backend's full enum is confirmed — don't
+  invent the rest of it speculatively.
+- **`LocoomoNode` (old, fabricated `isOpenNow`/`capacity.occupied`+`.total`
+  fields) and `PickupNode` (new, real `GET /nodes`/`GET /nodes/nearby`
+  shape) are two different types on purpose** — `LocoomoNode` is still
+  load-bearing for `vendor.service.ts`'s separate, still-unconfirmed
+  `/nodes/operator/inventory` endpoint (`VendorNodeProfile extends
+  LocoomoNode`), which this session didn't touch. The Consumer's node
+  picker (`SelectNodesScreen`, `GoogleMapView`, `NodeListItem`,
+  `nodesService`) uses `PickupNode` exclusively now. Don't merge the
+  two types without also fixing (or confirming) the Vendor inventory
+  endpoint's real shape first.
+- **No in-app payment-method picker anymore.** Paystack's hosted
+  checkout page (reached via `authorizationUrl`) presents card/bank
+  transfer/USSD itself — `POST /payments/intents`'s request body has
+  no field for it. `PaymentMethodSelector.tsx` was deleted as
+  genuinely dead code, not just unused.
+- **`/admin/approvals` and `/admin/pricing` have no home in the
+  original 8-frame `admin_UI.png` design** — both endpoint groups were
+  added to `docs/API.md` after that design reference was built. Placed
+  as new sidebar items (`ShieldCheckIcon`/`CreditCardIcon`) after
+  "Team", reusing `NodeNetworkScreen`'s tab pattern and
+  `TeamManagementScreen`'s table pattern rather than inventing new
+  visual language — see `nav-config.ts`'s comment on the placement
+  reasoning.
 
 ## Current progress
 
@@ -322,6 +402,50 @@ and a login/register bug fix that was blocking this work.
       standing caveat as every other real-route integration in this
       file without a live session to test against.
 
+**2026-08-12 (integration pass — Approvals, Pricing, Checkout rebuild):**
+- [x] Read `docs/API.md`, `docs/ARCHITECTURE.md`, `docs/PROJECT_CONTEXT.md`,
+      this file, and `docs/API_INTEGRATION_STATUS.md` before writing
+      any code, per instructions.
+- [x] Built `ApprovalsScreen` (`/admin/approvals`) and wired
+      `GET/PATCH node-operators/pending`+`/:id/approve` and the Rider
+      equivalent — see `docs/IMPLEMENTATION_LOG.md` for the full file
+      list.
+- [x] Built `PricingScreen` (`/admin/pricing`) and wired `POST`/`GET
+      /admin/pricing`.
+- [x] Fixed `GET /nodes/nearby` (`radiusKm`, paginated-envelope
+      unwrapping, new `PickupNode` type) — a prerequisite for the
+      Checkout rebuild below, since destination Node selection depends
+      on it.
+- [x] Rebuilt Checkout end-to-end on `POST /payments/intents` +
+      `GET /payments/intents/:id`: new `/orders/payment-callback`
+      screen, `destinationNodeId` replacing the old free-text
+      destination address throughout `SelectNodesScreen`/
+      `delivery-draft.store.ts`, and every order-rendering screen
+      (`DeliveryCard`, `TrackPackageScreen`, `OrderSuccessScreen`, both
+      dashboard sections) rebuilt against the real `Order` type.
+- [x] Updated `docs/API_INTEGRATION_STATUS.md` — 26 ✅ / 3 🟡 / 0 ❌ /
+      1 ⚪ (was 15 ✅ / 6 🟡 / 8 ❌ / 1 ⚪ that same morning, before the
+      seven new endpoints from the earlier docs-only pass were folded
+      in).
+- [x] `npx tsc --noEmit`, `npx eslint src`, `npm run build` all pass
+      (build succeeded on retry after two unrelated Google Fonts
+      network timeouts in this sandbox). Dev-server smoke test:
+      `/checkout`, `/delivery/select-nodes`, `/delivery/method`,
+      `/orders/payment-callback`, `/track`, `/admin/approvals`,
+      `/admin/pricing` all `200`.
+- [ ] **Not performed**: any verification against a live backend or a
+      real Paystack account — no live session or Paystack test account
+      was available this session. In particular unconfirmed: the real
+      `GET /nodes/nearby` response actually matching the new
+      `PickupNode` mapping; a real capacity reservation → Paystack
+      redirect → webhook → `GET /orders` round trip actually producing
+      a `paymentIntentId` the callback screen can match; and whether
+      `Order.status` ever takes a value beyond the one documented
+      example. Do a real browser + Paystack test-mode pass (place a
+      real order as a Consumer, approve a real NodeOperator/Rider as
+      Admin, add a real pricing rule) before treating any of this as
+      production-ready.
+
 ## Remaining work
 
 **From previous sessions** (unchanged, not touched this session —
@@ -331,7 +455,13 @@ still open):
 2. Backend response-shape verification for `mapSessionResponse` /
    `mapFareResponse` / `mapInventoryResponse` /
    `mapNotificationToActivity`.
-3. Payment SDK integration (`deliveryService.pay()` is a no-op).
+3. ~~Payment SDK integration (`deliveryService.pay()` is a no-op).~~
+   **Done (2026-08-12)** — Checkout now creates a real
+   `POST /payments/intents` and redirects to Paystack's hosted
+   checkout; `deliveryService.pay()` no longer exists. **Not verified
+   against a live backend/real Paystack account** — see this file's
+   2026-08-12 entry under "Current progress" and "Potential risks"
+   below.
 4. ~~Rider self-registration + KYC onboarding UI.~~ **Done** (2026-08-07,
    Rider-scoped session). ~~Rider auth redirect isn't gated on
    verification status yet.~~ **Also done** (2026-08-07, gating pass)
@@ -359,17 +489,16 @@ still open):
      has no `super_admin` role concept, so there may genuinely be no
      real equivalent to correct it to. Worth confirming with backend
      before spending more time on it.
-   - `GET /node-operators/pending` + `PATCH /node-operators/:id/approve`
+   - ~~`GET /node-operators/pending` + `PATCH /node-operators/:id/approve`
      and `GET /riders/pending` + `PATCH /riders/:id/approve` are real,
-     confirmed routes with **no screen in the current 8-frame design**
-     — worth flagging to whoever owns the design, since they're
-     genuine Admin actions (approving new Nodes/Riders) that the UI
-     doesn't currently surface anywhere.
-   - `GET /nodes/nearby` (used by the User role's node-selection
+     confirmed routes with no screen in the current 8-frame design~~
+     **Done (2026-08-12)** — `ApprovalsScreen` (`/admin/approvals`)
+     covers both.
+   - ~~`GET /nodes/nearby` (used by the User role's node-selection
      screen, not Admin) sends `radiusInMeters` but `API.md` requires
-     `radiusKm` — flagged in `API_INTEGRATION_STATUS.md`, not fixed
-     yet, out of this session's Admin scope but worth a look since
-     it'll likely 400 against the live backend as-is.
+     `radiusKm`~~ **Done (2026-08-12)** — see the matching
+     `IMPLEMENTATION_LOG.md` entry; also fixed the response-shape
+     parsing (paginated envelope, not a bare array) in the same pass.
 8. **No backend route exists at all** (confirmed against `API.md`,
    not just `endpoints.ts`) for: Dashboard summary stats, network-wide
    recent orders, network status/telemetry, admin-scoped order
@@ -507,13 +636,41 @@ browser-verified):
 See `docs/API_INTEGRATION_STATUS.md` for the live table. Short version:
 `Dashboard`, `Order List/Detail`, `Dispute Center`, and `Analytics`
 have zero backend support in `API.md`. `Node Network` (list/detail/
-create/manage) and `Team Management`'s invite are now fully on real
-routes. `Super Admin`'s elevation is the last "wired but unconfirmed"
-one left — `API.md` has no `super_admin` concept at all, so it may
-have no real equivalent.
+create/manage), `Team Management`'s invite, `Approvals`
+(NodeOperator + Rider, new 2026-08-12), and `Pricing` (new 2026-08-12)
+are now all fully on real routes. `Super Admin`'s elevation is the
+last "wired but unconfirmed" one left — `API.md` has no `super_admin`
+concept at all, so it may have no real equivalent.
 
 ## Potential risks
 
+- **The entire Checkout → Paystack → payment-callback → Order round
+  trip (2026-08-12) is built strictly from `docs/API.md`'s documented
+  contract and has not been exercised against a live backend or a real
+  Paystack account.** No real Node capacity reservation, Paystack
+  redirect, webhook delivery, or `GET /orders` match against a real
+  `paymentIntentId` has happened yet. If the live backend's
+  `POST /payments/intents` response ever omits a field this session
+  assumed present (e.g. `feeBreakdown`), `CheckoutScreen` will show a
+  generic error rather than a specific one — same "fail-loud, not
+  silent" posture as the rest of this codebase, but worth confirming
+  with a real test-mode Paystack account before going live.
+- **`GET /nodes/nearby`'s fix (2026-08-12) hasn't been confirmed
+  against a live response either** — the new `PickupNode` mapping
+  (`city`/`state`/`capacity`/`operatingHours`, no `isOpenNow`) is a
+  direct reading of `docs/API.md`'s documented Node shape, not a
+  verified one. If the real response has different field names, the
+  Select Nodes screen will render blank/`undefined` values rather than
+  crashing (no `.map()`-on-non-array risk like before, since the
+  paginated-envelope unwrapping is now correct either way).
+- **`Order.status`'s real full enum is still unknown** — `OrderStatusBadge`/
+  `getOrderProgress`/`isTerminalOrderStatus` fail safe (unrecognized
+  status → neutral "in-progress" styling, treated as still-active in
+  the dashboard split) but haven't been checked against any status
+  value beyond the one `docs/API.md` documents
+  (`"awaiting_drop_off"`). Confirm the full lifecycle with backend
+  before trusting the active/past dashboard split or the status pill
+  colors as accurate.
 - **The `AuthGuard` role gap is now closed for `/admin/*`** — a
   non-admin session (or none) is redirected to `/login`, and
   `authService.loginAdmin` rejects+revokes a login attempt from a
@@ -588,6 +745,15 @@ have no real equivalent.
 | `src/modules/rider/components/verification/VerificationReminderSheet.tsx` | New 2026-08-07 (gating pass) — dismissible bottom-sheet nudge shown on `RiderHomeScreen` for an unverified Rider, modeled on `ManualCodeEntrySheet`'s overlay pattern |
 | `src/modules/rider/components/dashboard/RiderHomeScreen.tsx` | New 2026-08-07: reads `useRiderVerification()` and renders `VerificationReminderSheet` when not yet `active`; this is now the Rider's post-login landing page |
 | `src/modules/rider/components/job-offer/JobOfferScreen.tsx` | New 2026-08-07: the one Rider screen that hard-blocks on verification status — reads `useRiderVerification()` before rendering job-board content |
+| `src/core/types/payment.types.ts` | New 2026-08-12 — the real `PaymentIntent`/`Order` types (`POST /payments/intents`, `GET /orders`(/:id)); read this before trusting the old `Delivery`/`DeliveryQuote` in `delivery.types.ts`, which are now dead in real-mode code |
+| `src/core/api/services/delivery.service.ts` | Rewritten 2026-08-12 — `createPaymentIntent`/`getPaymentIntent`/`list`/`getById` against the real routes; `calculateFare`/`create`/`pay` no longer exist |
+| `src/core/api/services/nodes.service.ts` | Rewritten 2026-08-12 — `listNearby` now sends `radiusKm` and unwraps the paginated envelope into `PickupNode`; `getById` calls the real `GET /nodes/:id` directly |
+| `src/modules/user/hooks/use-checkout.ts`, `use-payment-intent-status.ts` | New 2026-08-12 — Checkout's intent-creation hook and the payment-callback screen's polling hook |
+| `src/modules/user/components/checkout/CheckoutScreen.tsx` | Rewritten 2026-08-12 — creates the payment intent once per visit, redirects to Paystack; no more in-app payment-method picker |
+| `src/modules/user/components/tracking/PaymentCallbackScreen.tsx` | New 2026-08-12 — where Paystack redirects after checkout (`/orders/payment-callback`); polls the intent, then forwards to the real Order |
+| `src/modules/user/components/tracking/OrderStatusBadge.tsx` | New 2026-08-12 — status pill + progress/terminal heuristics for the real, mostly-unconfirmed `Order.status` string; read this before adding any new Order-status-dependent UI |
+| `src/modules/admin/components/approvals/ApprovalsScreen.tsx`, `src/modules/admin/hooks/use-admin-approvals.ts` | New 2026-08-12 — NodeOperator + Rider approval queues (`/admin/approvals`), no design reference existed for this screen |
+| `src/modules/admin/components/pricing/PricingScreen.tsx`, `AddPricingRuleForm.tsx`, `src/modules/admin/hooks/use-admin-pricing.ts` | New 2026-08-12 — pricing rule history + append-only creation form (`/admin/pricing`), no design reference existed for this screen |
 | `src/core/types/user.types.ts` | 2026-08-07: `UserRole` corrected to the real backend enum — read this before trusting any `role` comparison elsewhere in the codebase against the old `"user"`/`"vendor"` values |
 | `src/modules/user/hooks/use-auth.ts` | 2026-08-07: the one hook driving Consumer + Rider + NodeOperator register/login; `loginMutation`'s role-redirect map is the thing to edit if a new role or a new post-login destination is ever needed |
 | `src/modules/user/components/auth/CreateAccountScreen.tsx` | 2026-08-07: now shared by all three self-registerable roles via `?role=`; `ROLE_COPY` is the place to add per-role heading/subheading copy |

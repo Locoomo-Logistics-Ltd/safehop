@@ -200,6 +200,39 @@ export function getFriendlyError(error: unknown) {
       };
 
 
+    case "NODE_CAPACITY_UNAVAILABLE":
+      return {
+        title: "That drop-off point just filled up 📦",
+        message:
+          "The pickup station you chose reached capacity while you were checking out.",
+        action:
+          "Go back and choose a different pickup station.",
+        type: "warning",
+      };
+
+
+    case "PRICING_NOT_CONFIGURED":
+      return {
+        title: "Orders are temporarily unavailable ⏸️",
+        message:
+          "We can't calculate a delivery fee right now.",
+        action:
+          "Please try again shortly.",
+        type: "error",
+      };
+
+
+    case "PAYMENT_PROVIDER_ERROR":
+      return {
+        title: "Payment couldn't start 💳",
+        message:
+          "Our payment provider didn't respond. No charge was made.",
+        action:
+          "Please try again in a moment.",
+        type: "error",
+      };
+
+
     case "RATE_LIMITED":
       return {
         title: "Slow down a moment ⏳",

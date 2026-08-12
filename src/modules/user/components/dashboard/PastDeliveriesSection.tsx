@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { StatusBadge } from "@/components/ui";
 import { ROUTES } from "@/core/config/constants";
 import { formatDate } from "@/lib/format";
 import { useDeliveries } from "@/modules/user/hooks/use-deliveries";
+import { OrderStatusBadge } from "@/modules/user/components/tracking/OrderStatusBadge";
 
 const MAX_VISIBLE = 4;
 
@@ -31,12 +31,9 @@ export function PastDeliveriesSection() {
               <p className="text-[13px] font-medium text-text-primary font-mono tracking-tight">
                 {delivery.trackingCode}
               </p>
-              <p className="text-[12px] text-text-muted mt-0.5">
-                {delivery.status === "completed" ? "Completed" : "Cancelled"} ·{" "}
-                {formatDate(delivery.updatedAt)}
-              </p>
+              <p className="text-[12px] text-text-muted mt-0.5">{formatDate(delivery.createdAt)}</p>
             </div>
-            <StatusBadge status={delivery.status} />
+            <OrderStatusBadge status={delivery.status} />
           </Link>
         ))}
       </div>

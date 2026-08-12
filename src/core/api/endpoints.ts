@@ -63,6 +63,9 @@ export const ENDPOINTS = {
   nodeOperators: {
     onboarding: "/node-operators/onboarding",
     me: "/node-operators/me",
+    // Admin-only review queue — real, confirmed routes per docs/API.md.
+    pending: "/node-operators/pending",
+    approve: (profileId: string) => `/node-operators/${profileId}/approve`,
   },
 
   // ── Admin Nodes / Franchise Network (onboarding, admin-only) ──
@@ -77,6 +80,12 @@ export const ENDPOINTS = {
   },
 
   // ── Orders Engine ──────────────────────────────────────────────
+  // `calculateFare`/`book` don't appear anywhere in docs/API.md and are
+  // no longer called by delivery.service.ts as of 2026-08-12 — real
+  // order placement is `payments.intents` below. Kept only in case a
+  // real backend equivalent is ever confirmed; don't wire new code to
+  // them. `list`/`detail` ARE documented (`GET /orders`(/:id)) and are
+  // the real routes delivery.service.ts calls.
   orders: {
     calculateFare: "/orders/calculate-fare",
     book: "/orders/book",
@@ -109,10 +118,29 @@ export const ENDPOINTS = {
     uploadSignature: "/riders/verification/upload-signature",
     onboarding: "/riders/onboarding",
     me: "/riders/me",
+    // Admin-only review queue — real, confirmed routes per docs/API.md.
+    pending: "/riders/pending",
+    approve: (profileId: string) => `/riders/${profileId}/approve`,
   },
 
-  // ── Payment Webhook Ingestion (backend-to-backend, not used by app) ──
+  // ── Payments ─────────────────────────────────────────────────────
+  // `webhook` (singular, provider-parameterized) is the pre-existing,
+  // unconfirmed entry — kept for now, but note it does NOT match
+  // docs/API.md's actual `POST /payments/webhooks/paystack` (plural,
+  // Paystack-fixed, server-to-server only, never called by this app).
+  // `intents`/`intentDetail` below are the real, confirmed,
+  // frontend-facing routes.
   payments: {
     webhook: (provider: string) => `/payments/webhook/${provider}`,
+    intents: "/payments/intents",
+    intentDetail: (id: string) => `/payments/intents/${id}`,
+  },
+
+  // ── Admin Pricing ────────────────────────────────────────────────
+  // Real, confirmed routes per docs/API.md. Append-only — POST never
+  // edits an existing rule, it adds a new one that becomes "current."
+  adminPricing: {
+    create: "/admin/pricing",
+    list: "/admin/pricing",
   },
 } as const;

@@ -9,10 +9,10 @@ import {
   InfoWindow,
 } from "@vis.gl/react-google-maps";
 import { env } from "@/core/config/env";
-import type { GeoPoint, LocoomoNode } from "@/core/types";
+import type { GeoPoint, PickupNode } from "@/core/types";
 
 interface GoogleMapViewProps {
-  nodes: LocoomoNode[];
+  nodes: PickupNode[];
   selectedNodeId: string | null;
   onSelectNode: (nodeId: string) => void;
   /** User's live position — centers the map and shows a "you are here" marker. */
@@ -85,7 +85,7 @@ function NodeMarker({
   isSelected,
   onSelect,
 }: {
-  node: LocoomoNode;
+  node: PickupNode;
   isSelected: boolean;
   onSelect: (nodeId: string) => void;
 }) {
@@ -119,7 +119,8 @@ function NodeMarker({
           <div className="px-1 py-0.5 min-w-[160px]">
             <p className="text-[13px] font-semibold text-[#0B1530] mb-0.5">{node.name}</p>
             <p className="text-[11px] text-[#4A5C7D]">
-              {node.distanceKm?.toFixed(1)}km away · {node.isOpenNow ? "Open now" : "Closed"}
+              {node.distanceKm !== undefined ? `${node.distanceKm.toFixed(1)}km away · ` : ""}
+              {node.city}, {node.state}
             </p>
           </div>
         </InfoWindow>
@@ -134,7 +135,7 @@ function MapUnavailableFallback({
   selectedNodeId,
   onSelectNode,
 }: {
-  nodes: LocoomoNode[];
+  nodes: PickupNode[];
   selectedNodeId: string | null;
   onSelectNode: (nodeId: string) => void;
 }) {

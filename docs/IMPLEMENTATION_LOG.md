@@ -1094,3 +1094,300 @@ against. The `curl` smoke test above only confirms the routes compile
 and render (client-side `AuthGuard` blanks them without a session
 cookie) — it does not exercise the verification-status branches
 themselves.
+
+---
+
+## 2026-08-12 (docs-only pass — audit the new API.md diff)
+
+**Feature**: No application code changed. `docs/API.md` (maintained by
+the backend/project owner) had grown seven new documented endpoints
+since the last audit — `POST`/`GET /admin/pricing`, `POST
+/payments/intents`, `GET /payments/intents/:id`, `POST
+/payments/webhooks/paystack`, `GET /orders`, `GET /orders/:id` — none
+of which is an "Update" endpoint despite the session's original brief
+describing one (pricing is explicitly append-only; the rest are
+Create/Read). Confirmed this via `git diff docs/API.md` before writing
+anything, per the project owner's explicit instruction not to guess.
+
+**Files changed**: `docs/API_INTEGRATION_STATUS.md` only — added
+"Admin Pricing", "Payments", and "Orders" sections auditing the seven
+new endpoints against the live source (all found ❌ or 🟡 at the time:
+nothing called `admin/pricing` or `payments/intents` yet; `GET
+/orders`/`GET /orders/:id` happened to share a URL path with the
+existing, undocumented `orders/book`-driven flow but not its response
+shape). Updated summary counts (23→30 endpoints), the recommended
+priority list (new priority 0: rebuild Checkout), and the
+"Inconsistencies" section to stop listing `orders.list`/`orders.detail`
+as fully undocumented.
+
+**Verification performed**: none needed — read-only audit, no code
+touched.
+
+---
+
+## 2026-08-12 (later — full integration pass: Approvals, Pricing, Checkout rebuild)
+
+**Feature**: Following on directly from the docs-only pass above, the
+project owner asked to integrate every endpoint the audit had just
+flagged as not-yet-integrated, one at a time, building UI where none
+existed and keeping it visually consistent with the existing design
+system. Four endpoint groups, done in this order: NodeOperator
+approvals, Rider approvals, Admin Pricing, then the Consumer
+Checkout/payment rebuild (by far the largest, since it also required
+fixing the already-broken `GET /nodes/nearby` and reworking the
+Node-to-address delivery model into the real Node-to-Node one).
+
+### 1. Admin: NodeOperator + Rider approval queues
+
+`GET /node-operators/pending` + `PATCH /node-operators/:id/approve`,
+`GET /riders/pending` + `PATCH /riders/:id/approve` — real, confirmed
+routes with no screen anywhere in the app before this session
+(previously flagged in `docs/HANDOFF.md` as the single biggest
+functional gap: a self-registered NodeOperator/Rider who completed
+onboarding had no path to ever become `active`).
+
+**Files changed**:
+- `src/core/api/endpoints.ts` — added `nodeOperators.pending`/`.approve(id)`
+  and `riders.pending`/`.approve(id)`.
+- `src/core/types/admin.types.ts` — added `PendingNodeOperator`
+  (imports `RiderVerificationDocument` from `rider.types.ts` for the
+  Rider row's document shape) and `PendingRider`.
+- `src/core/api/services/admin.service.ts` — added
+  `getPendingNodeOperators`/`approveNodeOperator`/`getPendingRiders`/
+  `approveRider`; updated the file's header comment.
+- `src/modules/admin/hooks/use-admin-approvals.ts` — new. Exports
+  `useNodeOperatorApprovals()`/`useRiderApprovals()`, each a query +
+  approve mutation, tracking which row is mid-approval via
+  `mutation.variables` so only that row's button shows a spinner.
+- `src/modules/admin/components/approvals/ApprovalsScreen.tsx` + `index.ts`
+  — new. One screen, two tabs ("Node Operators"/"Riders"), modeled on
+  `NodeNetworkScreen`'s tab pattern and `TeamManagementScreen`'s table
+  pattern. No design reference exists for this screen (added to
+  `docs/API.md` after the original 8-frame `admin_UI.png`), so it
+  reuses existing patterns rather than inventing new visual language.
+- `src/app/(admin)/admin/approvals/page.tsx` — new route.
+- `src/core/config/constants.ts` — `ROUTES.adminApprovals`,
+  `QUERY_KEYS.adminNodeOperatorsPending`/`.adminRidersPending`.
+- `src/components/layout/nav-config.ts` — added "Approvals" nav item
+  (`ShieldCheckIcon`), placed after "Team".
+
+### 2. Admin: Pricing
+
+`POST`/`GET /admin/pricing` — same "no design reference, no screen"
+situation as Approvals.
+
+**Files changed**:
+- `src/core/api/endpoints.ts` — added `adminPricing.create`/`.list`.
+- `src/core/types/admin.types.ts` — added `CreatePricingRulePayload`,
+  `PricingRule`.
+- `src/core/api/services/admin.service.ts` — added
+  `createPricingRule`/`getPricingRules`.
+- `src/modules/admin/hooks/use-admin-pricing.ts` — new.
+- `src/modules/admin/components/pricing/AddPricingRuleForm.tsx`,
+  `PricingScreen.tsx`, `index.ts` — new. Inline append-only form (same
+  pattern as `OnboardNodeForm`) above a rate-history table, top row
+  marked "Current".
+- `src/app/(admin)/admin/pricing/page.tsx` — new route.
+- `src/core/config/constants.ts` — `ROUTES.adminPricing`,
+  `QUERY_KEYS.adminPricingRules`.
+- `src/components/layout/nav-config.ts` — added "Pricing" nav item
+  (`CreditCardIcon`), next to "Approvals".
+
+### 3. Consumer: Checkout rebuilt on `POST /payments/intents`
+
+The largest change. `POST /payments/intents` requires a real
+`destinationNodeId` (Node-to-Node), not the free-text
+`destinationAddress` the old, undocumented `orders/calculate-fare` +
+`orders/book` flow used — so this touched the delivery draft model,
+node selection, and every screen downstream of Checkout, not just the
+payment call itself.
+
+**Root-cause chain that expanded this task's scope**:
+1. Wiring `payments/intents` correctly required a real destination
+   Node id — `SelectNodesScreen` only collected a free-text address.
+2. Node selection (`SelectNodesScreen`, both origin and now
+   destination) depends on `GET /nodes/nearby`, which
+   `docs/API_INTEGRATION_STATUS.md` already had flagged 🟡 broken
+   (`radiusInMeters` instead of `radiusKm`, flat-array parsing instead
+   of the paginated envelope) — left broken, the new destination
+   picker would have been un-testable, so this session fixed it too.
+3. Fixing `GET /nodes/nearby` meant correcting `LocoomoNode`'s
+   fabricated fields (`isOpenNow`, `capacity.occupied`/`.total` — no
+   such data exists on the real backend). Rather than editing
+   `LocoomoNode` in place (which `vendor.service.ts`'s separate,
+   still-unconfirmed `/nodes/operator/inventory` endpoint also
+   depends on, unrelated to this session), a new `PickupNode` type was
+   introduced instead, scoped to the Consumer's real node data.
+4. Once Checkout redirects to Paystack, `docs/API.md` documents the
+   redirect landing on `/orders/payment-callback` and polling `GET
+   /payments/intents/:id` — a screen that didn't exist and had to be
+   built, including recovering the intent id from `sessionStorage`
+   (the callback URL's query params aren't documented) and finding the
+   resulting Order afterward (no "get order by intent id" route
+   exists, so it scans `GET /orders` for a matching `paymentIntentId`).
+5. The real `Order` (`GET /orders`(/:id)) has a materially different
+   shape from the old, undocumented `Delivery` type — no fee
+   breakdown, no `route`/`collectionQrCode`/`trackingHistory`, and a
+   `status` field where `docs/API.md` only confirms one value
+   (`"awaiting_drop_off"`). Every screen rendering an order
+   (`DeliveryCard`, `TrackPackageScreen`, `OrderSuccessScreen`, the two
+   dashboard sections) needed rebuilding against the real shape, not
+   just a mapping-function patch.
+
+**New types** — `src/core/types/payment.types.ts` (new file):
+`OrderParcelSize`, `CreatePaymentIntentPayload`,
+`PaymentIntentFeeBreakdown`, `PaymentIntentStatus`, `PaymentIntent`,
+`OrderStatus` (typed as `string`, not a union — see point 5 above),
+`Order`, plus `toOrderParcelSize()` (maps the UI's legacy `"xl"` to the
+real `"extra_large"`, the only member that differs). Barrel-exported
+from `core/types/index.ts`.
+
+**Legacy types kept, not deleted** — `src/core/types/delivery.types.ts`:
+`Delivery`, `DeliveryQuote`, `CreateDeliveryDraft`,
+`CalculateFarePayload`, `BookOrderPayload` are now unused by real app
+code, but were **not deleted**: the commented-out mock delivery
+service (`delivery.service.ts`) and `MOCK_DELIVERIES` fixture
+(`core/mocks/mock-deliveries.ts`) still assume this shape, and
+`docs/PROJECT_CONTEXT.md` explicitly says not to remove mock code until
+the project is feature-complete. Each got a `@deprecated`/legacy
+comment pointing at its real replacement instead. `LocoomoNode` was
+left completely untouched for the same reason (still used by
+`vendor.service.ts`/`VendorHomeScreen`).
+
+**Files changed** (real-mode code):
+- `src/core/api/endpoints.ts` — added `payments.intents`/
+  `.intentDetail(id)`; commented `orders.calculateFare`/`.book` as
+  legacy/unused; corrected `nodes.nearby`'s usage (see
+  `nodes.service.ts` below).
+- `src/core/api/services/delivery.service.ts` — replaced
+  `calculateFare`/`create`/`pay` with `createPaymentIntent`/
+  `getPaymentIntent`; `list`/`getById` now call the real `GET
+  /orders`(/:id) and return `Order`, not `Delivery`.
+- `src/core/api/services/nodes.service.ts` — rewritten: `listNearby`
+  sends `radiusKm` + `limit`, unwraps `PaginatedList<RawNearbyNode>`,
+  maps into `PickupNode`. `getById` now calls the real `GET /nodes/:id`
+  directly (was a "fetch a huge radius and filter client-side"
+  workaround, since this endpoint wasn't known to be usable this way
+  before).
+- `src/core/api/errors.ts` — added `getFriendlyError` cases for the
+  three new payments error codes: `NODE_CAPACITY_UNAVAILABLE`,
+  `PRICING_NOT_CONFIGURED`, `PAYMENT_PROVIDER_ERROR`.
+- `src/store/delivery-draft.store.ts` — `destinationAddress` →
+  `destinationNodeId`.
+- `src/modules/user/components/delivery/SelectNodesScreen.tsx` —
+  rewritten: origin picker unchanged (map + list), destination is now
+  a second searchable Node list below it (same `NodeListItem`
+  component), excludes whichever Node is picked as origin.
+- `src/modules/user/components/delivery/DestinationAddressInput.tsx` —
+  **deleted**, genuinely unused now.
+- `src/modules/user/components/delivery/NodeListItem.tsx`,
+  `GoogleMapView.tsx` — retyped from `LocoomoNode` to `PickupNode`;
+  dropped the fabricated "Filling up"/`isOpenNow` UI, added
+  `city`/`state`/`operatingHours` in its place.
+- `src/modules/user/components/delivery/DeliveryMethodScreen.tsx` —
+  removed the invented "From ₦800"/"From ₦2500" per-option pricing
+  (real pricing is distance-only and this field isn't sent to
+  `payments/intents` at all per `docs/API.md`); the method choice
+  itself stays as a local, UI-only preference.
+- `src/modules/user/hooks/use-fare-quote.ts`,
+  `use-create-delivery.ts` — **deleted**, replaced by:
+- `src/modules/user/hooks/use-checkout.ts` — new. Creates the intent
+  once, exposes `redirectToPaystack()` (stashes the intent id in
+  `sessionStorage`, then `window.location.href = authorizationUrl`).
+- `src/modules/user/hooks/use-payment-intent-status.ts` — new. Polls
+  `GET /payments/intents/:id` via `refetchInterval`, capped at ~36
+  attempts (~90s) tracked with a `useRef` counter incremented inside
+  the `refetchInterval` callback (not render) to satisfy the
+  `react-hooks/purity` lint rule against calling `Date.now()`/reading
+  refs during render.
+- `src/modules/user/components/checkout/CheckoutScreen.tsx` — rewritten
+  around `useCheckout()`; fires the intent creation exactly once
+  (`useRef` guard) since it has the side effect of reserving Node
+  capacity; no more in-app payment-method step.
+- `src/modules/user/components/checkout/OrderSummaryCard.tsx` —
+  rewritten against `PaymentIntentFeeBreakdown` (kobo amounts, `/100`
+  for display) instead of the old naira `DeliveryQuote`.
+- `src/modules/user/components/checkout/PaymentMethodSelector.tsx` —
+  **deleted**. Paystack's hosted checkout presents payment method
+  choice; the real API has no field for it.
+- `src/modules/user/components/tracking/PaymentCallbackScreen.tsx`,
+  `OrderStatusBadge.tsx` — new. The callback screen covers pending/
+  paid/failed/expired/timed-out states; `OrderStatusBadge` +
+  `getOrderProgress`/`isTerminalOrderStatus` render any raw status
+  string gracefully via keyword heuristics (`complete`/`deliver`/
+  `collect` → success-styled, `cancel`/`fail`/`expire` → danger-styled,
+  anything else → neutral/in-progress) rather than a fixed lookup
+  table, since only one status value is confirmed. Deliberately did
+  **not** reuse the shared `StatusBadge`/`DeliveryStatus` — that type
+  is still used by Admin's `NOT_IMPLEMENTED` order screens and Vendor's
+  `NodeParcel` statuses, unrelated domains this pass didn't touch.
+- `src/app/(user)/orders/payment-callback/page.tsx` — new route,
+  inside the `(user)` group (same `AuthGuard` as the rest of Checkout).
+- `src/modules/user/hooks/use-deliveries.ts`, `use-delivery.ts` —
+  rewritten against `Order`; active/past split now uses
+  `isTerminalOrderStatus` instead of a fixed `DeliveryStatus` set.
+- `src/modules/user/components/dashboard/DeliveryCard.tsx`,
+  `PastDeliveriesSection.tsx` — retyped to `Order`,
+  `OrderStatusBadge`/`getOrderProgress` instead of `StatusBadge`/
+  `getDeliveryProgress`.
+- `src/modules/user/components/tracking/TrackPackageScreen.tsx` —
+  rewritten; the "Tracking History" `TrackingTimeline` section was
+  **removed**, not faked — the real Order has no event-log field, only
+  a "Order Details" card (receiver/parcel/addresses/amount/date) in
+  its place.
+- `src/modules/user/components/tracking/OrderSuccessScreen.tsx` —
+  rewritten against `Order`; no fee breakdown (only `PaymentIntent`
+  has one), shows total paid instead; QR still shown (via the existing
+  decorative `QrCodeBlock` placeholder) but encodes just `trackingCode`
+  now, not the old `{trackingCode, qrNonce}` pair the real Order
+  doesn't return.
+- `src/core/config/constants.ts` — added `ROUTES.paymentCallback`,
+  `ROUTES.trackList` (fixed a pre-existing drift: several screens
+  already hardcoded `"/track"` directly instead of going through
+  `ROUTES`, the project's own stated convention — gave it a proper
+  entry rather than repeating the hardcode in the new code this pass
+  added), `QUERY_KEYS.paymentIntent(id)`, and a new `STORAGE_KEYS`
+  export (`pendingPaymentIntentId`).
+
+**Design decisions**:
+- Kept the four-step New Delivery flow's shape (New Delivery → Select
+  Nodes → Method → Checkout) rather than removing the now-non-functional
+  Method step — it's harmless UI-only state, and removing a whole step
+  users are used to wasn't the ask; just stopped it claiming false
+  pricing.
+- Payment intent creation happens once, automatically, on Checkout
+  mount (not on a button press) — matches `docs/API.md`'s own framing
+  of the endpoint as doing fee calc *and* reservation together; a
+  separate "preview" step doesn't exist server-side to call first.
+- Chose `sessionStorage` (not the callback URL's query string) to carry
+  the payment intent id across the Paystack redirect, since
+  `docs/API.md` doesn't document what Paystack appends to
+  `/orders/payment-callback`.
+
+**Verification performed**: `npx tsc --noEmit` (clean), `npx eslint
+src` (clean — including fixing two `react-hooks/purity`/
+`react-hooks/set-state-in-effect` violations the new polling/callback
+code first tripped, using the same lazy-`useState`-initializer pattern
+`RiderHomeScreen` already established for reading `sessionStorage`),
+`npm run build` (clean after two unrelated `fonts.gstatic.com`/
+`fonts.googleapis.com` network timeouts in this sandbox — succeeded on
+retry; `/admin/approvals`, `/admin/pricing`, `/orders/payment-callback`
+all present in the route table, every pre-existing route still
+builds). Dev-server smoke test: `/checkout`, `/delivery/select-nodes`,
+`/delivery/method`, `/orders/payment-callback`, `/track`,
+`/admin/approvals`, `/admin/pricing` all return `200`.
+
+**Not performed**: any verification against a live backend or a real
+Paystack account — no live session was available this session, same
+standing caveat as every other real-route integration in this log
+without one. In particular, unverified: whether the real `GET
+/nodes/nearby` response actually matches the new `PickupNode`
+mapping; whether a real Node capacity reservation + Paystack
+redirect + webhook + `GET /orders` round trip actually produces a
+matching `paymentIntentId` the callback screen can find; and whether
+`Order.status` ever takes a value this session didn't anticipate in
+`OrderStatusBadge`'s heuristic (fails safe — unrecognized values render
+as neutral/in-progress, not a crash).
+
+**Remaining work**: see `docs/API_INTEGRATION_STATUS.md`'s updated
+priority list (items 3, 5, 6, 7, 8) and `docs/HANDOFF.md`.

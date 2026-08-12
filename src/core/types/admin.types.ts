@@ -11,6 +11,7 @@
  */
 
 import type { DeliveryStatus, GeoPoint, TrackingEvent } from "./delivery.types";
+import type { RiderVerificationDocument } from "./rider.types";
 
 // ── Dashboard ────────────────────────────────────────────────────
 
@@ -138,6 +139,35 @@ export interface UpdateNodePayload {
   status?: NodeLifecycleStatus;
 }
 
+// ── Approvals (NodeOperator / Rider review queues) ──────────────
+// GET /node-operators/pending, PATCH /node-operators/:id/approve,
+// GET /riders/pending, PATCH /riders/:id/approve — real, confirmed
+// routes per docs/API.md. Previously flagged as the single biggest
+// functional gap in the app (docs/HANDOFF.md): a self-registered
+// NodeOperator/Rider who completes onboarding had no path to ever
+// become `active`, since only these dedicated endpoints flip both the
+// User and the linked profile's status together in one transaction.
+
+export interface PendingNodeOperator {
+  profileId: string;
+  userEmail: string;
+  userFirstName: string;
+  userLastName: string;
+  submittedAt: string;
+  /** Same Node shape as GET /nodes/:id — status will be "pending". */
+  node: AdminNodeRecord;
+}
+
+export interface PendingRider {
+  profileId: string;
+  userEmail: string;
+  userFirstName: string;
+  userLastName: string;
+  currentEmployer: string;
+  submittedAt: string;
+  documents: RiderVerificationDocument[];
+}
+
 // ── Team ─────────────────────────────────────────────────────────
 // `AdminTeamRole`/`AdminTeamMember` below are still provisional — no
 // `GET` list endpoint exists to check this taxonomy against (see
@@ -215,6 +245,27 @@ export interface SuperAdminOverview {
 /** Shape guessed from the route name — unverified, see admin.service.ts header. */
 export interface ElevateSuperAdminPayload {
   userId: string;
+}
+
+// ── Pricing ──────────────────────────────────────────────────────
+// POST/GET /admin/pricing — real, confirmed routes per docs/API.md.
+// Append-only: POST never edits an existing rule, it adds a new one
+// that becomes "current." Historical orders keep referencing whichever
+// rule was current when their fee was calculated.
+
+export interface CreatePricingRulePayload {
+  baseFeeNaira: number;
+  perKmRateNaira: number;
+}
+
+export interface PricingRule {
+  id: string;
+  baseFeeNaira: number;
+  baseFeeKobo: number;
+  perKmRateNaira: number;
+  perKmRateKobo: number;
+  effectiveFrom: string;
+  createdByAdminId: string;
 }
 
 // ── Analytics ────────────────────────────────────────────────────

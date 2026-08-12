@@ -1,14 +1,22 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { Button, Card, StatusBadge, RouteRail } from "@/components/ui";
+import { Card, RouteRail } from "@/components/ui";
 import { TopBar } from "@/components/layout";
-import { QrCodeIcon } from "@/components/icons";
 import { useDelivery } from "@/modules/user/hooks/use-delivery";
-import { getDeliveryProgress } from "@/modules/user/hooks/use-deliveries";
-import { TrackingTimeline } from "./TrackingTimeline";
+import { getOrderProgress, OrderStatusBadge } from "./OrderStatusBadge";
+import { formatCurrency, formatDate } from "@/lib/format";
 
-/** Tracking screen — route progress + full event history, matching Figma. */
+/**
+ * Tracking screen — route progress + order details.
+ *
+ * Rebuilt 2026-08-12 against the real `Order` type (`GET /orders/:id`).
+ * The previous version rendered a `TrackingHistory`/`TrackingTimeline`
+ * event-by-event log — the real Order response has no such field
+ * (only `status`, a single current value), so that section is dropped
+ * rather than fabricated. Re-add it if a real order-events endpoint is
+ * ever confirmed against docs/API.md.
+ */
 export function TrackPackageScreen() {
   const params = useParams<{ id: string }>();
   const { delivery, isLoading, isError } = useDelivery(params.id);
@@ -24,7 +32,7 @@ export function TrackPackageScreen() {
   if (isError || !delivery) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-bg-canvas px-6 text-center">
-        <p className="font-semibold text-text-primary mb-1">Delivery not found</p>
+        <p className="font-semibold text-text-primary mb-1">Order not found</p>
         <p className="text-[13px] text-text-secondary">
           This tracking link may be invalid or expired.
         </p>
@@ -32,8 +40,7 @@ export function TrackPackageScreen() {
     );
   }
 
-  const progress = getDeliveryProgress(delivery.status);
-  const isReadyForCollection = delivery.status === "ready_for_collection";
+  const progress = getOrderProgress(delivery.status);
 
   return (
     <div className="min-h-screen bg-bg-canvas">
@@ -54,7 +61,7 @@ export function TrackPackageScreen() {
               {delivery.trackingCode}
             </p>
           </div>
-          <StatusBadge status={delivery.status} />
+          <OrderStatusBadge status={delivery.status} />
         </Card>
 
         {/* Route overview */}
@@ -63,35 +70,41 @@ export function TrackPackageScreen() {
             Route Overview
           </p>
           <RouteRail
-            originLabel={delivery.route.originLabel}
-            destinationLabel={delivery.route.destinationLabel}
+            originLabel={delivery.originNodeName}
+            destinationLabel={delivery.destinationNodeName}
             progress={progress}
             variant="full"
           />
           <div className="flex items-center justify-between text-[12px] text-text-secondary mt-2 font-medium">
-            <span>{delivery.route.originLabel}</span>
-            <span>{delivery.route.destinationLabel}</span>
+            <span>{delivery.originNodeName}</span>
+            <span>{delivery.destinationNodeName}</span>
           </div>
         </Card>
 
-        {/* Tracking history */}
+        {/* Order details */}
         <Card padding="lg">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-text-muted mb-4">
-            Tracking History
+            Order Details
           </p>
-          {delivery.trackingHistory.length === 0 ? (
-            <p className="text-[13px] text-text-muted">No tracking events yet.</p>
-          ) : (
-            <TrackingTimeline events={delivery.trackingHistory} />
-          )}
+          <div className="flex flex-col gap-2.5 text-[13px]">
+            <DetailRow label="Receiver" value={delivery.receiverFullName} />
+            <DetailRow label="Parcel" value={delivery.parcelDescription} />
+            <DetailRow label="Origin address" value={delivery.originNodeAddress} />
+            <DetailRow label="Destination address" value={delivery.destinationNodeAddress} />
+            <DetailRow label="Amount paid" value={formatCurrency(delivery.amountKobo / 100)} />
+            <DetailRow label="Placed" value={formatDate(delivery.createdAt)} />
+          </div>
         </Card>
-
-        {isReadyForCollection && (
-          <Button fullWidth size="lg" leftIcon={<QrCodeIcon size={18} />} className="mt-5">
-            Show Collection QR
-          </Button>
-        )}
       </div>
+    </div>
+  );
+}
+
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className="text-text-muted">{label}</span>
+      <span className="font-medium text-text-primary text-right">{value}</span>
     </div>
   );
 }

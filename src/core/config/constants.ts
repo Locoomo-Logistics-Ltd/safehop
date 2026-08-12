@@ -15,8 +15,11 @@ export const ROUTES = {
   selectNodes: "/delivery/select-nodes",
   deliveryMethod: "/delivery/method",
   checkout: "/checkout",
+  /** Where Paystack redirects after checkout, per docs/API.md's `POST /payments/intents` — polls the intent, then forwards to orderSuccess once an Order exists. */
+  paymentCallback: "/orders/payment-callback",
   orderSuccess: (id: string) => `/delivery/${id}/success`,
   track: (id: string) => `/delivery/${id}/track`,
+  trackList: "/track",
 
   // Vendor (Shop Owner / Node Operator)
   vendorHome: "/vendor/home",
@@ -45,6 +48,8 @@ export const ROUTES = {
   adminOrderDetail: (id: string) => `/admin/orders/${id}`,
   adminNodes: "/admin/nodes",
   adminTeam: "/admin/team",
+  adminApprovals: "/admin/approvals",
+  adminPricing: "/admin/pricing",
   adminDisputes: "/admin/disputes",
   adminAnalytics: "/admin/analytics",
   adminSettings: "/admin/settings",
@@ -56,6 +61,7 @@ export const QUERY_KEYS = {
   node: (id: string) => ["nodes", id] as const,
   deliveries: ["deliveries"] as const,
   delivery: (id: string) => ["deliveries", id] as const,
+  paymentIntent: (id: string) => ["payment-intent", id] as const,
 
   vendorNodeProfile: ["vendor", "node-profile"] as const,
   vendorNodeOperatorProfile: ["vendor", "node-operator-profile"] as const,
@@ -78,6 +84,9 @@ export const QUERY_KEYS = {
   adminNodes: ["admin", "nodes"] as const,
   adminNodeDetail: (id: string) => ["admin", "nodes", id] as const,
   adminTeam: ["admin", "team"] as const,
+  adminNodeOperatorsPending: ["admin", "node-operators-pending"] as const,
+  adminRidersPending: ["admin", "riders-pending"] as const,
+  adminPricingRules: ["admin", "pricing-rules"] as const,
   adminDisputes: ["admin", "disputes"] as const,
   adminDisputeMetrics: ["admin", "dispute-metrics"] as const,
   adminSuperAdminOverview: ["admin", "super-admin-overview"] as const,
@@ -95,4 +104,9 @@ export const PARCEL_RULES = {
 export const CURRENCY = {
   code: "NGN",
   symbol: "₦",
+} as const;
+
+export const STORAGE_KEYS = {
+  /** Set right before redirecting to Paystack (`authorizationUrl`) — docs/API.md doesn't guarantee the intent id comes back on the `/orders/payment-callback` query string, so the callback screen reads it from here instead. */
+  pendingPaymentIntentId: "locoomo_pending_payment_intent_id",
 } as const;

@@ -1,65 +1,83 @@
 
 import { httpClient } from "@/core/api/client";
 import { ENDPOINTS } from "@/core/api/endpoints";
-import { ApiError } from "@/core/api/errors";
+// import { ApiError } from "@/core/api/errors";
 // import { mockDelay } from "@/core/mocks/mock-utils";
 // import { MOCK_NODES } from "@/core/mocks/mock-nodes";
-import type { GeoPoint, LocoomoNode } from "@/core/types";
+import type { PaginatedList } from "@/core/api/types";
+import type { GeoPoint, PickupNode } from "@/core/types";
 
 /**
- * Nodes service — Pickup Station directory.
- * Real API: GET /nodes/nearby?latitude&longitude&radiusInMeters —
- * server-side distance sorting from the user's live position (from
- * useGeolocation), replacing the old client-side haversine sort.
+ * Nodes service — Pickup Station directory for the Consumer's node
+ * picker (New Delivery → Select Nodes). Fixed 2026-08-12 against the
+ * real, documented contract — previously sent `radiusInMeters` and
+ * parsed a flat array, but `GET /nodes/nearby` per docs/API.md takes
+ * `radiusKm` (0.1–100) and returns the paginated envelope
+ * `{items, page, limit, total}` with `distanceMeters` per item, sorted
+ * nearest-first. Was flagged as the single highest-priority fix in
+ * docs/API_INTEGRATION_STATUS.md — a real backend would have 400'd on
+ * every call, and even past that, `.map()`-ing the response directly
+ * would have crashed on the paginated object.
  */
 
-// const mockNodesService = {
-//   async list(): Promise<LocoomoNode[]> {
-//     await mockDelay();
-//     return MOCK_NODES;
-//   },
+interface RawNode {
+  id: string;
+  name: string;
+  address: string;
+  city: string;
+  state: string;
+  latitude: number;
+  longitude: number;
+  capacity: number;
+  operatingHours: string | null;
+}
 
-//   async listNearby(position: GeoPoint): Promise<LocoomoNode[]> {
+interface RawNearbyNode extends RawNode {
+  distanceMeters: number;
+}
+
+function mapNode(raw: RawNode): PickupNode {
+  return {
+    id: raw.id,
+    name: raw.name,
+    address: raw.address,
+    city: raw.city,
+    state: raw.state,
+    location: { lat: raw.latitude, lng: raw.longitude },
+    capacity: raw.capacity,
+    operatingHours: raw.operatingHours,
+  };
+}
+
+function mapNearbyNode(raw: RawNearbyNode): PickupNode {
+  return { ...mapNode(raw), distanceKm: raw.distanceMeters / 1000 };
+}
+
+// const mockNodesService = {
+//   async listNearby(position: GeoPoint): Promise<PickupNode[]> {
 //     void position;
 //     await mockDelay();
 //     return MOCK_NODES;
 //   },
-
-//   async getById(id: string): Promise<LocoomoNode> {
-//     await mockDelay(300);
-//     const node = MOCK_NODES.find((n) => n.id === id);
-//     if (!node) {
-//       throw new ApiError({ message: "Node not found.", status: 404, code: "NOT_FOUND" });
-//     }
-//     return node;
-//   },
 // };
 
 const realNodesService = {
-  /** @deprecated no longer meaningful without a reference point — use listNearby(). Kept so old call sites don't break; returns the same as listNearby with a Lagos-centered default. */
-  async list(): Promise<LocoomoNode[]> {
-    return this.listNearby({ lat: 6.5244, lng: 3.3792 });
-  },
-
-  async listNearby(position: GeoPoint, radiusMeters = 5000): Promise<LocoomoNode[]> {
+  /** GET /nodes/nearby — real, confirmed route per docs/API.md. Always `active`-only, any authenticated role. */
+  async listNearby(position: GeoPoint, radiusKm = 25): Promise<PickupNode[]> {
     const params = new URLSearchParams({
       latitude: String(position.lat),
       longitude: String(position.lng),
-      radiusInMeters: String(radiusMeters),
+      radiusKm: String(radiusKm),
+      limit: "100",
     });
-    return httpClient.get<LocoomoNode[]>(`${ENDPOINTS.nodes.nearby}?${params.toString()}`);
+    const raw = await httpClient.get<PaginatedList<RawNearbyNode>>(`${ENDPOINTS.nodes.nearby}?${params.toString()}`);
+    return raw.items.map(mapNearbyNode);
   },
 
-  async getById(id: string): Promise<LocoomoNode> {
-    // The real spec doesn't expose a single-node detail endpoint —
-    // fetch nearby and find it, or add a /nodes/:id route on the
-    // backend if you need direct lookup often.
-    const nodes = await this.listNearby({ lat: 6.5244, lng: 3.3792 }, 50_000);
-    const node = nodes.find((n) => n.id === id);
-    if (!node) {
-      throw new ApiError({ message: "Node not found.", status: 404, code: "NOT_FOUND" });
-    }
-    return node;
+  /** GET /nodes/:id — real, confirmed route per docs/API.md. Any authenticated role; 404 if the Node exists but isn't `active`. */
+  async getById(id: string): Promise<PickupNode> {
+    const raw = await httpClient.get<RawNode>(ENDPOINTS.adminNodes.detail(id));
+    return mapNode(raw);
   },
 };
 

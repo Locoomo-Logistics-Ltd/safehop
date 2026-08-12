@@ -1,22 +1,24 @@
 import { Card, RouteRail } from "@/components/ui";
 import { formatCurrency } from "@/lib/format";
-import type { DeliveryQuote } from "@/core/types";
+import type { PaymentIntentFeeBreakdown } from "@/core/types";
 
 interface OrderSummaryCardProps {
   originLabel: string;
   destinationLabel: string;
   itemDescription: string;
-  deliveryTypeLabel: string;
-  quote: DeliveryQuote;
+  parcelSizeLabel: string;
+  feeBreakdown: PaymentIntentFeeBreakdown;
+  amountKobo: number;
 }
 
-/** Order summary card shown at the top of Checkout, matching Figma. */
+/** Order summary card shown at the top of Checkout — rebuilt 2026-08-12 against `PaymentIntent.feeBreakdown` (kobo), replacing the old naira `DeliveryQuote` shape from the undocumented calculate-fare flow. */
 export function OrderSummaryCard({
   originLabel,
   destinationLabel,
   itemDescription,
-  deliveryTypeLabel,
-  quote,
+  parcelSizeLabel,
+  feeBreakdown,
+  amountKobo,
 }: OrderSummaryCardProps) {
   return (
     <Card padding="md" className="flex flex-col gap-4">
@@ -35,17 +37,15 @@ export function OrderSummaryCard({
 
       <div className="flex flex-col gap-2 text-[13px]">
         <Row label="Item type" value={itemDescription} />
-        <Row label="Delivery type" value={deliveryTypeLabel} />
+        <Row label="Parcel size" value={parcelSizeLabel} />
       </div>
 
       <div className="h-px bg-border-default" />
 
       <div className="flex flex-col gap-2 text-[13px]">
-        <Row label="Base fare" value={formatCurrency(quote.baseFare)} />
-        {quote.expressSurcharge > 0 && (
-          <Row label="Express surcharge" value={formatCurrency(quote.expressSurcharge)} />
-        )}
-        <Row label="Insurance" value={formatCurrency(quote.insurance)} />
+        <Row label="Base fee" value={formatCurrency(feeBreakdown.baseFeeKobo / 100)} />
+        <Row label="Distance" value={`${feeBreakdown.distanceKm.toFixed(1)} km`} />
+        <Row label="Per-km rate" value={`${formatCurrency(feeBreakdown.perKmRateKobo / 100)} / km`} />
       </div>
 
       <div className="h-px bg-border-default" />
@@ -53,7 +53,7 @@ export function OrderSummaryCard({
       <div className="flex items-center justify-between">
         <span className="text-[14px] font-semibold text-text-primary">Total Amount</span>
         <span className="text-[18px] font-bold text-brand-blue font-display">
-          {formatCurrency(quote.total)}
+          {formatCurrency(amountKobo / 100)}
         </span>
       </div>
     </Card>

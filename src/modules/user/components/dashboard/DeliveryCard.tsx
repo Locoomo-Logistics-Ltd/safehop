@@ -1,19 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { Card, StatusBadge, RouteRail } from "@/components/ui";
+import { Card, RouteRail } from "@/components/ui";
 import { PackageIcon } from "@/components/icons";
 import { ROUTES } from "@/core/config/constants";
-import { getDeliveryProgress } from "@/modules/user/hooks/use-deliveries";
-import type { Delivery } from "@/core/types";
+import { getOrderProgress, OrderStatusBadge } from "@/modules/user/components/tracking/OrderStatusBadge";
+import type { Order } from "@/core/types";
 
 interface DeliveryCardProps {
-  delivery: Delivery;
+  delivery: Order;
 }
 
-/** One delivery row — used in both "Active Deliveries" and "Past Deliveries" lists. */
+/** One order row — used in both "Active Deliveries" and "Past Deliveries" lists. */
 export function DeliveryCard({ delivery }: DeliveryCardProps) {
-  const progress = getDeliveryProgress(delivery.status);
+  const progress = getOrderProgress(delivery.status);
 
   return (
     <Link href={ROUTES.track(delivery.id)}>
@@ -28,22 +28,22 @@ export function DeliveryCard({ delivery }: DeliveryCardProps) {
                 {delivery.trackingCode}
               </p>
               <p className="text-[12px] text-text-muted truncate">
-                {delivery.route.destinationLabel}
+                {delivery.destinationNodeName}
               </p>
             </div>
           </div>
-          <StatusBadge status={delivery.status} />
+          <OrderStatusBadge status={delivery.status} />
         </div>
 
         <RouteRail
-          originLabel={delivery.route.originLabel}
-          destinationLabel={delivery.route.destinationLabel}
+          originLabel={delivery.originNodeName}
+          destinationLabel={delivery.destinationNodeName}
           progress={progress}
         />
 
         <div className="flex items-center justify-between text-[11px] text-text-muted">
-          <span>{delivery.route.originLabel}</span>
-          <span>{delivery.route.destinationLabel}</span>
+          <span>{delivery.originNodeName}</span>
+          <span>{delivery.destinationNodeName}</span>
         </div>
       </Card>
     </Link>

@@ -12,6 +12,8 @@ import {
   AlertTriangleIcon,
   BarChartIcon,
   SettingsIcon,
+  ShieldCheckIcon,
+  CreditCardIcon,
 } from "@/components/icons";
 import { ROUTES } from "@/core/config/constants";
 
@@ -45,16 +47,25 @@ export const RIDER_NAV_ITEMS: NavItem[] = [
 ];
 
 /**
- * Admin nav — Dashboard / Orders / Nodes / Team / Disputes / Analytics,
- * matching the `admin_UI.png` design reference sidebar. "Settings"
- * (Super Admin) is rendered separately, pinned to the bottom of the
- * sidebar, same as the account footer pattern already used there.
+ * Admin nav — Dashboard / Orders / Nodes / Team / Approvals / Pricing /
+ * Disputes / Analytics. The first six + Disputes/Analytics match the
+ * `admin_UI.png` design reference sidebar; "Approvals" and "Pricing"
+ * were added 2026-08-12 — real, confirmed endpoints
+ * (`node-operators/pending`+`approve`, `riders/pending`+`approve`,
+ * `admin/pricing`) with no home in the original 8-frame design, so
+ * they're placed after "Team" (their closest thematic neighbor —
+ * account/role administration) rather than invented a new design
+ * section. "Settings" (Super Admin) is rendered separately, pinned to
+ * the bottom of the sidebar, same as the account footer pattern
+ * already used there.
  */
 export const ADMIN_NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: ROUTES.adminDashboard, icon: HomeIcon },
   { label: "Orders", href: ROUTES.adminOrders, icon: PackageIcon },
   { label: "Nodes", href: ROUTES.adminNodes, icon: MapPinIcon },
   { label: "Team", href: ROUTES.adminTeam, icon: UsersIcon },
+  { label: "Approvals", href: ROUTES.adminApprovals, icon: ShieldCheckIcon },
+  { label: "Pricing", href: ROUTES.adminPricing, icon: CreditCardIcon },
   { label: "Disputes", href: ROUTES.adminDisputes, icon: AlertTriangleIcon },
   { label: "Analytics", href: ROUTES.adminAnalytics, icon: BarChartIcon },
 ];

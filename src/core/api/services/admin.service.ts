@@ -16,12 +16,16 @@ import type {
   AdminAnalyticsSummary,
   AdminTeamMember,
   AdminOrderSummary,
+  CreatePricingRulePayload,
   ElevateSuperAdminPayload,
   InvitedStaffMember,
   InviteStaffPayload,
   NetworkStatusSummary,
   OnboardNodePayload,
   OrdersTrendPoint,
+  PendingNodeOperator,
+  PendingRider,
+  PricingRule,
   RiderPerformanceSummary,
   SuperAdminOverview,
   TopNodePerformance,
@@ -63,6 +67,19 @@ function mapNodeRecord(node: AdminNodeRecord): AdminNodeStatus {
  *      (`node_operator`/`rider`/`admin`) — nothing to do with the
  *      fictional `AdminTeamRole` (`ops_manager`/`node_manager`/etc.)
  *      used by the still-`NOT_IMPLEMENTED` team list below.
+ *    - `getPendingNodeOperators` / `approveNodeOperator` →
+ *      `GET /node-operators/pending`, `PATCH /node-operators/:id/approve`
+ *      (Approvals screen's "Node Operators" tab). Added 2026-08-12 —
+ *      previously the single biggest functional gap in the app, per
+ *      `docs/HANDOFF.md`: a self-registered NodeOperator who completed
+ *      onboarding had no path to ever become `active`.
+ *    - `getPendingRiders` / `approveRider` → `GET /riders/pending`,
+ *      `PATCH /riders/:id/approve` (Approvals screen's "Riders" tab).
+ *      Added 2026-08-12, same gap as above, Rider side.
+ *    - `createPricingRule` / `getPricingRules` → `POST /admin/pricing`,
+ *      `GET /admin/pricing` (Pricing screen). Added 2026-08-12.
+ *      Append-only per `docs/API.md` — `createPricingRule` never edits
+ *      an existing rule, it adds a new one that becomes "current."
  *
  * 2. **Wired, but to a route that does NOT appear anywhere in
  *    `docs/API.md`** — a previous pass guessed this from the route
@@ -213,6 +230,44 @@ const realAdminService = {
   async updateNode(nodeId: string, payload: UpdateNodePayload): Promise<AdminNodeStatus> {
     const raw = await httpClient.patch<AdminNodeRecord>(ENDPOINTS.adminNodes.detail(nodeId), payload);
     return mapNodeRecord(raw);
+  },
+
+  // ── Approvals ────────────────────────────────────────────────────
+  // Real, confirmed routes. Requested at the max page size since
+  // neither queue has pagination controls yet — same convention as
+  // getNodeStatuses above.
+  async getPendingNodeOperators(): Promise<PendingNodeOperator[]> {
+    const raw = await httpClient.get<PaginatedList<PendingNodeOperator>>(
+      `${ENDPOINTS.nodeOperators.pending}?limit=100`
+    );
+    return raw.items;
+  },
+
+  /** No request body — flips the User's status and the Node's status to `active` together, in one transaction. */
+  async approveNodeOperator(profileId: string): Promise<PendingNodeOperator> {
+    return httpClient.patch<PendingNodeOperator>(ENDPOINTS.nodeOperators.approve(profileId));
+  },
+
+  async getPendingRiders(): Promise<PendingRider[]> {
+    const raw = await httpClient.get<PaginatedList<PendingRider>>(`${ENDPOINTS.riders.pending}?limit=100`);
+    return raw.items;
+  },
+
+  /** No request body — flips the User's status and the RiderProfile's status to `active` together, in one transaction. */
+  async approveRider(profileId: string): Promise<PendingRider> {
+    return httpClient.patch<PendingRider>(ENDPOINTS.riders.approve(profileId));
+  },
+
+  // ── Pricing ──────────────────────────────────────────────────────
+  /** Real, confirmed route — append-only, this never edits an existing rule. */
+  async createPricingRule(payload: CreatePricingRulePayload): Promise<PricingRule> {
+    return httpClient.post<PricingRule>(ENDPOINTS.adminPricing.create, payload);
+  },
+
+  /** Real, confirmed route — rate history, newest first. */
+  async getPricingRules(): Promise<PricingRule[]> {
+    const raw = await httpClient.get<PaginatedList<PricingRule>>(`${ENDPOINTS.adminPricing.list}?limit=100`);
+    return raw.items;
   },
 
   // ── Analytics (no endpoints) ────────────────────────────────────

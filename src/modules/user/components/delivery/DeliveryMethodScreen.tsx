@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { Button, ProgressSteps } from "@/components/ui";
 import { TopBar } from "@/components/layout";
 import { cn } from "@/lib/utils";
-import { formatCurrency } from "@/lib/format";
 import { BoltIcon, PackageIcon } from "@/components/icons";
 import { useDeliveryDraftStore } from "@/store/delivery-draft.store";
 import { ROUTES } from "@/core/config/constants";
@@ -15,7 +14,6 @@ interface MethodOption {
   value: DeliveryMethod;
   title: string;
   description: string;
-  fromPrice: number;
   recommended?: boolean;
   icon: React.ReactNode;
 }
@@ -25,7 +23,6 @@ const METHOD_OPTIONS: MethodOption[] = [
     value: "drop_and_pick",
     title: "Drop & Pick",
     description: "Drop at a node near you. Most affordable for flexible schedules.",
-    fromPrice: 800,
     recommended: true,
     icon: <PackageIcon size={20} />,
   },
@@ -33,12 +30,20 @@ const METHOD_OPTIONS: MethodOption[] = [
     value: "express",
     title: "Express Delivery",
     description: "Door-to-door convenience. Fastest delivery with zero effort.",
-    fromPrice: 2500,
     icon: <BoltIcon size={20} />,
   },
 ];
 
-/** Step 3 of the New Delivery flow: choose the delivery method. */
+/**
+ * Step 3 of the New Delivery flow: choose the delivery method.
+ *
+ * UI-only as of 2026-08-12 — `POST /payments/intents` has no `method`
+ * field per docs/API.md, and pricing is distance-only regardless of
+ * this choice (confirmed by `parcelSize`'s own "does not affect the
+ * fee" note). The per-option "From ₦X" pricing this screen used to
+ * show was invented and has been removed rather than left inaccurate;
+ * the real fee appears at Checkout once calculated server-side.
+ */
 export function DeliveryMethodScreen() {
   const router = useRouter();
   const setMethod = useDeliveryDraftStore((s) => s.setMethod);
@@ -108,9 +113,6 @@ export function DeliveryMethodScreen() {
                   </div>
                   <p className="text-[13px] text-text-secondary leading-[1.5] mt-1">
                     {option.description}
-                  </p>
-                  <p className="text-[13px] font-semibold text-brand-blue mt-2">
-                    From {formatCurrency(option.fromPrice)}
                   </p>
                 </div>
               </button>

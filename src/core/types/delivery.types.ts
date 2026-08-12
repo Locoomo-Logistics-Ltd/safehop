@@ -49,6 +49,29 @@ export interface LocoomoNode {
   };
 }
 
+/**
+ * Real `GET /nodes`/`GET /nodes/nearby` Node shape, per docs/API.md —
+ * distinct from `LocoomoNode` above, which models a still-unconfirmed
+ * shape (`isOpenNow`, `capacity.occupied`/`.total`) that
+ * `vendor.service.ts`'s still-undocumented `/nodes/operator/inventory`
+ * endpoint assumes; don't conflate the two. There's no live
+ * occupancy/open-now signal from the real backend — `capacity` is the
+ * self-reported max, and there's no connectivity/hours-open concept at
+ * all (same correction already applied to Admin's `AdminNodeRecord`).
+ */
+export interface PickupNode {
+  id: string;
+  name: string;
+  address: string;
+  city: string;
+  state: string;
+  location: GeoPoint;
+  capacity: number;
+  operatingHours: string | null;
+  /** Only present from `GET /nodes/nearby` (`distanceMeters` / 1000), not `GET /nodes/:id`. */
+  distanceKm?: number;
+}
+
 export interface ParcelDetails {
   description: string;
   size: ParcelSize;
@@ -61,6 +84,7 @@ export interface ReceiverDetails {
   phone: string;
 }
 
+/** @deprecated Modeled on the undocumented orders/calculate-fare response — real fee data now comes from `PaymentIntent.feeBreakdown` (core/types/payment.types.ts), in kobo, not this naira breakdown. Kept only for the commented-out mock delivery service / `Delivery` below. */
 export interface DeliveryQuote {
   baseFare: number;
   expressSurcharge: number;
@@ -78,6 +102,7 @@ export interface TrackingEvent {
   timestamp: string;
 }
 
+/** @deprecated Real order data now comes from `Order` (core/types/payment.types.ts) via `GET /orders`/`GET /orders/:id` — a materially different shape (no `quote` breakdown, no `route`/`collectionQrCode`/`trackingHistory`, `destinationAddress` replaced by a real destination Node). Kept only because the commented-out mock delivery service / `MOCK_DELIVERIES` still assume this shape. */
 export interface Delivery {
   id: string;
   trackingCode: string; // e.g. "LCM-2026-0012"
@@ -108,7 +133,7 @@ export interface Delivery {
   updatedAt: string;
 }
 
-/** Payload built up across the multi-step "New Delivery" flow */
+/** @deprecated Superseded by the delivery-draft.store.ts fields feeding `CreatePaymentIntentPayload` directly (destination is now a Node id, not a free-text address). Payload built up across the multi-step "New Delivery" flow. */
 export interface CreateDeliveryDraft {
   receiver: ReceiverDetails;
   parcel: ParcelDetails;
@@ -125,7 +150,16 @@ export function toApiParcelSize(size: ParcelSize): "SMALL" | "MEDIUM" | "LARGE" 
   return "LARGE"; // "large" and "xl" both map to LARGE
 }
 
-// ── Real API fare + order request/scan shapes ───────────────────
+// ── Legacy fare/order request shapes ─────────────────────────────
+// `CalculateFarePayload`/`BookOrderPayload` targeted undocumented
+// routes (`orders/calculate-fare`, `orders/book`) that don't appear
+// anywhere in docs/API.md. The real, documented order-placement
+// contract is `POST /payments/intents` (see core/types/payment.types.ts
+// and delivery.service.ts) — Node-to-Node, not Node-to-address, and a
+// single call rather than calculate-then-book. Kept here, unused by
+// real app code as of 2026-08-12, only because the commented-out mock
+// delivery service and `Delivery`/`DeliveryQuote` below still assume
+// this shape — don't build new real-mode code against these two.
 
 export interface CalculateFarePayload {
   originNodeId: string;

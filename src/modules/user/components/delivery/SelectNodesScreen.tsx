@@ -12,16 +12,20 @@ import { ROUTES } from "@/core/config/constants";
 import { distanceKm } from "@/lib/geo";
 import { GoogleMapView } from "./GoogleMapView";
 import { NodeListItem } from "./NodeListItem";
-import { DestinationAddressInput } from "./DestinationAddressInput";
 
 /**
  * Step 2 of the New Delivery flow: pick the origin Pickup Station
- * (where the sender drops the parcel off) from the live network map,
- * and enter a destination address.
+ * (where the sender drops the parcel off) and the destination Pickup
+ * Station (where the receiver collects it).
  *
- * The real API resolves/geocodes a free-text destination address
- * server-side rather than requiring a destination Node — see
- * core/types/delivery.types.ts's comment on `destinationAddress`.
+ * Rebuilt 2026-08-12 — `POST /payments/intents` requires a real
+ * `destinationNodeId` per docs/API.md, not a free-text address (the
+ * old `DestinationAddressInput` targeted the undocumented
+ * `orders/book` route's `destinationAddress` field, which doesn't
+ * exist in the real, documented order-placement contract). Both
+ * pickers share the same nearby-Nodes list; the map stays focused on
+ * origin selection (its primary, highest-frequency use), destination
+ * is a second searchable list below it.
  *
  * Requests the user's real location on mount (useGeolocation) to
  * center the map and compute live "X km away" distances — falls back
@@ -32,13 +36,14 @@ export function SelectNodesScreen() {
   const { nodes, isLoading } = useNodes();
   const { position: userPosition, permissionGranted } = useGeolocation();
   const setOriginNode = useDeliveryDraftStore((s) => s.setOriginNode);
-  const setDestinationAddress = useDeliveryDraftStore((s) => s.setDestinationAddress);
+  const setDestinationNode = useDeliveryDraftStore((s) => s.setDestinationNode);
   const originNodeId = useDeliveryDraftStore((s) => s.originNodeId);
-  const destinationAddress = useDeliveryDraftStore((s) => s.destinationAddress);
+  const destinationNodeId = useDeliveryDraftStore((s) => s.destinationNodeId);
 
-  const [selectedId, setSelectedId] = useState<string | null>(originNodeId);
-  const [address, setAddress] = useState(destinationAddress ?? "");
-  const [search, setSearch] = useState("");
+  const [selectedOriginId, setSelectedOriginId] = useState<string | null>(originNodeId);
+  const [selectedDestinationId, setSelectedDestinationId] = useState<string | null>(destinationNodeId);
+  const [originSearch, setOriginSearch] = useState("");
+  const [destinationSearch, setDestinationSearch] = useState("");
 
   // Recompute live distance from the user's real position, then sort
   // nearest-first — replaces the static mock distanceKm values.
@@ -49,20 +54,30 @@ export function SelectNodesScreen() {
       .sort((a, b) => (a.distanceKm ?? 0) - (b.distanceKm ?? 0));
   }, [nodes, userPosition]);
 
-  const filteredNodes = useMemo(() => {
-    if (!search.trim()) return nodesWithLiveDistance;
-    const q = search.toLowerCase();
-    return nodesWithLiveDistance.filter(
-      (n) => n.name.toLowerCase().includes(q) || n.area.toLowerCase().includes(q)
-    );
-  }, [nodesWithLiveDistance, search]);
+  const filteredOriginNodes = useMemo(() => {
+    if (!originSearch.trim()) return nodesWithLiveDistance;
+    const q = originSearch.toLowerCase();
+    return nodesWithLiveDistance.filter((n) => n.name.toLowerCase().includes(q) || n.city.toLowerCase().includes(q));
+  }, [nodesWithLiveDistance, originSearch]);
 
-  const canProceed = !!selectedId && address.trim().length > 4;
+  const filteredDestinationNodes = useMemo(() => {
+    const withoutOrigin = nodesWithLiveDistance.filter((n) => n.id !== selectedOriginId);
+    if (!destinationSearch.trim()) return withoutOrigin;
+    const q = destinationSearch.toLowerCase();
+    return withoutOrigin.filter((n) => n.name.toLowerCase().includes(q) || n.city.toLowerCase().includes(q));
+  }, [nodesWithLiveDistance, selectedOriginId, destinationSearch]);
+
+  const canProceed = !!selectedOriginId && !!selectedDestinationId && selectedOriginId !== selectedDestinationId;
+
+  const handleSelectOrigin = (nodeId: string) => {
+    setSelectedOriginId(nodeId);
+    if (selectedDestinationId === nodeId) setSelectedDestinationId(null);
+  };
 
   const handleNext = () => {
     if (!canProceed) return;
-    setOriginNode(selectedId);
-    setDestinationAddress(address.trim());
+    setOriginNode(selectedOriginId);
+    setDestinationNode(selectedDestinationId);
     router.push(ROUTES.deliveryMethod);
   };
 
@@ -76,7 +91,7 @@ export function SelectNodesScreen() {
             Pickup &amp; Destination
           </h1>
           <p className="text-[14px] text-text-secondary mt-1">
-            Choose a drop-off Pickup Station and where it&apos;s headed
+            Choose a drop-off Pickup Station and a destination Pickup Station
           </p>
         </div>
 
@@ -84,8 +99,8 @@ export function SelectNodesScreen() {
 
         <GoogleMapView
           nodes={nodesWithLiveDistance}
-          selectedNodeId={selectedId}
-          onSelectNode={setSelectedId}
+          selectedNodeId={selectedOriginId}
+          onSelectNode={handleSelectOrigin}
           userPosition={userPosition}
         />
 
@@ -102,32 +117,59 @@ export function SelectNodesScreen() {
           <Input
             placeholder="Search nearby stations or from your history"
             leftElement={<SearchIcon size={16} />}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            value={originSearch}
+            onChange={(e) => setOriginSearch(e.target.value)}
           />
         </div>
 
         <div className="flex flex-col gap-2.5 mt-4">
           {isLoading ? (
             <p className="text-[13px] text-text-muted text-center py-6">Loading nodes…</p>
-          ) : filteredNodes.length === 0 ? (
+          ) : filteredOriginNodes.length === 0 ? (
             <p className="text-[13px] text-text-muted text-center py-6">
-              No stations match &ldquo;{search}&rdquo;
+              No stations match &ldquo;{originSearch}&rdquo;
             </p>
           ) : (
-            filteredNodes.map((node) => (
+            filteredOriginNodes.map((node) => (
               <NodeListItem
                 key={node.id}
                 node={node}
-                isSelected={selectedId === node.id}
-                onSelect={setSelectedId}
+                isSelected={selectedOriginId === node.id}
+                onSelect={handleSelectOrigin}
               />
             ))
           )}
         </div>
 
         <div className="mt-6">
-          <DestinationAddressInput value={address} onChange={setAddress} />
+          <p className="text-[13px] font-medium text-text-secondary mb-2">
+            Select Destination Station
+          </p>
+          <Input
+            placeholder="Search destination stations"
+            leftElement={<SearchIcon size={16} />}
+            value={destinationSearch}
+            onChange={(e) => setDestinationSearch(e.target.value)}
+          />
+        </div>
+
+        <div className="flex flex-col gap-2.5 mt-4">
+          {isLoading ? (
+            <p className="text-[13px] text-text-muted text-center py-6">Loading nodes…</p>
+          ) : filteredDestinationNodes.length === 0 ? (
+            <p className="text-[13px] text-text-muted text-center py-6">
+              {selectedOriginId ? `No other stations match “${destinationSearch}”` : "Select a pickup station first"}
+            </p>
+          ) : (
+            filteredDestinationNodes.map((node) => (
+              <NodeListItem
+                key={node.id}
+                node={node}
+                isSelected={selectedDestinationId === node.id}
+                onSelect={setSelectedDestinationId}
+              />
+            ))
+          )}
         </div>
 
         <p className="text-[11px] text-text-muted mt-4 leading-[1.6]">
