@@ -6,7 +6,45 @@
 
 ## Current objective
 
-**Latest session (2026-08-12 — full integration pass: Admin Approvals,
+**Latest session (2026-08-13 — live debugging session, continued):**
+same debugging thread as the entry below, continued live with the
+reporting user. Two more things resolved: (1) confirmed the
+`(user)/layout.tsx` role-gate fix (below) was in fact the fix for the
+`/orders` 404 — it was a non-Consumer session hitting a Consumer-only
+route, not a missing backend route; **`GET /orders` is live**, the
+docs-vs-deployment gap flagged below was a misdiagnosis. (2) Checkout
+was permanently stuck on "Calculating your delivery fee…" despite
+`POST /payments/intents` succeeding — root cause was a `useRef`-based
+"fire once" guard that could desync from the mutation's actual state;
+fixed by deriving the guard from the mutation's own `isIdle` instead.
+**This is the first piece of the whole 2026-08-12/13 integration to be
+confirmed working end-to-end against the live backend by a real user**
+— Checkout now correctly shows a real fee breakdown and enables
+"Confirm & Pay". The Paystack redirect → payment-callback → Order flow
+downstream of that is still unverified. Full detail in
+`docs/IMPLEMENTATION_LOG.md`'s 2026-08-13 entry.
+
+**Previous session (2026-08-12, later still — live debugging session):**
+a real user testing the previous session's Checkout rebuild reported
+"no stations available" on Select Nodes despite Admin having created
+one `active` Node. Root cause was three stacked issues, all fixed:
+(1) `SelectNodesScreen` silently swallowed fetch errors into the same
+"No stations match" text as a genuine empty result — now shows an
+`ErrorAlert`. (2) The real error was a stale, expired access token
+hitting `401` with no retry — closed the standing "wire a 401→refresh
+interceptor" gap in `core/api/client.ts`. (3) The Node's coordinates
+were almost certainly wrong because both Node-creation forms required
+typing raw lat/lng by hand — added a new shared
+`AddressGeocodeButton` (`src/components/maps/`) that resolves them
+from the address via Google's Geocoding API instead (needs a real
+`NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` to work; currently unset in this
+repo's env files). **Separately confirmed and flagged, not
+fixable from the frontend**: the live backend returns a raw "Cannot
+GET /api/v1/orders" 404 — `GET /orders` isn't actually deployed on the
+live backend yet despite being documented in `docs/API.md`. Full
+detail in `docs/IMPLEMENTATION_LOG.md`'s matching entry.
+
+**Previous session (2026-08-12 — full integration pass: Admin Approvals,
 Admin Pricing, Consumer Checkout rebuild):** every endpoint
 `docs/API_INTEGRATION_STATUS.md` had flagged ❌ as of that morning's
 audit is now wired, plus a fix to the already-broken `GET
@@ -644,17 +682,40 @@ concept at all, so it may have no real equivalent.
 
 ## Potential risks
 
-- **The entire Checkout → Paystack → payment-callback → Order round
-  trip (2026-08-12) is built strictly from `docs/API.md`'s documented
-  contract and has not been exercised against a live backend or a real
-  Paystack account.** No real Node capacity reservation, Paystack
-  redirect, webhook delivery, or `GET /orders` match against a real
-  `paymentIntentId` has happened yet. If the live backend's
-  `POST /payments/intents` response ever omits a field this session
-  assumed present (e.g. `feeBreakdown`), `CheckoutScreen` will show a
-  generic error rather than a specific one — same "fail-loud, not
-  silent" posture as the rest of this codebase, but worth confirming
-  with a real test-mode Paystack account before going live.
+- ~~**`GET /orders` is documented in `docs/API.md` but not actually
+  deployed on the live backend**~~ **Misdiagnosed, corrected
+  2026-08-13.** The raw `"Cannot GET /api/v1/orders?limit=100"` 404 was
+  actually the backend's response to a **non-Consumer session** hitting
+  a Consumer-only route — `(user)/layout.tsx` had no `allowedRoles`
+  gate (see below), so an Admin session testing the app could reach
+  `/dashboard`/`/track` and fire this call. `GET /orders` is confirmed
+  live and working once called with a real Consumer session. Worth
+  noting for future debugging: this backend's 404 for
+  "wrong role, right route" reads identically to "route doesn't
+  exist" — don't assume the latter from message text alone.
+- **`AddressGeocodeButton` (2026-08-12) needs a real
+  `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`** to actually resolve coordinates —
+  this repo's `.env`/`.env.local` both leave it empty, so right now
+  every Node-creation form still falls back to manual lat/lng entry
+  (with a hint explaining why). This was very likely why the Node that
+  triggered this session's bug report couldn't be found by any nearby
+  search in the first place.
+- **The Checkout → Paystack → payment-callback → Order round trip is
+  now *partially* confirmed live (2026-08-13)**: `POST
+  /payments/intents` has been exercised against the real backend by an
+  actual Consumer session and correctly returns `feeBreakdown`,
+  `amountKobo`, `authorizationUrl`, etc. — `CheckoutScreen` renders it
+  correctly and enables "Confirm & Pay". **Still unverified**: the
+  actual Paystack redirect, a real payment completing, the
+  server-to-server webhook firing, and `/orders/payment-callback`
+  successfully matching the resulting Order via `paymentIntentId` — no
+  real payment was carried through to completion this session. Also
+  now fixed (2026-08-13): the intent-creation effect used to guard
+  against double-firing with a separate `useRef` that could desync
+  from the mutation's real state, permanently stalling the "Calculating
+  your delivery fee…" screen despite a successful backend response —
+  now derives the guard from the mutation's own `isIdle` state instead
+  (`use-checkout.ts`/`CheckoutScreen.tsx`).
 - **`GET /nodes/nearby`'s fix (2026-08-12) hasn't been confirmed
   against a live response either** — the new `PickupNode` mapping
   (`city`/`state`/`capacity`/`operatingHours`, no `isOpenNow`) is a

@@ -35,6 +35,7 @@ export function useCheckout() {
     createIntent: mutation.mutate,
     intent: mutation.data,
     isCreating: mutation.isPending,
+    isIdle: mutation.isIdle,
     createError: mutation.error,
     redirectToPaystack,
   };

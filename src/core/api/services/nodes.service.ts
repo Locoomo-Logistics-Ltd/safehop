@@ -62,8 +62,8 @@ function mapNearbyNode(raw: RawNearbyNode): PickupNode {
 // };
 
 const realNodesService = {
-  /** GET /nodes/nearby — real, confirmed route per docs/API.md. Always `active`-only, any authenticated role. */
-  async listNearby(position: GeoPoint, radiusKm = 25): Promise<PickupNode[]> {
+  /** GET /nodes/nearby — real, confirmed route per docs/API.md. Always `active`-only, any authenticated role. Defaults to the API's max radius (100km, per API.md's "0.1–100" bound) — early in the network's life, Nodes are sparse, so a tight default risks hiding real results more than a wide one risks showing irrelevant ones. */
+  async listNearby(position: GeoPoint, radiusKm = 100): Promise<PickupNode[]> {
     const params = new URLSearchParams({
       latitude: String(position.lat),
       longitude: String(position.lng),

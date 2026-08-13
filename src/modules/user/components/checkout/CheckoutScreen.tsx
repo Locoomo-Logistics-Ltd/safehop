@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Button, ProgressSteps } from "@/components/ui";
 import { TopBar } from "@/components/layout";
@@ -36,8 +36,7 @@ export function CheckoutScreen() {
   const router = useRouter();
   const draft = useDeliveryDraftStore();
   const { nodes } = useNodes();
-  const { createIntent, intent, isCreating, createError, redirectToPaystack } = useCheckout();
-  const hasRequestedIntent = useRef(false);
+  const { createIntent, intent, isCreating, isIdle, createError, redirectToPaystack } = useCheckout();
 
   const isDraftComplete =
     !!draft.receiver && !!draft.parcel && !!draft.destinationNodeId && !!draft.originNodeId && !!draft.method;
@@ -51,11 +50,11 @@ export function CheckoutScreen() {
 
   // Create the payment intent exactly once per Checkout visit — it
   // reserves the origin Node's capacity for ~15 minutes the instant it
-  // succeeds, so this must not fire more than once (e.g. on re-render
-  // or React Strict Mode's double-invoke).
+  // succeeds, so this must not fire more than once. Guarded by the
+  // mutation's own `isIdle` (not a separate ref) so "have we already
+  // fired" can never disagree with the mutation's actual state.
   useEffect(() => {
-    if (!isDraftComplete || hasRequestedIntent.current) return;
-    hasRequestedIntent.current = true;
+    if (!isDraftComplete || !isIdle) return;
     createIntent({
       originNodeId: draft.originNodeId!,
       destinationNodeId: draft.destinationNodeId!,
@@ -66,7 +65,7 @@ export function CheckoutScreen() {
       parcelSize: toOrderParcelSize(draft.parcel!.size),
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isDraftComplete]);
+  }, [isDraftComplete, isIdle]);
 
   if (!isDraftComplete) {
     return null;
@@ -95,8 +94,25 @@ export function CheckoutScreen() {
               <p className="text-[13px] text-text-muted">Calculating your delivery fee…</p>
             </div>
           ) : createError || !intent ? (
-            <div className="rounded-[16px] border border-status-danger bg-status-danger-bg p-4 text-center">
+            <div className="rounded-[16px] border border-status-danger bg-status-danger-bg p-4 text-center flex flex-col items-center gap-3">
               <p className="text-[13px] font-medium text-status-danger">{getErrorMessage(createError)}</p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  createIntent({
+                    originNodeId: draft.originNodeId!,
+                    destinationNodeId: draft.destinationNodeId!,
+                    receiverFullName: draft.receiver!.fullName,
+                    receiverEmail: draft.receiver!.email,
+                    receiverPhone: draft.receiver!.phone,
+                    parcelDescription: draft.parcel!.description,
+                    parcelSize: toOrderParcelSize(draft.parcel!.size),
+                  })
+                }
+              >
+                Retry
+              </Button>
             </div>
           ) : (
             <OrderSummaryCard

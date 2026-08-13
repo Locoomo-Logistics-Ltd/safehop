@@ -1391,3 +1391,193 @@ as neutral/in-progress, not a crash).
 
 **Remaining work**: see `docs/API_INTEGRATION_STATUS.md`'s updated
 priority list (items 3, 5, 6, 7, 8) and `docs/HANDOFF.md`.
+
+---
+
+## 2026-08-12 (later still — live debugging session: "no stations available")
+
+**Feature**: A real user, testing the Consumer flow from the previous
+session's rebuild against the live backend for the first time, reported
+`/delivery/select-nodes` showing no pickup/destination stations at all,
+despite having created one `active` and one `pending` Node via Admin.
+This session root-caused and fixed three stacked issues, live, in
+conversation with the reporting user (no Claude in Chrome available
+this session — diagnosed via `curl` through the dev proxy and by
+reading the user's own Network-tab output back to them).
+
+**Root-cause chain**:
+1. `SelectNodesScreen` couldn't distinguish "the request failed" from
+   "zero results" — `useNodes()` already returned `isError`, but the
+   screen never read it, so any fetch error rendered the identical
+   "No stations match" text as a genuine empty result. This is what
+   made the real problem invisible in the first place.
+2. Once surfaced, the real error was `401 UNAUTHENTICATED` on
+   `GET /nodes/nearby` — confirmed via `curl` through the dev-mode
+   proxy (`next.config.ts`'s `rewrites()`, confirmed working correctly
+   and reaching the real live backend at
+   `locoomo-api.up.railway.app`) that the route and backend were both
+   healthy; the missing piece was purely session-side. Access tokens
+   expire every 15 minutes per `docs/API.md`, and — as already flagged
+   in `docs/API_INTEGRATION_STATUS.md`'s standing priority list —
+   nothing retried on `401`. The user's session had simply gone stale
+   mid-testing.
+3. Even with a valid session, the default 25km search radius risked
+   missing genuinely distant Nodes on a sparse, early-stage network.
+4. Underlying all of it: both Node-creation forms (Admin's
+   `OnboardNodeForm`, NodeOperator's self-onboarding form in
+   `VendorNodeSetupScreen`) required typing raw latitude/longitude by
+   hand, with no way to derive them from the address — an easy way to
+   end up with a Node whose coordinates don't correspond to anywhere
+   near its actual address, silently breaking every future
+   `nodes/nearby` search for it.
+
+**Also separately reported and confirmed, not fixed**: `GET
+/orders?limit=100` returning
+`{"success":false,"error":{"code":"NOT_FOUND","message":"Cannot GET /api/v1/orders?limit=100",...}}`.
+That exact message format is a raw NestJS/Express "no route matched"
+fallback, not the app's own structured `404 NOT_FOUND` handler (which
+docs/API.md documents with a different meaning: "route or resource
+doesn't exist" for a *resource*, not a whole unregistered route). This
+indicates the live backend at `locoomo-api.up.railway.app` doesn't
+actually have `GET /orders` deployed yet, despite `docs/API.md`
+documenting it — `deliveryService.list()`'s request is correct per the
+docs. **Flagged for the backend team, not a frontend fix.**
+
+**Files changed**:
+- `src/modules/user/hooks/use-nodes.ts` — now also returns `error`
+  (was already returning `isError`, just unused).
+- `src/modules/user/components/delivery/SelectNodesScreen.tsx` — added
+  an `ErrorAlert` (via `getFriendlyError`) driven by `useNodes()`'s
+  `isError`/`error`; both node lists now render nothing (not a
+  misleading "no match" message) when the shared query is in an error
+  state, since the banner above already explains why.
+- `src/core/api/services/nodes.service.ts` — `listNearby`'s default
+  `radiusKm` changed from `25` to `100` (the API's documented max).
+- `src/core/config/constants.ts` — added `STORAGE_KEYS.session`
+  (`"locoomo_session"`), extracted so both `auth.service.ts` (writes
+  it) and the new interceptor in `client.ts` (clears it on a failed
+  refresh) can reference the same key without `client.ts` importing
+  `authService` — that would be a circular import, since
+  `authService` itself imports `httpClient` from `client.ts`.
+- `src/core/api/services/auth.service.ts` — its local
+  `SESSION_STORAGE_KEY` constant replaced with the shared
+  `STORAGE_KEYS.session`; no behavior change.
+- `src/core/api/client.ts` — **new**: a `401` → refresh → retry
+  interceptor. Any `UNAUTHENTICATED` response (excluding `/auth/*`
+  routes and calls marked `skipAuth`) triggers one `POST /auth/refresh`
+  attempt via a new `refreshSessionOnce()` (centralizes concurrent
+  401s onto a single in-flight refresh — refresh tokens are
+  single-use and rotate on every call per `docs/API.md`, so two
+  independent refresh attempts would make the second one fail with
+  `INVALID_REFRESH_TOKEN` even though nothing's wrong), then retries
+  the original request exactly once (`isRetry` guard prevents any
+  further recursion). A failed refresh clears `useAuthStore` and
+  `localStorage` and hard-redirects to `/login`, per `docs/API.md`'s
+  "any error from `/auth/refresh` is a hard sign-out" instruction.
+  This finally gives the long-inert `skipAuth` option real meaning —
+  previously documented in `ARCHITECTURE.md` as "presently a no-op."
+  Also hardened response parsing: a `null`/non-JSON payload used to
+  throw a raw, uncaught `TypeError` on `apiResponse.success` instead of
+  a clean `ApiError` — split into an explicit null-check before the
+  discriminated-union check.
+- `src/components/maps/AddressGeocodeButton.tsx` — **new**, shared
+  component (promoted straight to `components/maps/` since two modules
+  needed it immediately, same reasoning as the existing
+  `QrScannerView`/`OtpInputBoxes` promotion pattern documented in
+  `ARCHITECTURE.md`). Wraps `@vis.gl/react-google-maps`'s
+  `useMapsLibrary("geocoding")`; renders a "Find Coordinates from
+  Address" button that resolves lat/lng from Address/City/State
+  (`componentRestrictions: { country: "ng" }`) and pre-fills the
+  (still manually editable) coordinate inputs. Renders a plain hint
+  instead of a button when `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` is unset,
+  matching `GoogleMapView`/`NodeNetworkMap`'s existing
+  no-key-configured fallback pattern — doesn't fail silently, doesn't
+  block manual entry either way.
+- `src/modules/admin/components/nodes/OnboardNodeForm.tsx`,
+  `src/modules/vendor/components/node-setup/VendorNodeSetupScreen.tsx`
+  — both wired to `AddressGeocodeButton`.
+
+**Verification performed**: `npx tsc --noEmit` (clean), `npx eslint
+src` (clean), `npm run build` (clean; `.next` briefly failed to clear
+mid-session because the dev server process still held a lock — resolved
+by waiting for the process to fully exit before retrying, not a code
+issue). Confirmed via `curl` through the dev-mode API proxy that
+`GET /api/v1/nodes/nearby` (no cookie) correctly returns `401
+UNAUTHENTICATED` from the real live backend, proving the proxy and
+backend are both reachable and healthy independent of the session-expiry
+bug.
+
+**Not performed**: this was diagnosed and fixed without direct browser
+access (no Claude in Chrome connection this session) — the actual fix
+has not been confirmed to resolve the reporting user's specific case
+end-to-end (fresh login → Select Nodes showing the real Node → Add Node
+with geocoding actually producing correct coordinates against a real
+Google Maps API key, which this repo's `.env`/`.env.local` don't
+currently have set). Whoever picks this up next should confirm all
+three fixes together resolve the original report, and separately raise
+the missing live `GET /orders` route with the backend team.
+
+---
+
+## 2026-08-13 — live debugging session, continued: two more real bugs found and confirmed fixed
+
+**Feature**: Continuing the same live debugging session, the reporting
+user confirmed the previous entry's `(user)/layout.tsx` role-gate fix
+resolved the `/orders` 404 (it was, as hypothesized, a non-Consumer
+session hitting a Consumer-only route — not a missing backend route
+after all; the exact phrasing `"Cannot GET /api/v1/orders?limit=100"`
+was the backend's own wrapped 404 for a role/route mismatch, not proof
+the route was undeployed). Then hit a second, unrelated bug: Checkout
+permanently stuck on "Calculating your delivery fee…" despite
+`POST /payments/intents` returning a clean `200 success:true` response
+with a complete, correctly-shaped `PaymentIntent` (confirmed via the
+user's own Network tab output).
+
+**Root cause**: `CheckoutScreen`'s intent-creation effect used a
+separate `useRef` (`hasRequestedIntent`) to guard against firing
+`createIntent()` more than once, independent of the mutation's own
+state. Under some real-world render/effect timing this codebase
+couldn't fully reproduce statically (React 18/19 Strict Mode's
+double-invoke of mount effects is the leading suspect, though not
+confirmed with certainty), the ref could end up set to `true` while
+the *actual* `useMutation()` instance backing the visible render never
+received its own `mutate()` call — so the network request that
+succeeded belonged to an effectively orphaned mutation observer, and
+the rendering component's own `intent`/`isCreating`/`createError` all
+stayed at their initial falsy values forever. Confirmed via a
+temporary on-page debug line (`isIdle`/`isCreating`/`hasIntent`/
+`hasError`) added specifically to pin this down, since no browser
+access was available this session — removed again once the fix was
+confirmed.
+
+**Fix**: removed the separate `useRef` guard entirely. The "have we
+already fired" check now reads the mutation's own `isIdle` (exposed
+from `useCheckout()`) instead of parallel, independently-mutable
+state — by construction, this can no longer disagree with what the
+mutation object itself believes happened, closing off this whole class
+of bug rather than patching the specific symptom.
+
+**Files changed**:
+- `src/modules/user/hooks/use-checkout.ts` — now also returns `isIdle`
+  (`mutation.isIdle`).
+- `src/modules/user/components/checkout/CheckoutScreen.tsx` — removed
+  `hasRequestedIntent` (`useRef`); the create-intent effect now guards
+  on `!isDraftComplete || !isIdle` instead. Also moved the ad-hoc
+  "Retry" button (added mid-session as a diagnostic safety net) from
+  the loading branch to the error branch, where it's a genuinely
+  useful, permanent affordance — Checkout previously had no way to
+  retry a failed intent creation short of reloading the whole page.
+
+**Verification performed**: `npx tsc --noEmit` (clean), `npx eslint
+src` (clean), `npm run build` (clean). **Confirmed working by the
+reporting user** against the live backend — Checkout now correctly
+shows the fee breakdown and an enabled "Confirm & Pay" button after a
+real `POST /payments/intents` call. This is the first piece of this
+whole integration (spanning the two previous 2026-08-12 entries) to be
+verified end-to-end against a live backend and a real user session,
+not just typecheck/lint/build/dev-smoke-test.
+
+**Not performed**: the actual Paystack redirect → `/orders/payment-callback`
+→ `GET /orders` matching flow downstream of "Confirm & Pay" is still
+unverified live — the session ended at a working fee summary, before
+following through to an actual payment.

@@ -23,5 +23,6 @@ export function useNodes() {
     nodes: query.data ?? [],
     isLoading: isLocating || query.isLoading,
     isError: query.isError,
+    error: query.error,
   };
 }

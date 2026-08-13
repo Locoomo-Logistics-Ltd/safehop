@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Card, Input, Button } from "@/components/ui";
 import { useOnboardNode } from "@/modules/admin/hooks/use-onboard-node";
+import { AddressGeocodeButton } from "@/components/maps/AddressGeocodeButton";
 
 interface OnboardNodeFormProps {
   onClose: () => void;
@@ -64,6 +65,15 @@ export function OnboardNodeForm({ onClose }: OnboardNodeFormProps) {
         <Input placeholder="Latitude" type="number" value={latitude} onChange={(e) => setLatitude(e.target.value)} />
         <Input placeholder="Longitude" type="number" value={longitude} onChange={(e) => setLongitude(e.target.value)} />
       </div>
+      <AddressGeocodeButton
+        address={address}
+        city={city}
+        state={state}
+        onResolved={(lat, lng) => {
+          setLatitude(String(lat));
+          setLongitude(String(lng));
+        }}
+      />
       <Button
         size="sm"
         disabled={!isValid}

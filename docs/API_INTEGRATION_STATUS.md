@@ -58,7 +58,7 @@ missing a UI/plumbing addition to an already-correct method).
 |---|---|---|---|---|---|---|
 | POST | `/auth/register` | Consumer + Rider + NodeOperator self-registration | ✅ | `RoleSelectScreen` (`/role-select`) → `CreateAccountScreen` (`/create-account?role=`) | `authService.registerConsumer` via `useAuth().register` | None. **2026-08-07**: `RoleSelectScreen`'s Rider/NodeOperator options now route to `/create-account?role=rider` / `?role=node_operator` (previously routed to now-deleted undocumented-flow screens); `CreateAccountScreen` reads `?role=` and includes it in the payload — all three self-registerable roles now reachable through this one documented endpoint, exactly as `API.md` describes ("This is the same endpoint for all three allowed roles"). Also fixed the client-side password strength meter (uppercase/lowercase/number/special) that contradicted `API.md`'s explicit "don't build a strength meter" guidance — now length-only (≥12 chars), matching `ResetPasswordScreen`. Also fixed a bug where a successful registration was incorrectly treated as a login (`setSession()` called with no server-side cookie ever issued) — `API.md` states registration does not log the user in; the hook now just routes to `/login`. |
 | POST | `/auth/login` | Consumer + Rider + NodeOperator + Admin login | ✅ | `LoginScreen`, `AdminLoginScreen` (`/admin-login`) | `authService.loginConsumer` / `loginAdmin` via `useAuth().login` | None — role-agnostic per `API.md`, all four roles correctly share the one real route with `credentials:"include"`. **2026-08-07**: post-login redirect is role-aware (`session.user.role`) — NodeOperator → `/vendor/node-setup`, Consumer → `/dashboard` — previously hardcoded to `/dashboard` for every role, and unreachable by Rider/NodeOperator anyway since they didn't go through this endpoint yet. **2026-08-07 (later, gating pass)**: Rider → `/rider/home` (changed from `/rider/verification`) — a not-yet-verified Rider now lands on Home with a dismissible verification reminder instead of being forced straight into the verification form; see the Riders section below and `docs/HANDOFF.md` for the product reasoning. |
-| POST | `/auth/refresh` | Session refresh | 🟡 | none directly | `authService.refreshSession` | Route/payload correct, but nothing calls it automatically on a `401`. Access tokens expire every 15 min with no interceptor — users get hard-logged-out mid-session instead of silently refreshing. |
+| POST | `/auth/refresh` | Session refresh | ✅ | none directly (interceptor, not screen-driven) | `authService.refreshSession`, called internally by `core/api/client.ts` | **Fixed 2026-08-12 (later — live debugging session).** `httpClient`'s `request()` now catches any `401 UNAUTHENTICATED` (except on `/auth/*` routes and `skipAuth` calls), fires one refresh attempt, and retries the original call once. Concurrent 401s share one in-flight refresh (`refreshPromise`) so a second caller doesn't independently trigger `401 INVALID_REFRESH_TOKEN` against the now-rotated, single-use token. A failed refresh clears the session (`useAuthStore` + `localStorage`) and hard-redirects to `/login`, per `API.md`'s "treat as a hard sign-out" instruction. This was surfaced by a real user report: `GET /nodes/nearby` returning `401` for a logged-in Consumer testing the Select Nodes screen — an expired, never-refreshed 15-minute access token. |
 | POST | `/auth/logout` | Logout | ✅ | Profile screens' "Log out" action | `authService.logout` via `useAuth().logout` | None. |
 | POST | `/auth/password-reset/request` | Forgot password | ✅ | `ForgotPasswordScreen` (`/forgot-password`) | `authService.requestPasswordReset` | None functionally. Leftover `console.log`/`console.error` debug statements should be removed before ship. |
 | POST | `/auth/password-reset/confirm` | Reset password | ✅ | `ResetPasswordScreen` (`/reset-password`) | `authService.confirmPasswordReset` | None — reads `token` from query string, correct password rules (12–128 chars, no composition), handles missing-token and success states. |
@@ -119,11 +119,10 @@ missing a UI/plumbing addition to an already-correct method).
 
 ## Summary
 
-**30** endpoints documented in `API.md`. **26 ✅ Fully Integrated**, **3 🟡
-Partially Integrated** (`/auth/refresh`, `/auth/verify-email`,
-`PATCH /nodes/:id` — all three pre-existing, unrelated to the
-2026-08-12 integration pass), **0 ❌ Not Integrated**, **1 ⚪ No UI
-Required Yet**.
+**30** endpoints documented in `API.md`. **27 ✅ Fully Integrated**, **2 🟡
+Partially Integrated** (`/auth/verify-email`, `PATCH /nodes/:id`),
+**0 ❌ Not Integrated**, **1 ⚪ No UI Required Yet**. (`/auth/refresh`
+moved 🟡→✅ in a same-day follow-up — see its row in the Auth section.)
 
 ### Recommended implementation priority
 
@@ -140,11 +139,9 @@ Required Yet**.
 2. ~~**Build the two Admin approval-queue screens**~~ **Done
    (2026-08-12).** `ApprovalsScreen` (`/admin/approvals`) covers both
    NodeOperator and Rider review queues in one screen (tabbed).
-3. **Wire a `401` → `refresh` → retry interceptor** in `httpClient`
-   (`core/api/client.ts`). `authService.refreshSession()` already exists
-   and is correct; nothing calls it. Every user is currently one 15-minute
-   access-token expiry away from an unexpected logout. Still open —
-   unrelated to the 2026-08-12 pass.
+3. ~~**Wire a `401` → `refresh` → retry interceptor**~~ **Done
+   (2026-08-12, later — live debugging session).** See the `/auth/refresh`
+   row above.
 4. ~~Remove the client-side password strength meter in
    `CreateAccountScreen`~~ **Done (2026-08-07)** — replaced with the
    length-only check `API.md` calls for.
@@ -161,6 +158,34 @@ Required Yet**.
    editing on `PATCH /nodes/:id`'s "Manage" panel (only `status` is
    exercised today); add pagination to `GET /nodes` once the network
    exceeds 100 entries.
+8a. **New from a live debugging session, same day (2026-08-12,
+   later still)** — a real user testing the Consumer flow reported
+   "no stations available" on Select Nodes despite one `active` Node
+   existing. Root-caused to three stacked issues, all fixed:
+   - `SelectNodesScreen` swallowed any `nodes/nearby` fetch error into
+     the same "No stations match" text as a genuine empty result —
+     added an `ErrorAlert` banner driven by `useNodes()`'s (already
+     returned but unused) `isError`/`error`.
+   - The actual error was `401 UNAUTHENTICATED` — an expired,
+     never-refreshed access token, which item 3 above (now done)
+     fixes going forward.
+   - `nodesService.listNearby`'s default `radiusKm` was `25`; changed
+     to `100` (the API's documented max) — early in a network's life,
+     Nodes are sparse, so a tight default risks hiding real, distant
+     matches.
+   - Root cause of *why* the Node wasn't near any reasonable search
+     position in the first place: Admin's "Add Node" form
+     (`OnboardNodeForm`) and the NodeOperator self-onboarding form
+     (`VendorNodeSetupScreen`) both required typing raw latitude/
+     longitude by hand — easy to get wrong or leave as placeholder
+     values. Added `AddressGeocodeButton` (new,
+     `src/components/maps/`, shared between both forms) — resolves
+     lat/lng from the Address/City/State fields via Google's
+     Geocoding API, same graceful-degradation-without-an-API-key
+     pattern as `GoogleMapView`. Requires `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`
+     to actually geocode (currently empty in this repo's `.env`/
+     `.env.local` — the button/form show a hint instead of failing
+     silently when it's unset).
 8. **New from the 2026-08-12 pass, not done**: the active/past order
    split (`isTerminalOrderStatus`) and `OrderStatusBadge`'s color/label
    logic are keyword-matching heuristics, not driven by a confirmed

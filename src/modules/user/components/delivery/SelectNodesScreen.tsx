@@ -3,12 +3,14 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button, Input, ProgressSteps } from "@/components/ui";
+import { ErrorAlert } from "@/components/ui/error-alert";
 import { TopBar } from "@/components/layout";
 import { SearchIcon } from "@/components/icons";
 import { useNodes } from "@/modules/user/hooks/use-nodes";
 import { useGeolocation } from "@/hooks/use-geolocation";
 import { useDeliveryDraftStore } from "@/store/delivery-draft.store";
 import { ROUTES } from "@/core/config/constants";
+import { getFriendlyError } from "@/core/api/errors";
 import { distanceKm } from "@/lib/geo";
 import { GoogleMapView } from "./GoogleMapView";
 import { NodeListItem } from "./NodeListItem";
@@ -33,7 +35,7 @@ import { NodeListItem } from "./NodeListItem";
  */
 export function SelectNodesScreen() {
   const router = useRouter();
-  const { nodes, isLoading } = useNodes();
+  const { nodes, isLoading, isError, error } = useNodes();
   const { position: userPosition, permissionGranted } = useGeolocation();
   const setOriginNode = useDeliveryDraftStore((s) => s.setOriginNode);
   const setDestinationNode = useDeliveryDraftStore((s) => s.setDestinationNode);
@@ -69,7 +71,7 @@ export function SelectNodesScreen() {
 
   const canProceed = !!selectedOriginId && !!selectedDestinationId && selectedOriginId !== selectedDestinationId;
 
-  const handleSelectOrigin = (nodeId: string) => {
+  const   handleSelectOrigin = (nodeId: string) => {
     setSelectedOriginId(nodeId);
     if (selectedDestinationId === nodeId) setSelectedDestinationId(null);
   };
@@ -110,6 +112,8 @@ export function SelectNodesScreen() {
           </p>
         )}
 
+        {isError && <ErrorAlert {...getFriendlyError(error)} />}
+
         <div className="mt-5">
           <p className="text-[13px] font-medium text-text-secondary mb-2">
             Select Pickup Station
@@ -125,7 +129,7 @@ export function SelectNodesScreen() {
         <div className="flex flex-col gap-2.5 mt-4">
           {isLoading ? (
             <p className="text-[13px] text-text-muted text-center py-6">Loading nodes…</p>
-          ) : filteredOriginNodes.length === 0 ? (
+          ) : isError ? null : filteredOriginNodes.length === 0 ? (
             <p className="text-[13px] text-text-muted text-center py-6">
               No stations match &ldquo;{originSearch}&rdquo;
             </p>
@@ -156,7 +160,7 @@ export function SelectNodesScreen() {
         <div className="flex flex-col gap-2.5 mt-4">
           {isLoading ? (
             <p className="text-[13px] text-text-muted text-center py-6">Loading nodes…</p>
-          ) : filteredDestinationNodes.length === 0 ? (
+          ) : isError ? null : filteredDestinationNodes.length === 0 ? (
             <p className="text-[13px] text-text-muted text-center py-6">
               {selectedOriginId ? `No other stations match “${destinationSearch}”` : "Select a pickup station first"}
             </p>

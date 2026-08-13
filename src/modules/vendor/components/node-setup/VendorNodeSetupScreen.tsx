@@ -5,6 +5,7 @@ import Link from "next/link";
 import { TopBar } from "@/components/layout";
 import { Button, Card, Input, EmptyState } from "@/components/ui";
 import { ErrorAlert } from "@/components/ui/error-alert";
+import { AddressGeocodeButton } from "@/components/maps/AddressGeocodeButton";
 import { CheckCircleIcon, ClockIcon, MapPinIcon } from "@/components/icons";
 import { getFriendlyError } from "@/core/api/errors";
 import { ROUTES } from "@/core/config/constants";
@@ -130,6 +131,18 @@ function OnboardingForm({
             onChange={(e) => setLongitude(e.target.value)}
           />
         </Card>
+
+        <div className="mt-3">
+          <AddressGeocodeButton
+            address={address}
+            city={city}
+            state={state}
+            onResolved={(lat, lng) => {
+              setLatitude(String(lat));
+              setLongitude(String(lng));
+            }}
+          />
+        </div>
 
         {error != null &&
           (() => {

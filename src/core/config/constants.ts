@@ -109,4 +109,6 @@ export const CURRENCY = {
 export const STORAGE_KEYS = {
   /** Set right before redirecting to Paystack (`authorizationUrl`) — docs/API.md doesn't guarantee the intent id comes back on the `/orders/payment-callback` query string, so the callback screen reads it from here instead. */
   pendingPaymentIntentId: "locoomo_pending_payment_intent_id",
+  /** The persisted-session localStorage key — shared between `auth.service.ts` (writes it) and `core/api/client.ts`'s 401 → refresh → retry interceptor (clears it on a hard sign-out), which can't import `authService` directly (would be a circular import back into `client.ts`). */
+  session: "locoomo_session",
 } as const;

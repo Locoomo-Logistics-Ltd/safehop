@@ -2,6 +2,7 @@
 import { httpClient } from "@/core/api/client";
 import { ENDPOINTS } from "@/core/api/endpoints";
 import { ApiError } from "@/core/api/errors";
+import { STORAGE_KEYS } from "@/core/config/constants";
 
 import type {
   AuthSession,
@@ -18,8 +19,6 @@ import type {
 } from "@/core/types";
 
 
-
-const SESSION_STORAGE_KEY = "locoomo_session";
 
 // ── Shared response mapping (real API) ──────────────────────────
 
@@ -62,14 +61,14 @@ function persistSession(session: AuthSession) {
   if (typeof window === "undefined") return;
 
   window.localStorage.setItem(
-    SESSION_STORAGE_KEY,
+    STORAGE_KEYS.session,
     JSON.stringify(session)
   );
 }
 
 function readPersistedSession(): AuthSession | null {
   if (typeof window === "undefined") return null;
-  const raw = window.localStorage.getItem(SESSION_STORAGE_KEY);
+  const raw = window.localStorage.getItem(STORAGE_KEYS.session);
   if (!raw) return null;
   try {
     return JSON.parse(raw) as AuthSession;
@@ -80,7 +79,7 @@ function readPersistedSession(): AuthSession | null {
 
 function clearPersistedSession() {
   if (typeof window === "undefined") return;
-  window.localStorage.removeItem(SESSION_STORAGE_KEY);
+  window.localStorage.removeItem(STORAGE_KEYS.session);
 }
 
 // ── Mock implementation (unchanged public shape, local-only) ────
