@@ -91,7 +91,7 @@ export function RiderHomeScreen() {
         {/* Quick link to the Jobs tab */}
         {availability === "online" && (
           <Link
-            href={ROUTES.riderJobOffer}
+            href={ROUTES.riderAvailableJobs}
             className="flex items-center justify-between gap-3 bg-brand-blue text-white rounded-[14px] px-5 py-4 transition-all hover:-translate-y-0.5"
           >
             <div className="flex items-center gap-3">

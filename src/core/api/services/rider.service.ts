@@ -3,10 +3,18 @@ import { httpClient } from "@/core/api/client";
 import { ENDPOINTS } from "@/core/api/endpoints";
 import { ApiError } from "@/core/api/errors";
 
+import type { PaginatedList } from "@/core/api/types";
+
 import type {
   AuthSession,
+  AvailableOrder,
   DeliveryJob,
   GeoPoint,
+  HandoffCode,
+  HandoffOrderSummary,
+  HandoffType,
+  ListAvailableOrdersParams,
+  RequestHandoffCodePayload,
   RiderAvailability,
   RiderEarningsSummary,
   RiderProfileDetails,
@@ -33,13 +41,22 @@ import type {
  *     onboarding (identity/rider/{userId}/onboarding) — no separate
  *     "get my profile" endpoint.
  *
- * These four all throw NOT_IMPLEMENTED in real mode below so the gap
- * is visible rather than silently showing fake numbers. Flag to the
- * backend team; wiring them is a 10-minute job once those routes
- * exist (same pattern as everything else here).
+ *   - A rider-scoped "my active deliveries" list — no endpoint exists.
+ *     `GET /orders` is Consumer-only and `/handoffs/available-orders`
+ *     returns only *unclaimed* orders, so an accepted delivery vanishes
+ *     from everything a rider can query. Bridged client-side by
+ *     store/rider-jobs.store.ts — read its header before relying on it.
  *
- * Everything else (job board, accept, manifest, pickup/dropoff scans,
- * location telemetry) maps directly to real endpoints.
+ * These all throw NOT_IMPLEMENTED below (bar the last, which has no
+ * method at all) so the gap is visible rather than silently showing
+ * fake numbers. Flag to the backend team; wiring them is a 10-minute
+ * job once those routes exist.
+ *
+ * The job board, accepting, and both handoff codes now run through the
+ * `handoffs` methods at the bottom of this file. The undocumented
+ * `riderOps.*` versions (getCurrentJobOffer/getActiveJob/acceptJob/
+ * declineJob/scanPickup/scanDropoff) were removed 2026-08-15 along with
+ * their screens.
  */
 
 // ── Mock implementation (unchanged — full offline dev experience) ──
@@ -194,60 +211,12 @@ const realRiderService = {
     throw new ApiError({ message: "No earnings endpoint in the real API yet — see this file's header.", code: "NOT_IMPLEMENTED" });
   },
 
-  async getCurrentJobOffer(position?: GeoPoint, radiusMeters = 5000): Promise<DeliveryJob | null> {
-    if (!position) {
-      throw new ApiError({ message: "Location is required to check the job board.", status: 400, code: "VALIDATION_ERROR" });
-    }
-    try {
-      return await httpClient.post<DeliveryJob>(ENDPOINTS.riderOps.jobBoard, {
-        latitude: position.lat,
-        longitude: position.lng,
-        radiusInMeters: radiusMeters,
-      });
-    } catch (error) {
-      if (error instanceof ApiError && error.status === 404) return null;
-      throw error;
-    }
-  },
-
-  async getActiveJob(): Promise<DeliveryJob | null> {
-    try {
-      return await httpClient.get<DeliveryJob>(ENDPOINTS.riderOps.manifest);
-    } catch (error) {
-      if (error instanceof ApiError && error.status === 404) return null;
-      throw error;
-    }
-  },
-
-  async acceptJob(jobId: string): Promise<DeliveryJob> {
-    return httpClient.post<DeliveryJob>(ENDPOINTS.riderOps.acceptJob, { orderId: jobId });
-  },
-
-  async declineJob(): Promise<{ success: true }> {
-    // No decline endpoint in the spec — simply not accepting lets the
-    // offer expire/reassign server-side. Kept as a no-op for UI parity.
-    return { success: true };
-  },
-
-  async scanPickup(jobId: string, qrNonce: string, position?: GeoPoint): Promise<DeliveryJob> {
-    if (!position) throw new ApiError({ message: "Location is required to scan.", status: 400, code: "VALIDATION_ERROR" });
-    return httpClient.post<DeliveryJob>(ENDPOINTS.riderOps.scanPickup, {
-      orderId: jobId,
-      qrNonce,
-      latitude: position.lat,
-      longitude: position.lng,
-    });
-  },
-
-  async scanDropoff(jobId: string, qrNonce: string, position?: GeoPoint): Promise<DeliveryJob> {
-    if (!position) throw new ApiError({ message: "Location is required to scan.", status: 400, code: "VALIDATION_ERROR" });
-    return httpClient.post<DeliveryJob>(ENDPOINTS.riderOps.scanDropoff, {
-      orderId: jobId,
-      qrNonce,
-      latitude: position.lat,
-      longitude: position.lng,
-    });
-  },
+  // getCurrentJobOffer / getActiveJob / acceptJob / declineJob /
+  // scanPickup / scanDropoff were removed 2026-08-15. They called the
+  // undocumented `riderOps.*` routes and are superseded by the handoffs
+  // methods below (`listAvailableOrders`, `acceptAvailableOrder`,
+  // `requestHandoffCode`), which are documented and carry no qrNonce or
+  // GPS. Their screens were deleted in the same pass.
 
   async getJobHistory(): Promise<DeliveryJob[]> {
     throw new ApiError({ message: "No job history endpoint in the real API yet — see this file's header.", code: "NOT_IMPLEMENTED" });
@@ -329,6 +298,60 @@ const realRiderService = {
   /** Throws `404 NOT_FOUND` (via ApiError) if the rider hasn't started verification yet — callers check `error.code`, same pattern as `vendorService.getMyNodeOperatorProfile`. */
   async getVerificationProfile(): Promise<RiderVerificationProfile> {
     return httpClient.get<RiderVerificationProfile>(ENDPOINTS.riders.me);
+  },
+
+  // ── Handoffs: the rider's side ──────────────────────────────────
+  // Real, confirmed routes per docs/API.md (2026-08-14). These
+  // supersede getCurrentJobOffer/acceptJob/scanPickup/scanDropoff
+  // above, which target undocumented `riderOps.*` routes. All three
+  // require an `active` RiderProfile — a valid Rider session isn't
+  // enough, and the rejection is `403 RIDER_NOT_ACTIVE`, distinct from
+  // the plain `403 FORBIDDEN` a non-Rider gets.
+
+  /**
+   * Unclaimed orders sitting at their origin Node, sorted nearest-first
+   * to `latitude`/`longitude`. The coordinates are used for this one
+   * request's sort and are not stored — this is not a telemetry ping
+   * (see sendTelemetryPing above for that).
+   */
+  async listAvailableOrders(
+    params: ListAvailableOrdersParams
+  ): Promise<PaginatedList<AvailableOrder>> {
+    const query = new URLSearchParams({
+      latitude: String(params.latitude),
+      longitude: String(params.longitude),
+    });
+    if (params.page !== undefined) query.set("page", String(params.page));
+    if (params.limit !== undefined) query.set("limit", String(params.limit));
+
+    return httpClient.get<PaginatedList<AvailableOrder>>(
+      `${ENDPOINTS.handoffs.availableOrders}?${query.toString()}`
+    );
+  },
+
+  /**
+   * Claims an available order. Atomic and race-safe — if another rider
+   * accepted first, this throws `409 ILLEGAL_ORDER_TRANSITION` rather
+   * than both riders "winning". `409 RIDER_CAPACITY_UNAVAILABLE` means
+   * the rider is already at the 3-concurrent-delivery cap.
+   */
+  async acceptAvailableOrder(orderId: string): Promise<HandoffOrderSummary> {
+    return httpClient.post<HandoffOrderSummary>(ENDPOINTS.handoffs.accept(orderId));
+  },
+
+  /**
+   * Issues a fresh 6-digit code for a handoff the rider is about to
+   * perform. Expires in 5 minutes, so call this at the counter, not in
+   * advance; calling again supersedes any prior unused code for the
+   * same `(order, type)`. `404 NOT_FOUND` means this rider isn't the
+   * one assigned to this order.
+   *
+   * The returned code is read aloud/shown to the Node operator and
+   * nowhere else — don't log it, persist it, or put it in a URL.
+   */
+  async requestHandoffCode(orderId: string, type: HandoffType): Promise<HandoffCode> {
+    const payload: RequestHandoffCodePayload = { type };
+    return httpClient.post<HandoffCode>(ENDPOINTS.handoffs.requestCode(orderId), payload);
   },
 };
 

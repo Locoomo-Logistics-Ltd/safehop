@@ -1,1 +1,0 @@
-export { RiderScanScreen } from "./RiderScanScreen";

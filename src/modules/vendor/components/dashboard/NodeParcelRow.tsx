@@ -15,12 +15,19 @@ interface NodeParcelRowProps {
 /**
  * One parcel row on the Node Dashboard — tracking code, status,
  * sender → receiver, matching the Figma list (LC-482TX, LC-9932Y...).
- * Tapping routes to the release/OTP screen when ready for collection,
- * otherwise just shows detail (no-op link target for now).
+ *
+ * Ready-for-collection rows point at the counter list rather than
+ * straight at a collect screen. This dashboard is fed by the
+ * undocumented `/nodes/operator/inventory`, whose `id` is not known to
+ * be the order uuid that `POST /handoffs/orders/:id/collect` needs —
+ * deep-linking on it would produce a 404 that looks like a wrong code.
+ * The counter list is keyed on ids captured from real handoff
+ * responses, so it's the safe landing point until that endpoint is
+ * documented.
  */
 export function NodeParcelRow({ parcel }: NodeParcelRowProps) {
   const isReady = parcel.status === "ready_for_collection";
-  const href = isReady ? ROUTES.vendorRelease(parcel.id) : ROUTES.vendorFlag(parcel.id);
+  const href = isReady ? ROUTES.vendorAwaitingCollection : ROUTES.vendorFlag(parcel.id);
 
   return (
     <Link href={href}>

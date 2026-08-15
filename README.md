@@ -25,7 +25,7 @@ Admin module will be added the same way, alongside `modules/user/`,
 - **React Hook Form + Zod** — form state and validation
 - **next-auth** (installed, scaffolded) — ready for real OAuth
 - **@fontsource** — self-hosted Sora + DM Sans (no runtime Google Fonts dependency — works fully offline as a PWA)
-- **@vis.gl/react-google-maps** — live Google Maps on the Select Nodes screen (graceful fallback if no API key is set; see below)
+- **leaflet** + **Geoapify** tiles/geocoding — maps on Select Nodes and Node Network, plus address→coordinate lookup (graceful fallback if no API key is set; see below)
 - **@yudiel/react-qr-scanner** — real camera-based QR scanning on the Vendor "Scan" screen
 - Hand-rolled **PWA**: `public/manifest.webmanifest` + `public/sw.js` + a tiny registration component. No third-party PWA plugin — full control, no Next 15 compatibility risk.
 
@@ -174,9 +174,11 @@ Google buttons instead of the mock mutation.
 
 ### The map (Select Nodes screen)
 
-The Select Nodes screen now uses **live Google Maps**
-(`@vis.gl/react-google-maps`, Google's official React wrapper) via
-`src/modules/user/components/delivery/GoogleMapView.tsx`. It:
+The Select Nodes screen uses **Leaflet + Geoapify tiles** via
+`src/modules/user/components/delivery/NodeMapView.tsx`, which wraps the
+shared `src/components/maps/MapView.tsx`. (It was Google Maps until
+2026-08-15 — switched because Geoapify's free tier needs no billing
+account. See "Switching map provider" below.) It:
 
 - Requests the user's real browser location on mount
   (`modules/user/hooks/use-geolocation.ts`), centers the map there, and
@@ -186,24 +188,48 @@ The Select Nodes screen now uses **live Google Maps**
 - Computes **live distances** (`lib/geo.ts`, haversine formula) from
   the user's real position to every node, replacing the old static
   mock `distanceKm` values, and sorts the node list nearest-first.
-- Renders node pins as clickable Google Maps `AdvancedMarker`s —
-  clicking a pin selects that node and opens an info window, in sync
-  with the list below it.
+- Renders node pins as clickable markers — clicking a pin selects that
+  node and opens a popup, in sync with the list below it.
 - Shows a clean **"Map unavailable"** fallback card (with the node
   list still fully usable) if no API key is configured — so the app
   never breaks for a missing key, it just degrades gracefully.
 
 **To activate it:**
-1. Get a key at [console.cloud.google.com](https://console.cloud.google.com) — enable **Maps JavaScript API**, set up billing.
+1. Get a free key at [myprojects.geoapify.com](https://myprojects.geoapify.com)
+   — no card required, 3,000 requests/day on the free tier.
 2. Add it to `.env.local`:
    ```
-   NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=your_key_here
+   NEXT_PUBLIC_GEOAPIFY_API_KEY=your_key_here
    ```
-3. *(Optional)* If you've created a custom Map ID for custom styling in
-   Cloud Console, also set `NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID`.
+3. *(Optional)* Pick a different basemap with
+   `NEXT_PUBLIC_GEOAPIFY_MAP_STYLE` (`osm-bright` is the default;
+   `positron` and `osm-bright-grey` are quieter, which makes the
+   coloured markers stand out more).
 
 That's it — no code changes needed, the fallback UI disappears
 automatically once a key is present.
+
+⚠️ **Restrict the key before going live.** It ships to the browser like
+any maps key; set an HTTP-referrer restriction in Geoapify's project
+settings or anyone can spend your quota.
+
+### Switching map provider
+
+Two files know which provider is in use:
+
+- `src/core/api/services/geocoding.service.ts` — address → coordinates.
+- `src/components/maps/MapView.tsx` — the tiles and marker rendering.
+
+Everything else talks to the provider-neutral `MapMarker[]` /
+`GeocodeResult` contracts, so screens don't change. `NEXT_PUBLIC_MAPS_PROVIDER`
+(`geoapify` | `google`) selects between them.
+
+Moving to Google needs real work in both, not just the env flag:
+`geocodeWithGoogle()` is currently a deliberate `NOT_IMPLEMENTED` throw
+(Google's Geocoding **web service** sends no CORS headers, so a browser
+can't call it directly — it needs either the Maps JS SDK's client-side
+`Geocoder` or a small backend proxy route), and `MapView` would need its
+Leaflet body swapped for the Google renderer.
 
 The old `MockMapView.tsx` (static SVG map) is still in the codebase,
 unused but kept as a lightweight reference/offline fallback in case a

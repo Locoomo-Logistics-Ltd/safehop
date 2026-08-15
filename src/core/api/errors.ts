@@ -233,6 +233,75 @@ export function getFriendlyError(error: unknown) {
       };
 
 
+    // ── Handoffs module (docs/API.md, 2026-08-14) ────────────────
+
+    case "RIDER_NOT_ACTIVE":
+      return {
+        title: "Your rider account isn't active yet ⏳",
+        message:
+          "Your verification is still being reviewed, so you can't take jobs just yet.",
+        action:
+          "Check your verification status — we'll let you know as soon as you're approved.",
+        type: "warning",
+      };
+
+
+    case "RIDER_CAPACITY_UNAVAILABLE":
+      return {
+        title: "You're at your limit 📦",
+        message:
+          "You can carry up to 3 deliveries at once, and you're already at 3.",
+        action:
+          "Drop one off, then come back for this job.",
+        type: "warning",
+      };
+
+
+    // Stale client state, or someone else advanced the order first
+    // (e.g. another rider won the race to accept it). Per docs/API.md
+    // the fix is to re-fetch and re-render, never to retry blindly —
+    // so the copy sends the user back to a fresh list rather than
+    // offering a "try again" that would fail identically.
+    case "ILLEGAL_ORDER_TRANSITION":
+      return {
+        title: "This one moved on without you 🔄",
+        message:
+          "Someone already handled this parcel, or it isn't at this step yet.",
+        action:
+          "Refresh to see where it actually is now.",
+        type: "warning",
+      };
+
+
+    // Deliberately identical for wrong / expired / already-used /
+    // locked-out, per docs/API.md — the copy must not hint at which,
+    // and the rider needs a fresh code in every one of those cases.
+    case "INVALID_HANDOFF_CODE":
+      return {
+        title: "That code didn't work 🔢",
+        message:
+          "It's incorrect, expired, or already been used.",
+        action:
+          "Ask the rider to request a new code, then try again.",
+        type: "error",
+      };
+
+
+    // Intake hasn't run yet (so no collection code has ever been
+    // minted), or the order is already `completed`. Both mean "there's
+    // nothing to resend," and the operator's next move differs, so the
+    // copy points at the step rather than the error.
+    case "ORDER_NOT_READY_FOR_COLLECTION":
+      return {
+        title: "This parcel isn't ready yet 📦",
+        message:
+          "It hasn't been checked in at your counter, or it's already been collected.",
+        action:
+          "Confirm intake first — that's what emails the receiver their code.",
+        type: "warning",
+      };
+
+
     case "RATE_LIMITED":
       return {
         title: "Slow down a moment ⏳",

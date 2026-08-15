@@ -1,10 +1,12 @@
 import {
+  ArchiveIcon,
   HomeIcon,
   TrackIcon,
   UserIcon,
   QrCodeIcon,
   ActivityIcon,
   BriefcaseIcon,
+  TruckIcon,
   WalletIcon,
   PackageIcon,
   MapPinIcon,
@@ -30,18 +32,43 @@ export const USER_NAV_ITEMS: NavItem[] = [
   { label: "Profile", href: "/profile", icon: UserIcon },
 ];
 
-/** Vendor (Shop Owner) nav — Home / Scan / Activity / Profile, matching Figma. */
+/**
+ * Vendor (Shop Owner) nav — Home / Scan / Activity / Profile per Figma,
+ * plus "Handoff" (2026-08-14), which has no home in the original design:
+ * `POST /handoffs/orders/:id/confirm-handoff` is operator-initiated from
+ * a code the rider states, so it can't hang off the QR scanner the way
+ * consumer drop-off does. Placed next to "Scan" as its closest
+ * thematic neighbour — both are counter actions on a parcel in hand.
+ *
+ * "Collect" joined them 2026-08-15 for the same reason. Scan / Handoff /
+ * Collect are now the three custody moments at a counter — consumer in,
+ * rider through, receiver out — so they sit together, ahead of the two
+ * secondary screens. Six items is the ceiling for `BottomNav`'s
+ * equal-width tabs; a seventh would need the nav restructured rather
+ * than extended.
+ */
 export const VENDOR_NAV_ITEMS: NavItem[] = [
   { label: "Home", href: ROUTES.vendorHome, icon: HomeIcon },
   { label: "Scan", href: ROUTES.vendorScan, icon: QrCodeIcon },
+  { label: "Handoff", href: ROUTES.vendorRiderHandoff, icon: TruckIcon },
+  { label: "Collect", href: ROUTES.vendorAwaitingCollection, icon: ArchiveIcon },
   { label: "Activity", href: ROUTES.vendorActivity, icon: ActivityIcon },
   { label: "Profile", href: ROUTES.vendorProfile, icon: UserIcon },
 ];
 
-/** Rider nav — Home / Jobs / Earnings / Profile, matching Figma. */
+/**
+ * Rider nav — Home / Jobs / Earnings / Profile per Figma, plus "Active"
+ * (2026-08-14). "Jobs" now points at the real, documented board
+ * (`GET /handoffs/available-orders`) rather than the undocumented
+ * `riderOps.jobBoard`; "Active" is the accepted-deliveries list that
+ * board feeds into, which the old single-offer model had no equivalent
+ * of — a rider can hold up to 3 at once now, so they need somewhere to
+ * see them.
+ */
 export const RIDER_NAV_ITEMS: NavItem[] = [
   { label: "Home", href: ROUTES.riderHome, icon: HomeIcon },
-  { label: "Jobs", href: ROUTES.riderJobOffer, icon: BriefcaseIcon },
+  { label: "Jobs", href: ROUTES.riderAvailableJobs, icon: BriefcaseIcon },
+  { label: "Active", href: ROUTES.riderActiveDeliveries, icon: TruckIcon },
   { label: "Earnings", href: ROUTES.riderDeliveries, icon: WalletIcon },
   { label: "Profile", href: ROUTES.riderProfile, icon: UserIcon },
 ];

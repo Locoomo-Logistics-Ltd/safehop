@@ -86,13 +86,46 @@ export const ENDPOINTS = {
   // real backend equivalent is ever confirmed; don't wire new code to
   // them. `list`/`detail` ARE documented (`GET /orders`(/:id)) and are
   // the real routes delivery.service.ts calls.
+  // `scanHandoff`/`scanCollection` were removed 2026-08-15 —
+  // undocumented, superseded by the `handoffs` group below (`drop-off`
+  // and `collect` respectively), and no longer called by any code.
   orders: {
     calculateFare: "/orders/calculate-fare",
     book: "/orders/book",
     list: "/orders",
     detail: (id: string) => `/orders/${id}`,
-    scanHandoff: "/orders/scan-handoff",
-    scanCollection: "/orders/scan-collection",
+  },
+
+  // ── Handoffs Module (custody chain: drop-off → rider → arrival) ─
+  // Real, confirmed routes per docs/API.md (2026-08-14). These are the
+  // documented replacement for `riderOps.jobBoard`/`acceptJob`/
+  // `scanPickup`/`scanDropoff` and `orders.scanHandoff` below/above,
+  // none of which appear in API.md. Custody transfers on a 6-digit code
+  // the rider reads to the Node operator — there's no `qrNonce` and no
+  // GPS in this contract (only `availableOrders` takes coordinates, and
+  // only to sort that one response). Don't wire new code to the older
+  // routes; see core/types/handoff.types.ts for the full lifecycle.
+  handoffs: {
+    /** Rider (active). Query: latitude, longitude (required), page, limit. */
+    availableOrders: "/handoffs/available-orders",
+    /** Rider (active). Race-safe claim; capped at 3 concurrent deliveries. */
+    accept: (orderId: string) => `/handoffs/orders/${orderId}/accept`,
+    /** NodeOperator. Scoped to orders whose originNodeId is your own Node. */
+    byTrackingCode: (code: string) =>
+      `/handoffs/orders/by-tracking-code/${encodeURIComponent(code)}`,
+    /** NodeOperator (origin). Idempotent: awaiting_drop_off → parcel_received_at_origin. */
+    dropOff: (orderId: string) => `/handoffs/orders/${orderId}/drop-off`,
+    /** Rider (assigned to this order). Issues a 6-digit code that expires in 5 minutes. */
+    requestCode: (orderId: string) => `/handoffs/orders/${orderId}/request-code`,
+    /** NodeOperator, ownership-scoped to the side matching `type`. Idempotent on a re-used code. */
+    confirmHandoff: (orderId: string) => `/handoffs/orders/${orderId}/confirm-handoff`,
+    /** NodeOperator (destination). Idempotent: arrived_at_destination → ready_for_collection, and emails the receiver their collection code. */
+    intake: (orderId: string) => `/handoffs/orders/${orderId}/intake`,
+    /** NodeOperator (destination). Mints + re-emails a fresh collection code, superseding the prior one. Rate-limited 5/min — it sends real email. */
+    collectionCodeResend: (orderId: string) =>
+      `/handoffs/orders/${orderId}/collection-code/resend`,
+    /** NodeOperator (destination). Final step: ready_for_collection → completed. */
+    collect: (orderId: string) => `/handoffs/orders/${orderId}/collect`,
   },
 
   // ── Maps & Live Telemetry Module ──────────────────────────────
@@ -101,14 +134,9 @@ export const ENDPOINTS = {
     track: (trackingCode: string) => `/maps/track/${trackingCode}`,
   },
 
-  // ── Rider Operations Gateway ───────────────────────────────────
-  riderOps: {
-    jobBoard: "/riders/job-board",
-    acceptJob: "/riders/accept-job",
-    manifest: "/riders/manifest",
-    scanPickup: "/riders/scan-pickup",
-    scanDropoff: "/riders/scan-dropoff",
-  },
+  // `riderOps.*` (job-board, accept-job, manifest, scan-pickup,
+  // scan-dropoff) was removed 2026-08-15 — undocumented, superseded by
+  // the `handoffs` group above, and no longer called by any code.
 
   // ── Riders (KYC verification / onboarding) ──────────────────────
   // Real, confirmed routes per docs/API.md. Requires an authenticated

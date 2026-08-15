@@ -1581,3 +1581,401 @@ not just typecheck/lint/build/dev-smoke-test.
 → `GET /orders` matching flow downstream of "Confirm & Pay" is still
 unverified live — the session ended at a working fee summary, before
 following through to an actual payment.
+
+---
+
+## 2026-08-14
+
+**Feature**: Handoffs module integration — the six `/handoffs/*`
+endpoints added to `docs/API.md` the same day, covering the parcel
+custody chain from consumer drop-off through rider pickup to arrival at
+the destination Node.
+
+**Files changed**:
+
+*Shared layer*
+- Created `src/core/types/handoff.types.ts` — `AvailableOrder`,
+  `HandoffOrderSummary`, `HandoffOrderPreview`, `HandoffCode`,
+  `HandoffType`, `AcceptedDelivery`, plus `HANDOFF_STATUS` and the
+  code-length/TTL/concurrency constants.
+- Created `src/store/rider-jobs.store.ts` — the rider's accepted
+  deliveries, localStorage-backed. See "API gaps found" below.
+- `src/core/api/endpoints.ts` — new `handoffs` group (six routes).
+- `src/core/api/errors.ts` — `getFriendlyError` copy for the four new
+  codes: `RIDER_NOT_ACTIVE`, `RIDER_CAPACITY_UNAVAILABLE`,
+  `ILLEGAL_ORDER_TRANSITION`, `INVALID_HANDOFF_CODE`.
+- `src/core/config/constants.ts` — `ROUTES.riderAvailableJobs`,
+  `riderActiveDeliveries`, `riderHandoff(orderId)`,
+  `vendorDropOff(trackingCode)`, `vendorRiderHandoff`; `QUERY_KEYS`
+  `riderAvailableOrders(lat,lng,page)` + `riderAvailableOrdersRoot` and
+  `vendorHandoffOrder(trackingCode)`.
+- `src/core/api/services/rider.service.ts` — `listAvailableOrders`,
+  `acceptAvailableOrder`, `requestHandoffCode`.
+- `src/core/api/services/vendor.service.ts` — `lookupOrderByTrackingCode`,
+  `confirmDropOff`, `confirmRiderHandoff`.
+- `src/components/layout/nav-config.ts` — Rider "Jobs" repointed at the
+  real board; new Rider "Active" and Vendor "Handoff" items.
+- `src/core/types/index.ts` — barrel export.
+
+*Rider surface (all new)*
+- `src/modules/rider/hooks/use-available-orders.ts`,
+  `use-accept-order.ts`, `use-handoff-code.ts`, `use-active-deliveries.ts`
+- `src/modules/rider/lib/handoff-format.ts`
+- `src/modules/rider/components/available-jobs/` (`AvailableJobsScreen`,
+  `AvailableJobCard`)
+- `src/modules/rider/components/active-delivery/`
+  (`ActiveDeliveriesScreen`, `HandoffCodeScreen`)
+- `src/app/(rider)/rider/available-jobs/`, `.../active-deliveries/`,
+  `.../active-deliveries/[orderId]/handoff/`
+
+*NodeOperator surface*
+- Created `src/modules/vendor/hooks/use-handoff-lookup.ts`,
+  `use-confirm-handoff.ts`
+- Created `src/modules/vendor/components/handoff/`
+  (`DropOffPreviewScreen`, `RiderHandoffScreen`, `HandoffStatusPill`)
+- Created `src/app/(vendor)/vendor/drop-off/[trackingCode]/`,
+  `.../rider-handoff/`
+- `src/modules/vendor/hooks/use-scan-parcel.ts` +
+  `components/scanner/QrScannerScreen.tsx` — repointed (see below).
+
+**Summary**: The handoffs contract is structurally different from the
+scan-based flow the app had been built against, in two ways that drove
+most of the work:
+
+1. **Nobody scans a rider.** Custody transfers on a 6-digit code the
+   rider requests (`request-code`) and reads to the Node operator, who
+   types it into `confirm-handoff`. There is no `qrNonce` anywhere in
+   this contract.
+2. **No GPS on any write.** The only endpoint taking coordinates is
+   `GET /handoffs/available-orders`, and only to sort that one response
+   — nothing is stored.
+
+Consequently the Vendor QR scanner was repointed: it used to call
+`vendorService.checkIn()` → the undocumented `orders.scanHandoff`, which
+resolved and checked a parcel in atomically from a tracking code +
+`qrNonce` + live position. The documented flow splits that into an
+origin-scoped read followed by a separate write, so scanning no longer
+mutates anything — it carries the tracking code to the new drop-off
+preview screen, which does the lookup and owns the confirm. This is
+also better counter UX: the operator now eyeballs the physical parcel
+against the description *before* accepting custody. `checkIn()` itself
+was left on the service, just no longer called from that path.
+
+**Deliberately not done**: `JobOfferScreen`, `ActiveJobScreen`,
+`RiderScanScreen` and their hooks (`use-job-offer`, `use-active-job`,
+`use-scan-job`) still exist and still target the undocumented
+`riderOps.*` routes. They are superseded by this work but were not
+deleted — `/rider/jobs` still resolves. Removing them is a separate
+decision; nav no longer points at them.
+
+**API gaps found — flag to the backend team**:
+
+1. **No rider-scoped "my deliveries" endpoint.** `GET /orders` is
+   Consumer-only and `/handoffs/available-orders` only returns
+   *unclaimed* orders, so the instant a rider accepts, the order
+   disappears from every list they can query — while they still need its
+   `id` to call `request-code` at both ends of the trip. Bridged with
+   `store/rider-jobs.store.ts` (localStorage), which is per-device and
+   can drift from server state. Requested: `GET /handoffs/my-deliveries`
+   or a rider-scoped filter on an orders route. That store should be
+   deleted outright when it lands, not kept as a cache.
+
+2. **The origin/destination lookup asymmetry.** `confirm-handoff` is
+   keyed on the order **uuid**, and the only documented way to resolve a
+   human-readable code into that uuid is
+   `GET /handoffs/orders/by-tracking-code/:code` — which is scoped to
+   orders whose `originNodeId` is *your* Node. So `rider_pickup` (origin)
+   works cleanly, while `rider_arrival` (destination) 404s on the lookup
+   by design, leaving the destination operator with no documented way to
+   obtain the id they are required to POST to. `RiderHandoffScreen` asks
+   them to enter the order id directly as a stopgap, which in practice
+   means reading a uuid off the rider's phone — poor counter UX, and it
+   should not survive. Requested: either widen the lookup to match the
+   destination Node too (the response carries no receiver PII, so the
+   privacy rationale for the current scoping appears satisfied either
+   way), or accept a tracking code as the `confirm-handoff` path param.
+
+3. **No rider-facing payout figure.** The available-orders contract
+   omits `amountKobo` (that's the consumer's fare, not a rider fee) and
+   no rider-earnings endpoint exists, so the job board shows route, size
+   and distance but no money. Left out rather than invented — the
+   intended rider-facing economics need confirming.
+
+**Verification**: `npx tsc --noEmit` clean, `npx eslint src` clean,
+`yarn build` succeeds with all five new routes emitted. **No endpoint
+was exercised against a live backend** — every response shape, status
+transition and error path here is wired from `docs/API.md` alone.
+Specifically unverified: real `distanceMeters` magnitudes, whether
+`accept` ever returns a status other than `rider_assigned`, the `409`
+race and capacity paths, code expiry, and the per-code lockout.
+
+---
+
+## 2026-08-15
+
+**Feature**: Handoffs module, part two — the destination Node's
+collection flow. Three new endpoints in `docs/API.md`
+(`POST /handoffs/orders/:id/intake`,
+`POST /handoffs/orders/:id/collection-code/resend`,
+`POST /handoffs/orders/:id/collect`) plus one new error code,
+`ORDER_NOT_READY_FOR_COLLECTION`. These close the lifecycle:
+`arrived_at_destination → ready_for_collection → completed`.
+
+**Files changed**:
+
+*Shared layer*
+- `src/core/api/endpoints.ts` — `intake`, `collectionCodeResend`, `collect`.
+- `src/core/types/handoff.types.ts` — `ready_for_collection`/`completed`
+  added to `HANDOFF_STATUS`; new `CollectParcelPayload`,
+  `CollectionCodeResendResult`, `AwaitingCollectionParcel`,
+  `COLLECTION_CODE_TTL_SECONDS`; lifecycle diagram extended and a note
+  added on the two codes running in opposite directions.
+- `src/core/api/errors.ts` — `ORDER_NOT_READY_FOR_COLLECTION`.
+- `src/core/config/constants.ts` — `ROUTES.vendorAwaitingCollection`,
+  `vendorCollect(orderId)`.
+- `src/core/api/services/vendor.service.ts` — `confirmIntake`,
+  `resendCollectionCode`, `collectParcel`.
+- Created `src/store/node-parcels.store.ts` — destination-side twin of
+  `rider-jobs.store.ts`. See "The uuid gap" below.
+- `src/components/layout/nav-config.ts` — new Vendor "Collect" item.
+
+*NodeOperator surface*
+- Created `src/modules/vendor/hooks/use-parcel-intake.ts`,
+  `use-collect-parcel.ts`, `use-awaiting-collection.ts`
+- Created `src/modules/vendor/components/collection/`
+  (`AwaitingCollectionScreen`, `CollectParcelScreen`)
+- Created `src/app/(vendor)/vendor/awaiting-collection/` and
+  `.../[orderId]/collect/`
+- `src/modules/vendor/hooks/use-confirm-handoff.ts` — captures the order
+  uuid into the new store on a successful `rider_arrival`.
+- `src/modules/vendor/components/handoff/RiderHandoffScreen.tsx` —
+  arrival success now chains straight into intake.
+
+**Summary**: The physical sequence at a destination Node is rider hands
+over → operator checks in → (hours later) receiver collects. The first
+two are one moment at the counter, so `RiderHandoffScreen`'s arrival
+success state now offers "Check In & Email Receiver" inline rather than
+sending the operator somewhere else. That also matters because intake is
+what mints and emails the receiver's collection code — until it runs,
+the receiver has been told nothing and `resend` has nothing to resend.
+
+The two 6-digit codes in this module run in **opposite directions**,
+which is the easiest thing to get backwards and is now called out in
+`handoff.types.ts`'s header:
+
+- **Rider codes** (`request-code`): shown only to the rider, read aloud
+  to the operator, never emailed. 5-minute TTL.
+- **Collection codes** (minted by `intake`): emailed only to the
+  receiver, read aloud to the operator, never in any API response the
+  operator can see. 1-hour TTL.
+
+`identityConfirmed` on `collect` is deliberately not defaulted. Per
+`docs/API.md` it's an audit-trail attestation that does **not** block
+completion when `false`, because proxy pickup is normal in this
+business. Pre-selecting "yes" would record an attestation the operator
+never made — the one thing that would make the field worthless — so the
+screen asks it as an explicit two-option question with no default, and
+the CTA stays disabled until it's answered.
+
+**The uuid gap — now materially worse, and the main thing to fix**:
+yesterday's entry flagged that `confirm-handoff` needs an order uuid the
+destination operator has no documented way to obtain. All three new
+endpoints are keyed on the same uuid and scoped to the same destination
+Node, so the gap now blocks **four of the six operator endpoints**, not
+one. There is still no destination-scoped lookup or list anywhere in
+`docs/API.md`.
+
+Mitigated, not solved: `confirm-handoff` (`rider_arrival`) *returns* the
+uuid, so `use-confirm-handoff.ts` captures it into
+`store/node-parcels.store.ts` at that single moment, and the collection
+screens work off that. This is honest but fragile — the store is
+per-device and per-browser, and clearing site data strands every parcel
+at the Node with no frontend recovery path. `AwaitingCollectionScreen`
+discloses that in-product rather than hiding it, and `CollectParcelScreen`
+has a specific "not on this device" state instead of a dead form. Both
+stores should be **deleted, not repurposed as caches**, once a
+destination-scoped endpoint exists.
+
+**Second gap found**: `identityConfirmed` asks the operator to attest
+they matched the receiver's name, but **no destination-side endpoint
+returns the receiver's name**. `by-tracking-code` explicitly omits
+receiver PII with the note "that's only relevant at the destination
+Node, at collection" — but nothing at collection supplies it either. So
+the operator is attesting to a conversation, with nothing on screen to
+check against. The UI is worded to match that reality rather than imply
+a verification the app didn't perform. Either the collection screens
+need a receiver name from somewhere, or the field's meaning should be
+narrowed in the docs.
+
+**Deliberately not done**: `ReleaseParcelScreen`,
+`use-release-parcel.ts` and `vendorService.releaseParcel()` (→ the
+undocumented `orders.scanCollection`) are untouched and still reachable
+at `/vendor/parcels/[parcelId]/release`. They are the old, undocumented
+version of exactly this flow — same 6-digit-code-at-the-counter shape,
+but with a `qrNonce` and GPS the real contract has no concept of, a
+3-attempt limit instead of 5, and an auto-send-on-mount that the real
+one must not have. Superseded, but removal is a separate decision, same
+call as the `riderOps.*` screens yesterday.
+
+**Verification**: `npx tsc --noEmit` clean, `npx eslint src` clean,
+`yarn build` succeeds from a cleared `.next` with both new routes
+emitted. **No endpoint was exercised against a live backend** — response
+shapes, transitions and error paths are wired from `docs/API.md` alone.
+Specifically unverified: whether `intake` really is idempotent in
+practice, the `409 ORDER_NOT_READY_FOR_COLLECTION` path, the resend
+rate limit, the per-code lockout, and whether `collect` returns anything
+beyond the summary shape.
+
+---
+
+## 2026-08-15 (later — supersession cleanup)
+
+**Feature**: Removed the screens, hooks, routes, service methods and
+endpoint definitions that the two Handoffs passes superseded. No new
+functionality; this makes the app use one flow per custody moment
+instead of two.
+
+**Why this was needed**: the two integration passes left the superseded
+screens in place on the reasoning that deleting them was "a separate
+decision." That was defensible for dead code but wrong here, because
+several of them were still *reachable*, so the app shipped two parallel
+flows over two different backends:
+
+- `VendorHomeScreen`'s "Ready for Collection" tab (from the undocumented
+  `/nodes/operator/inventory`) sat alongside the new
+  `AwaitingCollectionScreen` (from the local counter store) — two lists
+  of the same parcels, disagreeing.
+- `NodeParcelRow` routed those rows to the old `ReleaseParcelScreen`
+  (undocumented `orders.scanCollection`), while the new list routed to
+  `CollectParcelScreen` (documented `collect`).
+- `RiderHomeScreen`'s "View Job Offers" CTA still pointed at the old
+  `JobOfferScreen` (undocumented `riderOps.jobBoard`). The 2026-08-14
+  entry's claim that "nav no longer points at any of them" was true of
+  `nav-config.ts` only, and wrong about the app — correcting that here.
+- Repointing the QR scanner in the morning's pass had orphaned
+  `ScanSuccessScreen`: `ROUTES.vendorScanSuccess` ended up referenced
+  nowhere but `constants.ts`.
+
+**Deleted** (28 files):
+- Rider: `components/job-offer/`, `components/active-job/`,
+  `components/scanner/`, `components/complete/`; hooks `use-job-offer`,
+  `use-active-job`, `use-scan-job`; routes `app/(rider)/rider/jobs/**`
+  and `app/rider-scan/**`.
+- Vendor: `components/release/`, `components/scanner/ScanSuccessScreen`,
+  `components/scanner/ShelfLocationPicker`; hook `use-release-parcel`;
+  routes `vendor/parcels/[parcelId]/release/` and `vendor/scan-success/`.
+
+**Also removed**: `ENDPOINTS.riderOps.*` (5 routes),
+`ENDPOINTS.orders.scanHandoff`/`scanCollection`; `riderService`'s
+`getCurrentJobOffer`/`getActiveJob`/`acceptJob`/`declineJob`/
+`scanPickup`/`scanDropoff`; `vendorService`'s `lookupParcelByCode`/
+`checkIn`/`listShelves`/`assignShelf`/`sendReleaseOtp`/`releaseParcel`;
+`useShelfLocations`/`useAssignShelf`; `ROUTES.riderJobOffer`/
+`riderActiveJob`/`riderScanPickup`/`riderDeliveryComplete`/
+`vendorRelease`/`vendorScanSuccess`; `QUERY_KEYS.riderJobOffer`/
+`riderActiveJob`/`vendorShelves`.
+
+**Repointed**: `RiderHomeScreen` → `ROUTES.riderAvailableJobs`;
+`NodeParcelRow`'s ready-for-collection rows → `vendorAwaitingCollection`
+(deliberately the list, not a deep link — the Node Dashboard is fed by
+`/nodes/operator/inventory`, whose `id` is not known to be the order
+uuid `collect` needs, so deep-linking on it would 404 in a way that
+looks like a wrong code).
+
+**Note on shelf assignment**: `ScanSuccessScreen` was the only UI for
+it, and it's gone. Nothing was lost functionally — `listShelves()`
+returned `[]` and `assignShelf()` threw NOT_IMPLEMENTED, so the screen
+showed an empty picker behind a button that always errored, and shelf
+assignment appears nowhere in `docs/API.md`. If the feature returns it
+needs a real endpoint first.
+
+**Mocks untouched**: `src/core/mocks/*` and the commented-out mock
+service blocks were left exactly as they were, per
+`PROJECT_CONTEXT.md`'s standing instruction. One mid-edit slip
+clobbered part of `vendor.service.ts`'s commented mock block; it was
+restored verbatim rather than taken as an opportunity to prune.
+
+**Verification**: `npx tsc --noEmit` clean, `npx eslint src` clean,
+`yarn build` from a cleared `.next` succeeds. Grepped for every removed
+symbol — the only surviving mentions are explanatory comments.
+
+---
+
+## 2026-08-15 (later still — maps/geocoding moved to Geoapify)
+
+**Feature**: Replaced Google Maps with Geoapify for both map rendering
+and address→coordinate geocoding, behind a provider switch so the move
+back to Google is a contained change when there's budget for it.
+
+**Why**: Google requires a billing account even on its free tier.
+Geoapify's free tier (3,000 req/day) needs no card, which unblocks the
+one thing that actually matters here — Node coordinates. A Node saved
+with wrong or placeholder lat/lng is invisible to `GET /nodes/nearby`
+for every Consumer searching from a real location: it exists, looks
+fine in the Admin list, and simply never appears to anyone.
+
+**Files changed**:
+- Created `src/core/api/services/geocoding.service.ts` — provider-agnostic
+  `geocodeAddress()` → `{lat, lng, formatted}`. Owns its own `fetch`
+  rather than going through `core/api/client.ts`, which speaks the
+  Locoomo envelope and attaches session cookies that must never reach a
+  third party (same reasoning as the Cloudinary upload in
+  `rider.service.ts`).
+- Created `src/components/maps/MapView.tsx` — the single place map
+  rendering happens. Leaflet + Geoapify raster tiles.
+- Created `src/components/maps/MapViewDynamic.tsx` — `next/dynamic`
+  wrapper with `ssr: false`. Leaflet reads `window` at module scope, so
+  a direct import crashes the server render; every screen goes through
+  this.
+- Created `src/components/maps/MapUnavailable.tsx` — shared no-key
+  fallback, previously duplicated in two components.
+- Rewrote `AddressGeocodeButton.tsx` against `geocodingService`. It now
+  also shows the provider's matched address back, so a
+  plausible-but-wrong match can be caught before saving.
+- Replaced `GoogleMapView.tsx` with `NodeMapView.tsx` (renamed — the old
+  name was no longer true; same props, `SelectNodesScreen` only changed
+  its import).
+- Rewrote `NodeNetworkMap.tsx` on the shared `MapView`.
+- `env.ts` / `.env.example` / `.env.local` — added
+  `NEXT_PUBLIC_MAPS_PROVIDER`, `NEXT_PUBLIC_GEOAPIFY_API_KEY`,
+  `NEXT_PUBLIC_GEOAPIFY_MAP_STYLE`. Google vars kept, now only read when
+  the provider is `google`.
+- `package.json` — added `leaflet` + `@types/leaflet`, removed
+  `@vis.gl/react-google-maps`.
+- `README.md` — rewrote the map section, added "Switching map provider".
+
+**Why Leaflet and not MapLibre**: Geoapify publishes tiles and APIs but
+no map SDK, so a renderer was required either way. Leaflet is ~40KB
+gzipped against MapLibre's ~200KB — the right trade for a mobile PWA on
+Nigerian networks — and its `divIcon` lets markers stay plain HTML
+styled with the app's own tokens instead of provider-specific pin
+objects. If vector tiles, rotation or 3D are ever wanted, MapLibre is
+the upgrade path and `MapView.tsx` is the only file it touches.
+
+**Marker colours are resolved hex, not Tailwind classes**, in both map
+components. Leaflet renders markers outside React, so the Tailwind JIT
+compiler never sees class names used there and would purge them.
+
+**Note on the Google path**: `geocodeWithGoogle()` is a deliberate
+`NOT_IMPLEMENTED` throw rather than a stub that silently falls back to
+Geoapify. Google's Geocoding *web service* sends no CORS headers, so a
+browser can't call it directly — it needs the Maps JS SDK's client-side
+`Geocoder` (what the old `AddressGeocodeButton` used) or a backend proxy
+route. Setting `NEXT_PUBLIC_MAPS_PROVIDER=google` today fails loudly,
+which is better than quietly using a provider the operator didn't pick.
+
+**Verification**: `npx tsc --noEmit` clean, `npx eslint src` clean,
+`yarn build` from a cleared `.next` succeeds. All three map-bearing
+routes (`/delivery/select-nodes`, `/admin/nodes`, `/vendor/node-setup`)
+were rendered against a running dev server with a dummy Geoapify key set
+and returned `200` with no SSR errors — that specifically exercises the
+`window`-at-module-scope hazard the dynamic import exists to avoid.
+Bundles got smaller: select-nodes 192→178 kB, admin/nodes 165→152 kB,
+vendor/node-setup 164→149 kB first-load JS (Leaflet lands in a lazy
+chunk).
+
+**Not verified**: no real Geoapify key was available, so live tile
+rendering and a real geocode response have not been seen. The response
+parsing is written defensively (missing `features`, non-numeric
+`lat`/`lon`, and a 200-with-no-results are each handled) but the happy
+path is unexercised.

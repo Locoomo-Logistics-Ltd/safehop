@@ -6,7 +6,175 @@
 
 ## Current objective
 
-**Latest session (2026-08-13 — live debugging session, continued):**
+**Latest session (2026-08-15, latest — maps moved to Geoapify):** both
+maps and address→coordinate geocoding now run on Geoapify (Leaflet for
+rendering) instead of Google, behind a `NEXT_PUBLIC_MAPS_PROVIDER`
+switch. Google needs a billing account even on its free tier; Geoapify's
+doesn't, which unblocks the geocode buttons that keep Nodes from being
+saved with placeholder coordinates — the failure mode where a Node looks
+fine in the Admin list and is invisible to every Consumer.
+
+**You need to paste a key.** `.env.local` has
+`NEXT_PUBLIC_GEOAPIFY_API_KEY=` waiting — get a free one at
+myprojects.geoapify.com (no card). Until then maps show the "Map
+unavailable" fallback and the geocode buttons stay hidden; nothing
+crashes. **Restrict the key by HTTP referrer in Geoapify's project
+settings before going live** — it ships to the browser.
+
+Only two files know the provider: `core/api/services/geocoding.service.ts`
+and `components/maps/MapView.tsx`. Everything else uses the neutral
+`MapMarker[]` / `GeocodeResult` contracts. Moving back to Google is real
+work in both, not just the env flag — `geocodeWithGoogle()` is a
+deliberate `NOT_IMPLEMENTED` throw because Google's Geocoding web
+service sends no CORS headers, so it needs the Maps JS SDK or a backend
+proxy route.
+
+`GoogleMapView` was renamed `NodeMapView`; `@vis.gl/react-google-maps`
+is gone, `leaflet` is in. Bundles shrank (select-nodes 192→178 kB
+first-load JS).
+
+**Unverified**: no real Geoapify key was available, so live tiles and a
+real geocode response haven't been seen. Parsing is defensive but the
+happy path is unexercised — that's the first thing to check once the key
+is in.
+
+**Previous session (2026-08-15, later — supersession cleanup):** deleted
+the screens, hooks, routes, service methods and endpoint definitions the
+two Handoffs passes superseded (28 files). The app now has exactly one
+flow per custody moment.
+
+This was not tidying. The earlier passes left the old screens in place
+as "a separate decision," but several were still reachable, so the app
+was running two parallel flows over two different backends — a vendor
+could reach the old `orders.scanCollection` release screen from the Node
+Dashboard while the new `collect` flow lived one nav tab away, showing a
+different list of the same parcels. A rider's home screen CTA still
+opened the old undocumented job board. **The 2026-08-14 note below
+claiming "nav no longer points at any of them" was true of
+`nav-config.ts` only and wrong about the app** — that's corrected now.
+
+Gone: `JobOfferScreen`, `ActiveJobScreen`, `RiderScanScreen`,
+`DeliveryCompleteScreen`, `ReleaseParcelScreen`, `ScanSuccessScreen`,
+`ShelfLocationPicker` and their hooks/routes; `ENDPOINTS.riderOps.*`,
+`orders.scanHandoff`, `orders.scanCollection`; the six superseded
+`riderService` methods and six `vendorService` ones; the dead `ROUTES`
+and `QUERY_KEYS` entries.
+
+**Shelf assignment no longer has any UI.** `ScanSuccessScreen` was its
+only home. Nothing was lost functionally — `listShelves()` returned `[]`
+and `assignShelf()` always threw NOT_IMPLEMENTED, and the feature
+appears nowhere in `docs/API.md` — but if it's wanted back it needs a
+real endpoint first, not a rebuilt screen.
+
+`src/core/mocks/*` and the commented-out mock service blocks were left
+untouched, per `PROJECT_CONTEXT.md`'s standing instruction.
+
+`npx tsc --noEmit`, `npx eslint src` and a cleared-`.next` `yarn build`
+all pass.
+
+**Previous session (2026-08-15 — Handoffs part two: collection):** the
+three new destination-side endpoints (`intake`,
+`collection-code/resend`, `collect`) are wired, closing the parcel
+lifecycle at `completed`. New screens: `/vendor/awaiting-collection`
+(what's on this Node's shelves, split into "needs check-in" and "ready
+for collection") and `/vendor/awaiting-collection/[orderId]/collect`
+(code entry, identity attestation, resend). New Vendor nav item
+"Collect" — Scan / Handoff / Collect are now the three custody moments
+at a counter.
+
+Two things worth knowing before touching this code:
+
+- **The two 6-digit codes run in opposite directions.** Rider codes are
+  shown only to the rider and never emailed (5-min TTL); collection
+  codes are emailed only to the receiver and never appear in any
+  response the operator can see (1-hour TTL). `intake` is what mints and
+  emails the collection code, so deferring it strands the receiver —
+  which is why arrival confirmation now chains straight into it on the
+  same screen.
+- **`identityConfirmed` is not defaulted, deliberately.** It's an audit
+  attestation that per `API.md` doesn't block completion when `false`
+  (proxy pickup is normal). Pre-selecting "yes" would record something
+  the operator never said. Don't "improve" it into a checkbox.
+
+`yarn build` (from a cleared `.next`), `npx tsc --noEmit` and
+`npx eslint src` all pass. **Still nothing exercised against a live
+backend.**
+
+**The one backend fix that matters most**: the destination operator
+cannot resolve an order uuid. All three new endpoints are keyed on it
+and scoped to the destination Node, and the only documented lookup is
+origin-scoped — so this now blocks **four of the six operator
+endpoints**. Mitigated by capturing the uuid from the `rider_arrival`
+confirm response into `src/store/node-parcels.store.ts`, the one moment
+it crosses the operator's session. That store is per-device; clearing
+site data strands every parcel at the Node with no frontend recovery.
+Both client stores (`rider-jobs`, `node-parcels`) should be **deleted**
+when destination- and rider-scoped endpoints land, not kept as caches.
+
+**A second, smaller gap**: `identityConfirmed` asks the operator to
+confirm the receiver's name, but no destination-side endpoint returns
+it — so there's nothing on screen to check against. The UI is worded
+honestly about that rather than implying a verification it didn't do.
+
+**Also superseded, not deleted**: `ReleaseParcelScreen` /
+`use-release-parcel.ts` / `vendorService.releaseParcel` (the
+undocumented `orders.scanCollection`) is the old version of exactly this
+collection flow and is still routable at
+`/vendor/parcels/[parcelId]/release`. Same follow-up as the `riderOps.*`
+screens below.
+
+**Previous session (2026-08-14 — Handoffs module integration):** the six
+`/handoffs/*` endpoints added to `docs/API.md` the same day are wired
+end to end, with new screens on both the Rider and NodeOperator sides.
+This is the parcel custody chain — consumer drop-off → rider claims →
+rider collects → rider delivers — and it is the documented replacement
+for the undocumented `riderOps.*` / `orders.scanHandoff` routes the app
+had been built against.
+
+Two structural differences from the old model drove most of the work,
+and anyone touching these screens needs them front of mind:
+
+1. **Nobody scans a rider.** Custody transfers on a 6-digit code the
+   rider requests and states to the Node operator, who types it in.
+   There is no `qrNonce` in this contract.
+2. **No write endpoint takes GPS.** Only `available-orders` takes
+   coordinates, and only to sort that one response.
+
+The Vendor QR scanner was repointed accordingly: scanning a consumer's
+code no longer mutates anything, it routes to a new drop-off preview
+screen that does an origin-scoped lookup and owns the separate confirm.
+Better counter UX too — the operator eyeballs the parcel against the
+description before accepting custody.
+
+`yarn build`, `npx tsc --noEmit` and `npx eslint src` all pass.
+**Nothing here has been exercised against a live backend** — every
+response shape, status transition and error path is wired from
+`docs/API.md` alone.
+
+**Three things need the backend team**, all documented in full in
+`docs/IMPLEMENTATION_LOG.md`'s 2026-08-14 entry and
+`docs/API_INTEGRATION_STATUS.md`'s new Handoffs section:
+
+1. **No rider-scoped "my deliveries" endpoint** — an accepted order
+   disappears from every list the rider can query, while they still need
+   its `id` to request handoff codes. Bridged with a localStorage store
+   (`src/store/rider-jobs.store.ts`) that is per-device and can drift.
+   Delete it when `GET /handoffs/my-deliveries` (or equivalent) lands.
+2. **`confirm-handoff` is unusable at the destination Node** — it needs
+   the order uuid, and the only lookup that resolves one is scoped to
+   the *origin* Node. `rider_arrival` currently asks the operator to
+   type a uuid read off the rider's phone. This is the most
+   user-visible thing wrong with the module right now.
+3. **No rider-facing payout figure exists anywhere in the API** — the
+   job board shows route, size and distance but no money.
+
+**Not done, deliberately**: `JobOfferScreen`, `ActiveJobScreen`,
+`RiderScanScreen` and their three hooks still exist and still target the
+undocumented `riderOps.*` routes. Nav no longer points at any of them
+and the documented equivalents are live, so they're dead in practice —
+but deleting them is a separate call, not incidental cleanup.
+
+**Previous session (2026-08-13 — live debugging session, continued):**
 same debugging thread as the entry below, continued live with the
 reporting user. Two more things resolved: (1) confirmed the
 `(user)/layout.tsx` role-gate fix (below) was in fact the fix for the

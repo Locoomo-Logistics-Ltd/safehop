@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { XIcon } from "@/components/icons";
-import { getErrorMessage } from "@/core/api/errors";
 import { useScanParcel } from "@/modules/vendor/hooks/use-scan-parcel";
 import { ROUTES } from "@/core/config/constants";
 import { QrScannerView } from "./QrScannerView";
@@ -14,19 +13,19 @@ import { ManualCodeEntrySheet } from "./ManualCodeEntrySheet";
  * code" screen. Real camera access via QrScannerView; falls back to
  * manual code entry if the camera is denied/unavailable or the
  * vendor taps "Having trouble?".
+ *
+ * The scan itself no longer hits the API — it hands the tracking code
+ * to the drop-off preview screen, which resolves it and owns both the
+ * "no such parcel here" case and the confirm. See use-scan-parcel.ts.
  */
 export function QrScannerScreen() {
   const router = useRouter();
   const [showManualEntry, setShowManualEntry] = useState(false);
-  const { lookupAndCheckIn, isProcessing, error, reset } = useScanParcel();
+  const { openDropOff, isProcessing } = useScanParcel();
 
   const handleScan = (value: string) => {
-    if (isProcessing) return; // ignore repeat frames while a lookup is in flight
-    lookupAndCheckIn(value);
-  };
-
-  const handleManualSubmit = (code: string) => {
-    lookupAndCheckIn(code);
+    if (isProcessing) return; // ignore repeat frames mid-navigation
+    openDropOff(value);
   };
 
   return (
@@ -57,19 +56,12 @@ export function QrScannerScreen() {
             Hold steady — we&apos;ll detect it automatically
           </p>
         )}
-
-        {error && (
-          <p className="text-[#FF8A3D] text-[12px] text-center mt-1">{getErrorMessage(error)}</p>
-        )}
       </div>
 
       {/* Manual entry trigger */}
       <div className="absolute bottom-8 left-0 right-0 px-6">
         <button
-          onClick={() => {
-            reset();
-            setShowManualEntry(true);
-          }}
+          onClick={() => setShowManualEntry(true)}
           className="w-full h-12 rounded-full border border-white/30 text-white text-[14px] font-medium"
         >
           Having trouble? Enter code manually
@@ -78,10 +70,9 @@ export function QrScannerScreen() {
 
       {showManualEntry && (
         <ManualCodeEntrySheet
-          onSubmit={handleManualSubmit}
+          onSubmit={openDropOff}
           onClose={() => setShowManualEntry(false)}
           isSubmitting={isProcessing}
-          error={error ? getErrorMessage(error) : null}
         />
       )}
     </div>

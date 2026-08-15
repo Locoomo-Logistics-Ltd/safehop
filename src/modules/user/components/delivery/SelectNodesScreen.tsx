@@ -12,7 +12,7 @@ import { useDeliveryDraftStore } from "@/store/delivery-draft.store";
 import { ROUTES } from "@/core/config/constants";
 import { getFriendlyError } from "@/core/api/errors";
 import { distanceKm } from "@/lib/geo";
-import { GoogleMapView } from "./GoogleMapView";
+import { NodeMapView } from "./NodeMapView";
 import { NodeListItem } from "./NodeListItem";
 
 /**
@@ -99,7 +99,7 @@ export function SelectNodesScreen() {
 
         <ProgressSteps total={4} current={2} className="mb-5" />
 
-        <GoogleMapView
+        <NodeMapView
           nodes={nodesWithLiveDistance}
           selectedNodeId={selectedOriginId}
           onSelectNode={handleSelectOrigin}

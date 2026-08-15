@@ -29,7 +29,10 @@ export function useRiderAvailability() {
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.riderAvailability });
-      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.riderJobOffer });
+      // The board is position-keyed and polls on its own; going online
+      // no longer needs to nudge it (the old single-offer query this
+      // used to invalidate was removed with `riderOps.*`).
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.riderAvailableOrdersRoot });
     },
   });
 

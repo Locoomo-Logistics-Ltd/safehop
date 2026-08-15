@@ -112,6 +112,11 @@ backend greps logs for.
 | 409 | `NODE_OPERATOR_ALREADY_ONBOARDED` | `POST /node-operators/onboarding` called by an account that already has a Node |
 | 409 | `RIDER_ALREADY_ONBOARDED` | `POST /riders/onboarding` called by an account that already has a rider profile |
 | 409 | `NODE_CAPACITY_UNAVAILABLE` | `POST /payments/intents` — the origin Node filled up between you seeing it in `/nodes/nearby` and this request landing. Show the consumer a "that drop-off point just filled up, try another" message, not a generic error |
+| 403 | `RIDER_NOT_ACTIVE` | `POST /handoffs/orders/:id/accept` — your rider role is valid but your `RiderProfile` isn't `active` yet (still `pending` Admin review, or `suspended`) |
+| 409 | `RIDER_CAPACITY_UNAVAILABLE` | `POST /handoffs/orders/:id/accept` — you already have the maximum number of concurrent active deliveries (3). Finish or hand off one before accepting another |
+| 409 | `ILLEGAL_ORDER_TRANSITION` | A handoff scan/confirm endpoint was called while the order isn't in the state that step expects — either stale client state or someone else already advanced it. Re-fetch the order and refresh the UI rather than retrying blindly |
+| 401 | `INVALID_HANDOFF_CODE` | `POST /handoffs/orders/:id/confirm-handoff` and `POST /handoffs/orders/:id/collect` — the code was missing, expired, already used, locked out after too many wrong guesses, or just wrong. Deliberately identical for all of these, same enumeration-avoidance reasoning as other invalid-token errors; request/resend a fresh code either way |
+| 409 | `ORDER_NOT_READY_FOR_COLLECTION` | `POST /handoffs/orders/:id/collection-code/resend` — called before `POST /handoffs/orders/:id/intake` has run (or after the order's already `completed`). There's no collection code to resend yet |
 | 429 | `RATE_LIMITED` | Too many requests to this route from your IP. `/auth/register` and `/auth/login` allow 5/min; `/payments/intents` allows 5/min; everything else defaults to 100/min |
 | 500 | `INTERNAL_ERROR` | Unexpected server failure — message is always the generic "Something went wrong," never internal detail. Report the `correlationId` to backend |
 | 502 | `PAYMENT_PROVIDER_ERROR` | Paystack's API failed or was unreachable when placing an order — safe to let the consumer retry |
@@ -896,3 +901,232 @@ Response `200`, `data`: same shape as one item from the list response above.
 
 Errors: `401 UNAUTHENTICATED`, `403 FORBIDDEN` (non-Consumer), `404 NOT_FOUND`.
 
+### `GET /api/v1/handoffs/available-orders`
+
+**Requires an authenticated Rider session, and your `RiderProfile` must be `active`**
+(rejected `403 RIDER_NOT_ACTIVE` otherwise, even with a valid Rider role — see
+`POST /riders/onboarding` and Admin approval). Lists orders sitting unclaimed at their
+origin Node (`status: parcel_received_at_origin`, no rider assigned yet), sorted
+nearest-first to the coordinates you supply. Nothing about your location is stored —
+`latitude`/`longitude` are used for this one request's sort only. Paginated (see
+[Pagination](#pagination-list-endpoints)).
+ 
+Query params: `latitude`, `longitude` (required), `page`, `limit`.
+
+Response `200`, `data`:
+
+```json
+{
+  "items": [
+    {
+      "id": "uuid",
+      "trackingCode": "LCM-4F2K-9XPT",
+      "originNodeId": "uuid",
+      "originNodeName": "Ikeja Node",
+      "originNodeAddress": "12 Allen Avenue, Ikeja",
+      "destinationNodeId": "uuid",
+      "destinationNodeName": "Lekki Node",
+      "destinationNodeAddress": "45 Admiralty Way, Lekki Phase 1",
+      "parcelDescription": "A small box of documents",
+      "parcelSize": "small",
+      "createdAt": "2026-07-22T09:29:00.000Z",
+      "distanceMeters": 4213.7
+    }
+  ],
+  "page": 1,
+  "limit": 20,
+  "total": 1
+}
+```
+
+No receiver name/email/phone here — deciding whether to accept a job doesn't need
+receiver PII, only route/size/distance.
+
+Errors: `401 UNAUTHENTICATED`, `403 FORBIDDEN` (non-Rider), `403 RIDER_NOT_ACTIVE`,
+`400 VALIDATION_FAILED`.
+
+### `POST /api/v1/handoffs/orders/:id/accept`
+
+**Requires an authenticated, `active` Rider session.** Claims an available order —
+atomic, race-safe against other riders accepting the same order simultaneously (only one
+wins; the other gets `409 ILLEGAL_ORDER_TRANSITION`), and capped at 3 concurrent active
+deliveries per rider (`409 RIDER_CAPACITY_UNAVAILABLE` past that).
+
+Response `200`, `data`:
+
+```json
+{
+  "id": "uuid",
+  "trackingCode": "LCM-4F2K-9XPT",
+  "status": "rider_assigned",
+  "originNodeId": "uuid",
+  "destinationNodeId": "uuid"
+}
+```
+
+Errors: `401 UNAUTHENTICATED`, `403 FORBIDDEN` (non-Rider), `403 RIDER_NOT_ACTIVE`,
+`409 ILLEGAL_ORDER_TRANSITION` (order already claimed, or not yet at
+`parcel_received_at_origin`), `409 RIDER_CAPACITY_UNAVAILABLE`.
+
+### `GET /api/v1/handoffs/orders/by-tracking-code/:code`
+
+**Requires an authenticated NodeOperator session**, and only returns orders whose
+`originNodeId` is *your* Node (`404 NOT_FOUND` otherwise — not-found-not-forbidden, same
+pattern as everywhere else). This is what your app calls after scanning/typing a
+consumer's QR/tracking code at drop-off, to preview the parcel before confirming receipt.
+
+Response `200`, `data`:
+
+```json
+{
+  "id": "uuid",
+  "trackingCode": "LCM-4F2K-9XPT",
+  "status": "awaiting_drop_off",
+  "originNodeId": "uuid",
+  "destinationNodeId": "uuid",
+  "destinationNodeName": "Lekki Node",
+  "parcelDescription": "A small box of documents",
+  "parcelSize": "small",
+  "createdAt": "2026-07-22T09:29:00.000Z"
+}
+```
+
+No receiver PII here either — that's only relevant at the destination Node, at
+collection.
+
+Errors: `401 UNAUTHENTICATED`, `403 FORBIDDEN` (non-NodeOperator), `404 NOT_FOUND`.
+
+### `POST /api/v1/handoffs/orders/:id/drop-off`
+
+**Requires an authenticated NodeOperator session**, ownership-scoped the same way as the
+lookup above. Confirms the consumer has physically handed over the parcel —
+`awaiting_drop_off → parcel_received_at_origin`. Idempotent: calling this twice for the
+same order is a safe no-op the second time, same response either way.
+
+Response `200`, `data`: same shape as the accept response above, `status:
+"parcel_received_at_origin"`.
+
+Errors: `401 UNAUTHENTICATED`, `403 FORBIDDEN` (non-NodeOperator), `404 NOT_FOUND` (not
+your Node), `409 ILLEGAL_ORDER_TRANSITION` (order isn't at `awaiting_drop_off`).
+
+### `POST /api/v1/handoffs/orders/:id/request-code`
+
+**Requires an authenticated, `active` Rider session, and you must be the rider assigned
+to this specific order** (`404 NOT_FOUND` otherwise — a rider who never accepted this
+order can't get a code for it; there's nothing to show a Node operator even
+if you tried). Issues a fresh 6-digit code for the handoff you're about to do — request
+it right before you're physically at the counter, not in advance, since it expires in 5
+minutes. Requesting again supersedes any prior unused code for the same `(order, type)`.
+
+Request:
+
+```json
+{ "type": "rider_pickup" }
+```
+
+`type` is `rider_pickup` (you're at the origin Node about to take the parcel) or
+`rider_arrival` (you're at the destination Node about to hand it off) — nothing else is
+accepted here.
+
+Response `201`, `data`:
+
+```json
+{ "code": "482913", "expiresAt": "2026-07-22T09:34:00.000Z" }
+```
+
+Show or read this code to the Node operator — never send it anywhere else, it's not
+logged or emailed.
+
+Errors: `401 UNAUTHENTICATED`, `403 FORBIDDEN` (non-Rider), `403 RIDER_NOT_ACTIVE`,
+`404 NOT_FOUND` (not your order), `400 VALIDATION_FAILED`.
+
+### `POST /api/v1/handoffs/orders/:id/confirm-handoff`
+
+**Requires an authenticated NodeOperator session, ownership-scoped to the correct side**
+— `type: "rider_pickup"` must come from the *origin* Node's operator, `type:
+"rider_arrival"` from the *destination* Node's operator (`404 NOT_FOUND` from the wrong
+one, same not-found-not-forbidden pattern as everything else). This is what you call
+after the rider shows/states their code. Rate-limited (10/min) on top of a per-code
+lockout — 5 wrong guesses locks that code out permanently; the rider has to request a
+new one, they aren't blocked from trying again.
+
+Request:
+
+```json
+{ "type": "rider_pickup", "code": "482913" }
+```
+
+Response `200`, `data`: same shape as the accept response, `status` becomes `in_transit`
+(pickup) or `arrived_at_destination` (arrival). Idempotent — a retried confirm with the
+same already-used code returns the same success, not an error.
+
+Errors: `401 UNAUTHENTICATED`, `403 FORBIDDEN` (non-NodeOperator), `404 NOT_FOUND` (wrong
+Node for this `type`), `401 INVALID_HANDOFF_CODE`, `429 RATE_LIMITED`,
+`400 VALIDATION_FAILED`.
+
+### `POST /api/v1/handoffs/orders/:id/intake`
+
+**Requires an authenticated NodeOperator session**, ownership-scoped to the
+*destination* Node (`404 NOT_FOUND` otherwise). Destination-side equivalent of drop-off —
+confirms the parcel has physically arrived at your counter (the rider already moved it to
+`arrived_at_destination` via `confirm-handoff`). `arrived_at_destination →
+ready_for_collection`. In the same step, mints a 6-digit collection code and emails it to
+the receiver — you never see the code yourself, only the receiver does. Idempotent:
+calling this twice is a safe no-op the second time.
+
+Response `200`, `data`: same shape as the accept response above, `status:
+"ready_for_collection"`.
+
+Errors: `401 UNAUTHENTICATED`, `403 FORBIDDEN` (non-NodeOperator), `404 NOT_FOUND` (not
+your Node), `409 ILLEGAL_ORDER_TRANSITION` (order isn't at `arrived_at_destination`).
+
+### `POST /api/v1/handoffs/orders/:id/collection-code/resend`
+
+**Requires an authenticated NodeOperator session**, ownership-scoped to the destination
+Node. Use this when the receiver is standing at the counter but says they never got the
+email, or their original code expired (1 hour TTL) — mints a fresh code, superseding the
+prior one, and re-emails it. Rate-limited (5/min) since it sends a real email each time.
+
+No request body. Response `200`, `data`:
+
+```json
+{ "expiresAt": "2026-07-22T10:34:00.000Z" }
+```
+
+The code itself is never in this response — it only ever goes to the receiver's email,
+never to the operator's session or any API response, the mirror image of the rider
+pickup/arrival codes (which are only ever shown to the rider, never emailed).
+
+Errors: `401 UNAUTHENTICATED`, `403 FORBIDDEN` (non-NodeOperator), `404 NOT_FOUND` (not
+your Node), `409 ORDER_NOT_READY_FOR_COLLECTION` (intake hasn't run yet, or the order's
+already `completed`), `429 RATE_LIMITED`.
+
+### `POST /api/v1/handoffs/orders/:id/collect`
+
+**Requires an authenticated NodeOperator session**, ownership-scoped to the destination
+Node. Final step — the receiver reads you the code from their email, you ask for and
+confirm their name, then call this. `ready_for_collection → completed`. Rate-limited
+(10/min) on top of the same per-code lockout as pickup/arrival (5 wrong guesses locks
+that code out permanently; resend recovers it).
+
+`identityConfirmed` is your attestation that you asked for and matched the receiver's
+name — it's recorded on the order's permanent event log but does **not** block
+completion if `false`. Legitimate proxy pickup (someone other than the named receiver
+collecting on their behalf) is common in this business; this isn't a system-enforced
+identity check, just an audit trail of whether you did it.
+
+Request:
+
+```json
+{ "code": "738204", "identityConfirmed": true }
+```
+
+Response `200`, `data`: same shape as the accept response, `status` becomes `completed`.
+Idempotent — a retried confirm with the same already-used code returns the same success,
+not an error.
+
+Errors: `401 UNAUTHENTICATED`, `403 FORBIDDEN` (non-NodeOperator), `404 NOT_FOUND` (wrong
+Node), `401 INVALID_HANDOFF_CODE`, `429 RATE_LIMITED`, `400 VALIDATION_FAILED`.
+
+This is also the end of the parcel's lifecycle in the system today — rider payout for a
+`completed` order is manual for now (see `doc/ROADMAP.md`).

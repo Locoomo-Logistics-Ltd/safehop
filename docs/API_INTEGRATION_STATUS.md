@@ -52,6 +52,34 @@ to it (session refresh interceptor, verify-email route, and Node
 Network's "Manage" panel only sending `status` — each still just
 missing a UI/plumbing addition to an already-correct method).
 
+**2026-08-14 (Handoffs pass)**: `docs/API.md` grew six more documented
+endpoints — the whole `/handoffs/*` module — plus four new error codes
+(`RIDER_NOT_ACTIVE`, `RIDER_CAPACITY_UNAVAILABLE`,
+`ILLEGAL_ORDER_TRANSITION`, `INVALID_HANDOFF_CODE`). All six are now
+wired, with new screens on both sides; see the new Handoffs section
+below and `docs/IMPLEMENTATION_LOG.md`'s 2026-08-14 entry.
+
+**2026-08-15 (Collection pass)**: three more — `POST /handoffs/orders/:id/intake`,
+`.../collection-code/resend`, `.../collect` — plus
+`ORDER_NOT_READY_FOR_COLLECTION`. These close the lifecycle at
+`completed`. All three wired, with a new destination-side counter list
+and collection screen; see the Handoffs section and
+`docs/IMPLEMENTATION_LOG.md`'s 2026-08-15 entry. Summary counts now
+cover **39** documented endpoints, not 30:
+**31 ✅ / 7 🟡 / 0 ❌ / 1 ⚪**.
+
+All four Handoffs 🟡 rows share a single cause — the destination
+operator cannot resolve an order uuid — and would all go ✅ on one
+backend change. See Inconsistencies item 2.
+
+This module supersedes several of the undocumented routes the
+"Inconsistencies" section below has been flagging — `riderOps.jobBoard`,
+`riderOps.acceptJob`, `riderOps.scanPickup`, `riderOps.scanDropoff`, and
+`orders.scanHandoff`. The Vendor scanner no longer calls
+`orders.scanHandoff`; the Rider screens that call `riderOps.*` still
+exist but are no longer reachable from nav. See that section for the
+current state of each.
+
 ## Auth
 
 | Method | Endpoint | Feature/Module | Status | Related page(s)/component(s) | Service/hook | Missing work |
@@ -245,6 +273,72 @@ moved 🟡→✅ in a same-day follow-up — see its row in the Auth section.)
   `orders.scanHandoff`/`orders.scanCollection` remain live, undocumented,
   load-bearing call sites for Vendor/Rider scanning, untouched by this
   pass (out of scope — see "Out of scope for this file" below).
+  **Resolved 2026-08-15 (cleanup pass)**: `riderOps.*` (all 5),
+  `orders.scanHandoff` and `orders.scanCollection` have been **deleted
+  from `endpoints.ts`**, along with the service methods and screens that
+  called them. Nothing in the app targets an undocumented custody route
+  any more. (An interim 2026-08-14 note here claimed nav no longer
+  pointed at the superseded screens — that was true of `nav-config.ts`
+  but not of the app: `RiderHomeScreen` and `NodeParcelRow` still linked
+  to them, which is exactly why the cleanup was needed. Both repointed.) `orders.scanCollection` (recipient collection at
+  the destination Node) is untouched and still the only path for that
+  step — the handoffs module ends at `arrived_at_destination` and does
+  not cover collection.
+  **Superseded and removed 2026-08-15**: it does now.
+  `POST /handoffs/orders/:id/collect` is the documented replacement,
+  `CollectParcelScreen` implements it, and the old path
+  (`ReleaseParcelScreen`, `use-release-parcel.ts`,
+  `vendorService.releaseParcel`, `/vendor/parcels/[parcelId]/release`)
+  has been deleted. It was the same 6-digit-code-at-the-counter shape
+  but with a `qrNonce` and GPS the real contract has no concept of, a
+  3-attempt limit instead of 5, and an auto-send-OTP-on-mount the
+  documented flow must **not** have (resend costs a real email and is
+  rate-limited 5/min) — and it was still reachable from the Node
+  Dashboard, so the app was offering two different collection flows.
+- **Genuine API gaps found in the Handoffs module** (2026-08-14,
+  extended 2026-08-15), all needing a backend change:
+  1. **No rider-scoped "my deliveries" endpoint.** `GET /orders` is
+     Consumer-only and `/handoffs/available-orders` returns only
+     *unclaimed* orders, so an accepted order vanishes from every list
+     the rider can query — while they still need its `id` for
+     `request-code` at both ends of the trip. Bridged client-side with
+     `store/rider-jobs.store.ts` (localStorage, per-device, can drift
+     from server state; never trusted for authorization). Requested:
+     `GET /handoffs/my-deliveries`. Delete that store when it lands
+     rather than keeping it as a cache.
+  2. **The origin/destination lookup asymmetry.** `confirm-handoff`
+     needs a uuid the destination operator has no documented way to
+     obtain. Requested: widen `by-tracking-code` to match the
+     destination Node too (its response carries no receiver PII, so the
+     privacy rationale for the current scoping appears satisfied either
+     way), or accept a tracking code as the path param.
+     **Escalated 2026-08-15**: the three new collection endpoints
+     (`intake`, `collection-code/resend`, `collect`) are keyed on the
+     same uuid and scoped to the same destination Node, so this now
+     blocks **four of the six operator endpoints**, not one. Mitigated
+     by capturing the uuid from the `confirm-handoff` (`rider_arrival`)
+     response into `store/node-parcels.store.ts` — the one moment it
+     crosses the destination operator's session — but that store is
+     per-device and clearing site data strands every parcel at the Node
+     with no frontend recovery path. This is the single highest-value
+     backend fix outstanding for this module.
+  3. **`identityConfirmed` has nothing to check against** (2026-08-15).
+     `POST /collect` asks the operator to attest they matched the
+     receiver's name, but no destination-side endpoint returns receiver
+     PII. `by-tracking-code` explicitly omits it with the note "that's
+     only relevant at the destination Node, at collection" — yet nothing
+     at collection supplies it either. `CollectParcelScreen` is worded to
+     attest to a conversation rather than an on-screen match, since
+     implying a verification the app didn't perform would be worse than
+     admitting the limit. Either surface the receiver name to the
+     destination operator, or narrow what the field claims to mean.
+- **No rider-facing payout figure anywhere in the API** (2026-08-14).
+  `/handoffs/available-orders` omits `amountKobo` (that's the consumer's
+  fare, not a rider fee) and no rider-earnings endpoint exists, so the
+  job board shows route/size/distance and no money. Left out rather than
+  invented; the intended rider-facing economics need confirming. Note
+  this compounds the pre-existing `riderService.getEarningsSummary()`
+  `NOT_IMPLEMENTED` gap.
   `API.md`'s own header states "if something you need isn't here, it isn't
   built yet" — so each of these is either an undocumented-but-real backend
   route, or the frontend is calling something that doesn't exist server-side.
@@ -277,6 +371,41 @@ moved 🟡→✅ in a same-day follow-up — see its row in the Auth section.)
   the undocumented route it called were deleted 2026-08-07 (see
   `docs/HANDOFF.md`). `riderService.submitVerification` is the only
   Rider onboarding path now.
+
+## Handoffs
+
+New 2026-08-14, extended 2026-08-15. The full parcel custody chain:
+consumer drop-off at the origin Node → rider claims it → rider collects
+→ rider delivers to the destination Node → operator checks it in →
+receiver collects. Three structural notes that explain most of the UI
+decisions below:
+
+- Custody transfers on a **6-digit code read aloud at the counter**, not
+  a QR anyone scans. There is no `qrNonce` in this contract at all.
+- **No write endpoint takes GPS.** Only `available-orders` takes
+  coordinates, purely to sort one response.
+- **The two codes run in opposite directions**, which is the easiest
+  thing to get backwards. Rider codes (`request-code`) are shown only to
+  the rider and never emailed, 5-minute TTL. Collection codes (minted by
+  `intake`) are emailed only to the receiver and never appear in any
+  response the operator can see, 1-hour TTL.
+
+This module supersedes the app's entire pre-existing scan-based custody
+flow. `orders.scanHandoff` is no longer called; `orders.scanCollection`
+(via `ReleaseParcelScreen`) is now superseded by `collect` but has not
+yet been removed — see Inconsistencies.
+
+| Method | Endpoint | Feature/Module | Status | Related page(s)/component(s) | Service/hook | Missing work |
+|---|---|---|---|---|---|---|
+| GET | `/handoffs/available-orders` | Rider job board | ✅ | `AvailableJobsScreen` (`/rider/available-jobs`), `AvailableJobCard` | `riderService.listAvailableOrders` via `useAvailableOrders` | None functionally. Paginated with real controls. Note the screen hides all distance figures when `useGeolocation` has fallen back to its Lagos default (permission denied/unsupported) — the sort is meaningless from a position the rider isn't at, and showing the numbers anyway would present fiction as fact. Verification-gated client-side (`useRiderVerification`) since the route is a guaranteed `403 RIDER_NOT_ACTIVE` otherwise. No payout shown — the contract carries no rider-facing figure (see Inconsistencies). |
+| POST | `/handoffs/orders/:id/accept` | Rider claims an order | ✅ | Same screen, "Accept" per row | `riderService.acceptAvailableOrder` via `useAcceptOrder` | None. Handles both `409`s: the lost accept race (`ILLEGAL_ORDER_TRANSITION`) refetches the board rather than retrying, per `API.md`; the 3-delivery cap (`RIDER_CAPACITY_UNAVAILABLE`) is also enforced client-side so the rider learns the limit before eating the error. The hook takes the whole `AvailableOrder`, not just its id — the accept response is a minimal receipt with no node names or addresses, and there's no rider-scoped endpoint to fetch them back later, so this is the only moment they can be captured. |
+| POST | `/handoffs/orders/:id/request-code` | Rider gets a handoff code | ✅ | `HandoffCodeScreen` (`/rider/active-deliveries/[orderId]/handoff`) | `riderService.requestHandoffCode` via `useHandoffCode` | None. Requested on tap, never on mount — a code issued at screen-open is usually dead by the time the rider reaches the counter, and each request supersedes the last, so an auto-firing query could invalidate a code mid-read-aloud. Live MM:SS countdown; expired codes are nulled at the hook boundary so the screen physically cannot display one. Digits rendered large enough for an operator to read across a counter. A `404` (rider not assigned — usually a stale store entry) prunes the entry and explains it. |
+| GET | `/handoffs/orders/by-tracking-code/:code` | Operator previews a drop-off | ✅ | `DropOffPreviewScreen` (`/vendor/drop-off/[trackingCode]`), reached from `QrScannerScreen` | `vendorService.lookupOrderByTrackingCode` via `useHandoffLookup` | None at the origin Node. `retry: false` and a `404`-specific empty state ("no order with that code at this Node") kept distinct from real fetch errors, same pattern as `useRiderVerification`'s `notStarted`. **Origin-scoped by design, which breaks the arrival flow — see Inconsistencies.** |
+| POST | `/handoffs/orders/:id/drop-off` | Operator confirms receipt | ✅ | Same screen, "Confirm Receipt" CTA | `vendorService.confirmDropOff` via `useHandoffLookup` | None. Server-side idempotent, but the button is still disabled in flight. Replaces the old scan-and-check-in-atomically flow: the operator now eyeballs the parcel against the description *before* accepting custody, which the previous `orders.scanHandoff` call site couldn't do. |
+| POST | `/handoffs/orders/:id/intake` | Operator checks a parcel in at the destination | 🟡 | `RiderHandoffScreen`'s arrival success state (inline), `AwaitingCollectionScreen` (`/vendor/awaiting-collection`) | `vendorService.confirmIntake` via `useParcelIntake` | Wired correctly and chained straight off the arrival confirm, since that's the same physical moment and intake is what emails the receiver their code. 🟡 only because it inherits the uuid gap below — it works when reached from the arrival confirm that produced the id, and is unreachable otherwise. |
+| POST | `/handoffs/orders/:id/collection-code/resend` | Operator re-emails the collection code | 🟡 | `CollectParcelScreen` (`/vendor/awaiting-collection/[orderId]/collect`) | `vendorService.resendCollectionCode` via `useCollectParcel` | Wired correctly. Deliberately a manual action placed below the primary CTA and never auto-fired — it sends real email and is rate-limited 5/min, unlike the old `sendReleaseOtp` no-op it replaces, which fired on mount. Resetting the local attempt counter on success is correct: a fresh code supersedes the old one's lockout. 🟡 for the uuid gap only. |
+| POST | `/handoffs/orders/:id/collect` | Receiver collects; order completed | 🟡 | Same screen | `vendorService.collectParcel` via `useCollectParcel` | Wired correctly. `identityConfirmed` is asked as an explicit two-option question with **no default** and gates the CTA until answered — per `API.md` it's an audit-trail attestation that doesn't block completion when `false`, so pre-selecting "yes" would record something the operator never said. Note the app **cannot show the expected receiver name** (no destination-side endpoint returns receiver PII), so the wording attests to a conversation rather than an on-screen match — see Inconsistencies. 🟡 for the uuid gap only. |
+| POST | `/handoffs/orders/:id/confirm-handoff` | Operator confirms a rider handoff | 🟡 | `RiderHandoffScreen` (`/vendor/rider-handoff`) | `vendorService.confirmRiderHandoff` via `useConfirmHandoff` | Wired correctly, and `rider_pickup` (origin) works end to end. **`rider_arrival` is only half-usable**: the endpoint is keyed on the order uuid, and the sole documented way to resolve a human-readable code into that uuid is the origin-scoped lookup above — so the destination operator has no documented way to obtain the id they must POST to. The screen asks them to type it directly as a stopgap, which means reading a uuid off the rider's phone. Backend fix needed, not a frontend one — see Inconsistencies. Error handling is otherwise complete: `INVALID_HANDOFF_CODE` copy deliberately doesn't hint whether the code was wrong/expired/used/locked-out (per `API.md`), the 5-attempt lockout is tracked as UX advice only and never gates the request, and `429`/`404`/`409` are distinguished. |
 
 ## Out of scope for this file
 

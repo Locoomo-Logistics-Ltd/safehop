@@ -1,8 +1,10 @@
 "use client";
 
-import { APIProvider, Map, AdvancedMarker } from "@vis.gl/react-google-maps";
+import { useMemo } from "react";
+import { MapViewDynamic } from "@/components/maps/MapViewDynamic";
+import { MapUnavailable } from "@/components/maps/MapUnavailable";
+import type { MapMarker } from "@/components/maps/MapView";
 import { env } from "@/core/config/env";
-import { MapPinIcon } from "@/components/icons";
 import type { AdminNodeStatus, GeoPoint, NodeLifecycleStatus } from "@/core/types";
 
 interface NodeNetworkMapProps {
@@ -11,6 +13,7 @@ interface NodeNetworkMapProps {
 
 const LAGOS_CENTER: GeoPoint = { lat: 6.5244, lng: 3.3792 };
 
+/** Resolved hex, not Tailwind classes — Leaflet renders markers outside React. */
 const STATUS_COLOR: Record<NodeLifecycleStatus, string> = {
   active: "#16A34A",
   pending: "#D97706",
@@ -26,41 +29,38 @@ const LEGEND: Array<{ status: NodeLifecycleStatus; label: string }> = [
 ];
 
 /**
- * Network map for "Node Network" — real Google Map (same library as
- * `GoogleMapView`) with markers colored by the Node's lifecycle
- * status. Renders the same graceful no-API-key fallback the User
- * module already uses. Markers only appear once
- * `adminService.getNodeStatuses()` returns real coordinates — there's
- * no fake data plotted here.
+ * Network map for "Node Network" — markers coloured by each Node's
+ * lifecycle status. Markers only appear once
+ * `adminService.getNodeStatuses()` returns real coordinates; there's no
+ * fake data plotted here.
+ *
+ * Uses the shared `MapView` (Leaflet + Geoapify) as of 2026-08-15,
+ * previously Google Maps.
  */
 export function NodeNetworkMap({ nodes }: NodeNetworkMapProps) {
-  if (!env.googleMapsApiKey) {
-    return <MapUnavailableFallback />;
+  const markers = useMemo<MapMarker[]>(
+    () =>
+      nodes.map((node) => ({
+        id: node.id,
+        position: node.location,
+        title: node.name,
+        color: STATUS_COLOR[node.status],
+        subtitle: LEGEND.find((entry) => entry.status === node.status)?.label ?? node.status,
+      })),
+    [nodes]
+  );
+
+  if (!env.geoapifyApiKey) {
+    return (
+      <div className="w-full h-[420px]">
+        <MapUnavailable className="w-full h-full rounded-[16px] border border-dashed border-border-strong bg-bg-subtle flex flex-col items-center justify-center px-6 text-center gap-2" />
+      </div>
+    );
   }
 
   return (
     <div className="relative w-full h-[420px] rounded-[16px] overflow-hidden border border-border-default">
-      <APIProvider apiKey={env.googleMapsApiKey}>
-        <Map
-          mapId={env.googleMapsMapId || undefined}
-          defaultCenter={LAGOS_CENTER}
-          defaultZoom={11}
-          gestureHandling="greedy"
-          disableDefaultUI
-          zoomControl
-          style={{ width: "100%", height: "100%" }}
-        >
-          {nodes.map((node) => (
-            <AdvancedMarker key={node.id} position={node.location} title={node.name}>
-              <span
-                className="block w-3.5 h-3.5 rounded-full border-2 border-white shadow-md"
-                style={{ background: STATUS_COLOR[node.status] }}
-              />
-            </AdvancedMarker>
-          ))}
-        </Map>
-      </APIProvider>
-
+      <MapViewDynamic markers={markers} center={LAGOS_CENTER} zoom={11} />
       <Legend />
     </div>
   );
@@ -68,25 +68,20 @@ export function NodeNetworkMap({ nodes }: NodeNetworkMapProps) {
 
 function Legend() {
   return (
-    <div className="absolute bottom-3 left-3 bg-bg-card rounded-[10px] border border-border-default shadow-[var(--shadow-card)] px-3 py-2 flex flex-col gap-1">
-      {LEGEND.map((item) => (
-        <span key={item.status} className="flex items-center gap-1.5 text-[11px] text-text-secondary">
-          <span className="w-2 h-2 rounded-full" style={{ background: STATUS_COLOR[item.status] }} />
-          {item.label}
-        </span>
-      ))}
-    </div>
-  );
-}
-
-function MapUnavailableFallback() {
-  return (
-    <div className="relative w-full h-[420px] rounded-[16px] bg-bg-subtle border border-border-default flex flex-col items-center justify-center gap-2 text-text-muted">
-      <MapPinIcon size={22} />
-      <p className="text-[13px] px-6 text-center leading-[1.5]">
-        Map unavailable — set NEXT_PUBLIC_GOOGLE_MAPS_API_KEY to enable it.
-      </p>
-      <Legend />
+    <div className="absolute bottom-3 left-3 z-[500] bg-bg-card/95 backdrop-blur-sm rounded-[10px] border border-border-default px-3 py-2.5 shadow-[var(--shadow-raised)]">
+      <div className="flex flex-col gap-1.5">
+        {LEGEND.map((entry) => (
+          <div key={entry.status} className="flex items-center gap-2">
+            <span
+              className="w-2.5 h-2.5 rounded-full shrink-0"
+              style={{ background: STATUS_COLOR[entry.status] }}
+            />
+            <span className="text-[11px] text-text-secondary whitespace-nowrap">
+              {entry.label}
+            </span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

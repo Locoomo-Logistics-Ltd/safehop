@@ -1,10 +1,19 @@
 "use client";
 
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { vendorService } from "@/core/api/services";
 import { QUERY_KEYS } from "@/core/config/constants";
 
-/** Fetches a single node parcel by id — used on Scan Success and Release screens. */
+/**
+ * Fetches a single node parcel by id, from the Node Dashboard's
+ * inventory list — used by the Flag Issue screen.
+ *
+ * `useShelfLocations`/`useAssignShelf` used to live here and were
+ * removed 2026-08-15 along with the Scan Success screen: neither had a
+ * backend route (`listShelves` returned `[]`, `assignShelf` threw
+ * NOT_IMPLEMENTED), and shelf assignment doesn't appear in docs/API.md
+ * at all. Rebuild them against a real endpoint if the feature returns.
+ */
 export function useNodeParcel(parcelId: string) {
   const query = useQuery({
     queryKey: [...QUERY_KEYS.vendorParcels, parcelId],
@@ -21,39 +30,5 @@ export function useNodeParcel(parcelId: string) {
     parcel: query.data,
     isLoading: query.isLoading,
     isError: query.isError,
-  };
-}
-
-/** Fetches available shelf locations for the Scan Success "Assign Shelf Location" step. */
-export function useShelfLocations() {
-  const query = useQuery({
-    queryKey: QUERY_KEYS.vendorShelves,
-    queryFn: () => vendorService.listShelves(),
-  });
-
-  return {
-    shelves: query.data ?? [],
-    isLoading: query.isLoading,
-  };
-}
-
-/** Assigns a shelf to a checked-in parcel — the "Confirm & Store Parcel" action. */
-export function useAssignShelf() {
-  const queryClient = useQueryClient();
-
-  const mutation = useMutation({
-    mutationFn: ({ parcelId, shelfId }: { parcelId: string; shelfId: string }) =>
-      vendorService.assignShelf(parcelId, shelfId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.vendorParcels });
-      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.vendorShelves });
-    },
-  });
-
-  return {
-    assignShelf: mutation.mutate,
-    isAssigning: mutation.isPending,
-    error: mutation.error,
-    isSuccess: mutation.isSuccess,
   };
 }

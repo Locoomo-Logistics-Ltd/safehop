@@ -24,19 +24,27 @@ export const ROUTES = {
   // Vendor (Shop Owner / Node Operator)
   vendorHome: "/vendor/home",
   vendorScan: "/vendor-scan",
-  vendorScanSuccess: (parcelId: string) => `/vendor/scan-success/${parcelId}`,
   vendorActivity: "/vendor/activity",
-  vendorRelease: (parcelId: string) => `/vendor/parcels/${parcelId}/release`,
   vendorFlag: (parcelId: string) => `/vendor/parcels/${parcelId}/flag`,
   vendorProfile: "/vendor/profile",
   vendorNodeSetup: "/vendor/node-setup",
+  /** Consumer drop-off preview + confirm — `GET /handoffs/orders/by-tracking-code/:code` then `POST .../drop-off`. Reached from the scanner or manual code entry. */
+  vendorDropOff: (trackingCode: string) => `/vendor/drop-off/${trackingCode}`,
+  /** Operator types the rider's 6-digit code — `POST /handoffs/orders/:id/confirm-handoff`, both `rider_pickup` (origin) and `rider_arrival` (destination). */
+  vendorRiderHandoff: "/vendor/rider-handoff",
+  /** Parcels at this Node between arrival and collection. Client-side list — no destination-scoped orders endpoint exists (see store/node-parcels.store.ts). */
+  vendorAwaitingCollection: "/vendor/awaiting-collection",
+  /** Receiver collection: code entry + identity attestation — `POST /handoffs/orders/:id/collect`. */
+  vendorCollect: (orderId: string) => `/vendor/awaiting-collection/${orderId}/collect`,
 
   // Rider
   riderHome: "/rider/home",
-  riderJobOffer: "/rider/jobs",
-  riderActiveJob: (jobId: string) => `/rider/jobs/${jobId}`,
-  riderScanPickup: (jobId: string) => `/rider-scan/${jobId}`,
-  riderDeliveryComplete: (jobId: string) => `/rider/jobs/${jobId}/complete`,
+  /** The job board — `GET /handoffs/available-orders`. */
+  riderAvailableJobs: "/rider/available-jobs",
+  /** Rider's own accepted deliveries. Client-side only — no rider-scoped orders endpoint exists (see store/rider-jobs.store.ts). */
+  riderActiveDeliveries: "/rider/active-deliveries",
+  /** Where the rider requests + shows the 6-digit handoff code for one delivery. */
+  riderHandoff: (orderId: string) => `/rider/active-deliveries/${orderId}/handoff`,
   riderVerification: "/rider/verification",
   riderDeliveries: "/rider/deliveries",
   riderProfile: "/rider/profile",
@@ -66,15 +74,22 @@ export const QUERY_KEYS = {
   vendorNodeProfile: ["vendor", "node-profile"] as const,
   vendorNodeOperatorProfile: ["vendor", "node-operator-profile"] as const,
   vendorParcels: ["vendor", "parcels"] as const,
-  vendorShelves: ["vendor", "shelves"] as const,
   vendorActivity: ["vendor", "activity"] as const,
 
   riderAvailability: ["rider", "availability"] as const,
   riderEarnings: ["rider", "earnings"] as const,
-  riderJobOffer: ["rider", "job-offer"] as const,
-  riderActiveJob: ["rider", "active-job"] as const,
   riderVerification: ["rider", "verification"] as const,
   riderJobHistory: ["rider", "job-history"] as const,
+
+  // Handoffs module. `availableOrders` is keyed on the coordinates it
+  // was sorted against and the page — a different position is a
+  // genuinely different result set, not a stale one to reuse.
+  /** Prefix for every position/page variant below — invalidate this to refetch the board wholesale (e.g. after an accept). */
+  riderAvailableOrdersRoot: ["rider", "available-orders"] as const,
+  riderAvailableOrders: (latitude: number, longitude: number, page: number) =>
+    ["rider", "available-orders", latitude, longitude, page] as const,
+  vendorHandoffOrder: (trackingCode: string) =>
+    ["vendor", "handoff-order", trackingCode] as const,
 
   adminDashboardStats: ["admin", "dashboard-stats"] as const,
   adminRecentOrders: ["admin", "recent-orders"] as const,
