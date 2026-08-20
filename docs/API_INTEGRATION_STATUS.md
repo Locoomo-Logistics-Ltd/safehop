@@ -4,8 +4,9 @@
 > current frontend implementation. Verified by reading the live source
 > (`core/api/endpoints.ts`, `core/api/services/*.ts`, the module hooks
 > that wrap them, and the screens that call those hooks) — not assumed
-> from prior documentation. Last audited 2026-08-12 (integration pass,
-> later same day).
+> from prior documentation. Last audited 2026-08-20 (full endpoint/mock
+> audit — see that date's entry below and in
+> `docs/IMPLEMENTATION_LOG.md`).
 >
 > **`docs/API.md` is maintained by the backend/project owner — read it,
 > never edit it from a frontend session.** This file is the one that
@@ -75,17 +76,38 @@ backend change. See Inconsistencies item 2.
 This module supersedes several of the undocumented routes the
 "Inconsistencies" section below has been flagging — `riderOps.jobBoard`,
 `riderOps.acceptJob`, `riderOps.scanPickup`, `riderOps.scanDropoff`, and
-`orders.scanHandoff`. The Vendor scanner no longer calls
+`orders.scanHandoff`. The Node operator's scanner no longer calls
 `orders.scanHandoff`; the Rider screens that call `riderOps.*` still
 exist but are no longer reachable from nav. See that section for the
 current state of each.
+
+**2026-08-20 (full endpoint/mock audit)**: every literal endpoint
+string in `core/api/endpoints.ts` re-checked against all 44 routes
+documented in the current `docs/API.md`. Found and removed six
+undocumented call sites (`/nodes/operator/inventory` via the dead Flag
+Issue screen, `/corporate-ops/staff/elevate-superadmin` via Super
+Admin's elevation form, `/maps/rider/telemetry-ping` and
+`/maps/track/:code` — both dead code with zero callers, `/admin/rider-
+earnings` via the old Rider Earnings screen) plus three dead-and-
+undocumented unused constants (`franchiseNodes.onboardOperator`,
+`nodes.onboard`, `nodes.updateStatus`). Wired the three new documented
+Earnings endpoints (`GET /earnings/mine`, `GET /earnings/my-node`,
+`admin/revenue-split` group) that had zero integration before this
+pass — see the new Earnings section below. `/auth/consumer/request-
+otp`/`request-login-otp` remain undocumented and live but were
+explicitly left unwired-to-real-auth at the user's direction this
+session — see Inconsistencies. Full detail in
+`docs/IMPLEMENTATION_LOG.md`'s 2026-08-20 entry, including the
+same-session Vendor→Node rename (every `vendor*` identifier/route in
+this file's rows below now reads `node*` — a naming change only,
+not a re-verification of any endpoint's behavior).
 
 ## Auth
 
 | Method | Endpoint | Feature/Module | Status | Related page(s)/component(s) | Service/hook | Missing work |
 |---|---|---|---|---|---|---|
 | POST | `/auth/register` | Consumer + Rider + NodeOperator self-registration | ✅ | `RoleSelectScreen` (`/role-select`) → `CreateAccountScreen` (`/create-account?role=`) | `authService.registerConsumer` via `useAuth().register` | None. **2026-08-07**: `RoleSelectScreen`'s Rider/NodeOperator options now route to `/create-account?role=rider` / `?role=node_operator` (previously routed to now-deleted undocumented-flow screens); `CreateAccountScreen` reads `?role=` and includes it in the payload — all three self-registerable roles now reachable through this one documented endpoint, exactly as `API.md` describes ("This is the same endpoint for all three allowed roles"). Also fixed the client-side password strength meter (uppercase/lowercase/number/special) that contradicted `API.md`'s explicit "don't build a strength meter" guidance — now length-only (≥12 chars), matching `ResetPasswordScreen`. Also fixed a bug where a successful registration was incorrectly treated as a login (`setSession()` called with no server-side cookie ever issued) — `API.md` states registration does not log the user in; the hook now just routes to `/login`. |
-| POST | `/auth/login` | Consumer + Rider + NodeOperator + Admin login | ✅ | `LoginScreen`, `AdminLoginScreen` (`/admin-login`) | `authService.loginConsumer` / `loginAdmin` via `useAuth().login` | None — role-agnostic per `API.md`, all four roles correctly share the one real route with `credentials:"include"`. **2026-08-07**: post-login redirect is role-aware (`session.user.role`) — NodeOperator → `/vendor/node-setup`, Consumer → `/dashboard` — previously hardcoded to `/dashboard` for every role, and unreachable by Rider/NodeOperator anyway since they didn't go through this endpoint yet. **2026-08-07 (later, gating pass)**: Rider → `/rider/home` (changed from `/rider/verification`) — a not-yet-verified Rider now lands on Home with a dismissible verification reminder instead of being forced straight into the verification form; see the Riders section below and `docs/HANDOFF.md` for the product reasoning. |
+| POST | `/auth/login` | Consumer + Rider + NodeOperator + Admin login | ✅ | `LoginScreen`, `AdminLoginScreen` (`/admin-login`) | `authService.loginConsumer` / `loginAdmin` via `useAuth().login` | None — role-agnostic per `API.md`, all four roles correctly share the one real route with `credentials:"include"`. **2026-08-07**: post-login redirect is role-aware (`session.user.role`) — NodeOperator → `/node/setup` (route renamed 2026-08-20, was `/vendor/node-setup`), Consumer → `/dashboard` — previously hardcoded to `/dashboard` for every role, and unreachable by Rider/NodeOperator anyway since they didn't go through this endpoint yet. **2026-08-07 (later, gating pass)**: Rider → `/rider/home` (changed from `/rider/verification`) — a not-yet-verified Rider now lands on Home with a dismissible verification reminder instead of being forced straight into the verification form; see the Riders section below and `docs/HANDOFF.md` for the product reasoning. |
 | POST | `/auth/refresh` | Session refresh | ✅ | none directly (interceptor, not screen-driven) | `authService.refreshSession`, called internally by `core/api/client.ts` | **Fixed 2026-08-12 (later — live debugging session).** `httpClient`'s `request()` now catches any `401 UNAUTHENTICATED` (except on `/auth/*` routes and `skipAuth` calls), fires one refresh attempt, and retries the original call once. Concurrent 401s share one in-flight refresh (`refreshPromise`) so a second caller doesn't independently trigger `401 INVALID_REFRESH_TOKEN` against the now-rotated, single-use token. A failed refresh clears the session (`useAuthStore` + `localStorage`) and hard-redirects to `/login`, per `API.md`'s "treat as a hard sign-out" instruction. This was surfaced by a real user report: `GET /nodes/nearby` returning `401` for a logged-in Consumer testing the Select Nodes screen — an expired, never-refreshed 15-minute access token. |
 | POST | `/auth/logout` | Logout | ✅ | Profile screens' "Log out" action | `authService.logout` via `useAuth().logout` | None. |
 | POST | `/auth/password-reset/request` | Forgot password | ✅ | `ForgotPasswordScreen` (`/forgot-password`) | `authService.requestPasswordReset` | None functionally. Leftover `console.log`/`console.error` debug statements should be removed before ship. |
@@ -100,7 +122,7 @@ current state of each.
 |---|---|---|---|---|---|---|
 | POST | `/nodes` | Admin creates a Node | ✅ | `OnboardNodeForm`, Node Network (`/admin/nodes`) | `adminService.onboardPartnerNode` via `useOnboardNode` | Fields match the real body exactly. Same generic-toast validation issue as `/users/invite` above (`getErrorMessage`, not `getFriendlyError`). |
 | GET | `/nodes` | Admin lists Nodes | ✅ | Node Network screen (`NodeNetworkScreen`) | `adminService.getNodeStatuses` via `useAdminNodes` | Fetches `limit=100` with no pagination UI — fine while the network is small, will silently truncate past 100 Nodes. |
-| GET | `/nodes/nearby` | User picks a pickup Node | ✅ | `GoogleMapView`, Select Nodes (`/delivery/select-nodes`) | `nodesService.listNearby` via `useNodes` | **Fixed 2026-08-12.** Was sending `radiusInMeters` and parsing a flat array; now sends `radiusKm` and unwraps the paginated `{items,...}` envelope, mapping into a new `PickupNode` type (real fields: `city`/`state`/`capacity` as a raw number/`operatingHours`, no fabricated `isOpenNow`/`capacity.occupied`). Deliberately did **not** touch the pre-existing `LocoomoNode` type (kept as-is for `vendor.service.ts`'s separate, still-unconfirmed `/nodes/operator/inventory` endpoint) to avoid an unrelated blast radius. `MockMapView.tsx` (already `@deprecated`, unused by the active screen) still references the old `LocoomoNode` shape and was left untouched. |
+| GET | `/nodes/nearby` | User picks a pickup Node | ✅ | `GoogleMapView`, Select Nodes (`/delivery/select-nodes`) | `nodesService.listNearby` via `useNodes` | **Fixed 2026-08-12.** Was sending `radiusInMeters` and parsing a flat array; now sends `radiusKm` and unwraps the paginated `{items,...}` envelope, mapping into a new `PickupNode` type (real fields: `city`/`state`/`capacity` as a raw number/`operatingHours`, no fabricated `isOpenNow`/`capacity.occupied`). **2026-08-20**: `LocoomoNode` (the type this row deliberately left untouched) is now unused for real — its one live consumer, `node.service.ts`'s `mapInventoryResponse()`, was deleted along with the rest of the dead Flag Issue feature (see Inconsistencies). `MockMapView.tsx` (`@deprecated`, unused by the active screen) still references the old `LocoomoNode` shape and was left untouched. |
 | GET | `/nodes/:id` | Admin views Node detail | ✅ | Node Network's "View Details" expand | `adminService.getNodeDetail` | None. **2026-08-12**: also reused by `nodesService.getById` (Consumer side) — same route, any authenticated role per `API.md`, previously had a hacky "search nearby and filter" workaround instead. |
 | PATCH | `/nodes/:id` | Admin approves/suspends/edits a Node | 🟡 | Node Network's "Manage" panel | `adminService.updateNode` via `useManageNode` | Correctly wired, but the UI only ever sends `{status}` (approve/suspend/reactivate). `name`/`address`/`capacity`/`operatingHours`/etc. are all editable per `API.md` but no form exposes them. Same generic-toast validation issue as above. |
 
@@ -108,8 +130,8 @@ current state of each.
 
 | Method | Endpoint | Feature/Module | Status | Related page(s)/component(s) | Service/hook | Missing work |
 |---|---|---|---|---|---|---|
-| POST | `/node-operators/onboarding` | Vendor self-service Node setup | ✅ | `VendorNodeSetupScreen` (`/vendor/node-setup`) | `vendorService.onboardNode` via `useVendorNodeSetup` | None. Fields match the real required body exactly. |
-| GET | `/node-operators/me` | Vendor checks Node approval status | ✅ | Same screen, reachable from Vendor Profile's "Node Setup" row | `vendorService.getMyNodeOperatorProfile` via `useVendorNodeSetup` | None. Drives all three states correctly (`404`→onboarding form, `pending`→waiting view, `active`→dashboard link), field-level errors via `getFriendlyError`. |
+| POST | `/node-operators/onboarding` | Node Operator self-service Node setup | ✅ | `NodeSetupScreen` (`/node/setup`) | `nodeService.onboardNode` via `useNodeSetup` | None. Fields match the real required body exactly. |
+| GET | `/node-operators/me` | Node Operator checks Node approval status | ✅ | Same screen, reachable from Node Profile's "Node Setup" row; also `NodeHomeScreen` (`/node/home`) and `NodeProfileScreen` (Node identity/address), both since 2026-08-17 follow-up 2 | `nodeService.getMyNodeOperatorProfile` via `useNodeSetup` (Node Setup), `useNodeProfile` (Home + Profile) | None. Drives all three states correctly (`404`→onboarding form, `pending`→waiting view, `active`→dashboard link), field-level errors via `getFriendlyError`. Same query key (`QUERY_KEYS.nodeOperatorProfile`) across all three call sites, so TanStack Query dedupes them. |
 | GET | `/node-operators/pending` | Admin's NodeOperator review queue | ✅ | `ApprovalsScreen` (`/admin/approvals`, "Node Operators" tab) | `adminService.getPendingNodeOperators` via `useNodeOperatorApprovals` | None — new 2026-08-12. `/admin/approvals` has no home in the original 8-frame design; placed as a new nav item after "Team" (see `nav-config.ts`'s comment). |
 | PATCH | `/node-operators/:id/approve` | Admin approves a NodeOperator | ✅ | Same screen, "Approve" button per row | `adminService.approveNodeOperator` via `useNodeOperatorApprovals` | None — new 2026-08-12. Closes the gap this row used to describe: an Admin can now approve a self-registered NodeOperator through the UI. |
 
@@ -118,7 +140,7 @@ current state of each.
 | Method | Endpoint | Feature/Module | Status | Related page(s)/component(s) | Service/hook | Missing work |
 |---|---|---|---|---|---|---|
 | GET | `/riders/verification/upload-signature` | Rider KYC — get Cloudinary signature | ✅ | `RiderVerificationScreen` (`/rider/verification`) | `riderService.getVerificationUploadSignature` via `useRiderVerification` | None — only sends `documentType: "rating_screenshot"`, the one documented value. |
-| POST | `/riders/onboarding` | Rider KYC — submit verification | ✅ | Same screen | `riderService.submitVerification` via `useRiderVerification` | None. Upload flows client-side straight to Cloudinary first (`uploadVerificationDocument`), then submits the resulting `public_id` — matches `API.md`'s "file bytes never pass through this API" instruction exactly. |
+| POST | `/riders/onboarding` | Rider KYC — submit verification | ✅ | Same screen | `riderService.submitVerification` via `useRiderVerification` | None. Upload flows client-side straight to Cloudinary first (`uploadVerificationDocument`), then submits the resulting `public_id` — matches `API.md`'s "file bytes never pass through this API" instruction exactly. `licenseNumber` (added to `docs/API.md` 2026-08-17, self-reported, no document check) is now a required field on the form and the payload; existing riders' profiles show `null` until they resubmit, which the form doesn't currently prompt for — a re-verification nudge would need a product decision, not a frontend one. |
 | GET | `/riders/me` | Rider checks verification status | ✅ | `RiderVerificationScreen`, `RiderHomeScreen`'s reminder sheet, `JobOfferScreen`'s gate, Rider Profile's "Verification" row | `riderService.getVerificationProfile` via `useRiderVerification` (called independently from each of those four screens/components, same query key — TanStack Query dedupes) | None. Drives all three states correctly (`404`→form, `pending`→under-review, `active`→dashboard link) on the verification screen itself. **2026-08-07**: also now gates `data.status !== "active"` on `JobOfferScreen` (blocks with "Verification required" + a link back to `/rider/verification`, instead of showing job-board content) and drives a dismissible reminder on `RiderHomeScreen`. Deliberately **not** gated on Home/Earnings/Profile — those stay browsable pre-approval (product decision, see `docs/HANDOFF.md`). |
 | GET | `/riders/pending` | Admin's Rider review queue | ✅ | `ApprovalsScreen` (`/admin/approvals`, "Riders" tab) | `adminService.getPendingRiders` via `useRiderApprovals` | None — new 2026-08-12. Shows a "View screenshot" link to the pending Rider's signed `viewUrl` document alongside each row. |
 | PATCH | `/riders/:id/approve` | Admin approves a Rider | ✅ | Same screen, "Approve" button per row | `adminService.approveRider` via `useRiderApprovals` | None — new 2026-08-12. Closes the gap this row used to describe: a Rider who completes verification can now be moved to `active` through the UI, reaching the job board. |
@@ -129,6 +151,18 @@ current state of each.
 |---|---|---|---|---|---|---|
 | POST | `/admin/pricing` | Admin sets a new pricing rule | ✅ | `AddPricingRuleForm`, `PricingScreen` (`/admin/pricing`) | `adminService.createPricingRule` via `useCreatePricingRule` | None — new 2026-08-12. Same generic-toast validation issue as `/users/invite`/`/nodes` above (`getErrorMessage`, not `getFriendlyError`). |
 | GET | `/admin/pricing` | Admin views rate history | ✅ | Same screen — table below the form, newest-first, top row marked "Current" | `adminService.getPricingRules` via `usePricingRules` | None — new 2026-08-12. `/admin/pricing` has no home in the original 8-frame design; placed as a new nav item next to "Approvals" (see `nav-config.ts`'s comment). This closes the real gap the pre-2026-08-12 audit flagged: Consumer checkout (`POST /payments/intents`) depends on a pricing rule existing, and there was previously no Admin-facing way to create one. |
+## Earnings (revenue split)
+
+New 2026-08-20. Every `completed` order's fee is split rider/origin-Node/platform per an Admin-configured ratio — see `docs/API.md`'s "Earnings (revenue split)" section. **Supersedes `GET /admin/rider-earnings`**, an endpoint the 2026-08-17 session wired `RiderEarningsScreen` to that never actually appeared in `docs/API.md` — deleted, see Inconsistencies.
+
+| Method | Endpoint | Feature/Module | Status | Related page(s)/component(s) | Service/hook | Missing work |
+|---|---|---|---|---|---|---|
+| POST | `/admin/revenue-split` | Admin sets the split ratio | ✅ | `SetRevenueSplitRatioForm`, `RevenueSplitScreen` (`/admin/revenue-split`) | `adminService.createRevenueSplitRatio` via `useCreateRevenueSplitRatio` | None — new 2026-08-20. Client-side validates the three percentages sum to exactly 100 before enabling submit, mirroring the server's `400 INVALID_REVENUE_SPLIT`. Same generic-toast validation issue as `/users/invite`/`/nodes` above. |
+| GET | `/admin/revenue-split` | Admin views ratio history | ✅ | Same screen — "Current split" card reads the newest entry | `adminService.getRevenueSplitRatios` via `useRevenueSplitRatios` | None — new 2026-08-20. |
+| GET | `/admin/revenue-split/entries` | Admin views payout-readiness entries | ✅ | Same screen — filterable table, `partyType`/`payoutStatus` | `adminService.getRevenueSplitEntries` via `useRevenueSplitEntries` | None — new 2026-08-20. Requested at `limit=100`, no pagination UI yet. |
+| PATCH | `/admin/revenue-split/entries/:id/mark-paid` | Admin marks an entry settled off-system | ✅ | Same screen, "Mark Paid" per pending row | `adminService.markRevenueSplitEntryPaid` via `useMarkRevenueSplitEntryPaid` | None — new 2026-08-20. No request body, idempotent per `API.md`. |
+| GET | `/earnings/mine` | Rider views own earnings | ✅ | `EarningsStatCards`/`RiderHomeScreen`, `RiderProfileScreen`'s stat row, `MyEarningsScreen` (`/rider/deliveries`, "Earnings" nav tab) | `riderService.listMyEarnings`/`getEarningsSummary` via `useMyEarnings` (list), `useRiderEarnings` (reduced today/total summary) | None — new 2026-08-20, closes a real gap (`getEarningsSummary()` previously `NOT_IMPLEMENTED`, no endpoint existed). No server-side "today" filter or rating field — summary is reduced client-side from the full entry list; `RiderEarningsSummary` no longer carries a `rating` field (nothing in the real API supplies one). |
+| GET | `/earnings/my-node` | NodeOperator views this Node's earnings | ✅ | `NodeEarningsScreen` (`/node/earnings`, reached from Node Profile) | `nodeService.getMyNodeEarnings` via `useNodeEarnings` | None — new 2026-08-20, first integration of this route (previously zero frontend calls). Only shows entries where this Node was the *origin*, per the documented split rule. |
 
 ## Payments
 
@@ -147,10 +181,14 @@ current state of each.
 
 ## Summary
 
-**30** endpoints documented in `API.md`. **27 ✅ Fully Integrated**, **2 🟡
-Partially Integrated** (`/auth/verify-email`, `PATCH /nodes/:id`),
-**0 ❌ Not Integrated**, **1 ⚪ No UI Required Yet**. (`/auth/refresh`
-moved 🟡→✅ in a same-day follow-up — see its row in the Auth section.)
+**47** endpoints documented in `API.md` as of 2026-08-20 (up from 39 at
+the 2026-08-15 audit — the `admin/revenue-split` group and
+`earnings/mine`/`earnings/my-node` are new). **Every one has a row in
+this file** (verified by a 1:1 diff of every `### METHOD /api/v1/...`
+header in `API.md` against every table row here — no gaps either
+direction). **44 ✅ Fully Integrated**, **2 🟡 Partially Integrated**
+(`/auth/verify-email`, `PATCH /nodes/:id`), **0 ❌ Not Integrated**,
+**1 ⚪ No UI Required Yet**.
 
 ### Recommended implementation priority
 
@@ -204,7 +242,7 @@ moved 🟡→✅ in a same-day follow-up — see its row in the Auth section.)
    - Root cause of *why* the Node wasn't near any reasonable search
      position in the first place: Admin's "Add Node" form
      (`OnboardNodeForm`) and the NodeOperator self-onboarding form
-     (`VendorNodeSetupScreen`) both required typing raw latitude/
+     (`NodeSetupScreen`) both required typing raw latitude/
      longitude by hand — easy to get wrong or leave as placeholder
      values. Added `AddressGeocodeButton` (new,
      `src/components/maps/`, shared between both forms) — resolves
@@ -220,6 +258,14 @@ moved 🟡→✅ in a same-day follow-up — see its row in the Auth section.)
    status enum — `docs/API.md` only documents `"awaiting_drop_off"`.
    Replace the heuristic with a real lookup table once the backend's
    full `Order.status` enum is confirmed.
+9. **New from the 2026-08-20 audit, deliberately not done**: rebuild
+   Consumer signup/login against the documented plain
+   `POST /auth/register`/`POST /auth/login` flow — the current
+   `/auth/consumer/request-otp`/`request-login-otp` OTP step doesn't
+   appear anywhere in `docs/API.md`. Flagged to the user this session;
+   they asked to leave it alone ("already working") rather than have it
+   rebuilt. High blast radius (every Consumer's signup/login) if
+   revisited — confirm the decision still stands before touching it.
 
 ### Inconsistencies and other issues found
 
@@ -246,23 +292,31 @@ moved 🟡→✅ in a same-day follow-up — see its row in the Auth section.)
   standing "Remaining work" list covers general doc/code drift cleanup);
   the claim is accurate again, just not yet un-flagged at the source.
 - **Endpoints the frontend calls that don't appear in `API.md`** (updated
-  2026-08-12 — `orders.list`/`orders.detail` removed from this list, since
-  `GET /orders`/`GET /orders/:id` are now documented; see the new Orders
-  section above for why they're still only 🟡, not ✅): `/auth/consumer/request-otp`,
-  `/auth/consumer/request-login-otp`,
-  `/identity/consumer/:userId/onboarding`,
-  `/corporate-ops/staff/elevate-superadmin`, `/nodes/onboard`,
-  `/nodes/operator/inventory`, `/nodes/:id/status`, `/franchise-nodes/onboard-operator`,
-  `orders.calculateFare` (`/orders/calculate-fare`), `orders.book`
-  (`/orders/book`), `orders.scanHandoff`, `orders.scanCollection`, `maps.*`,
-  `riderOps.*`, `notifications.*`, `/payments/webhook/:provider` (note:
-  this is `endpoints.ts`'s `payments.webhook`, singular and
+  2026-08-20 — see that date's full re-audit in `docs/IMPLEMENTATION_LOG.md`.
+  `orders.list`/`orders.detail` were removed from this list 2026-08-12,
+  since `GET /orders`/`GET /orders/:id` are now documented; see the new
+  Orders section above for why they're still only 🟡, not ✅):
+  `/auth/consumer/request-otp`, `/auth/consumer/request-login-otp`,
+  `/identity/consumer/:userId/onboarding`, `orders.calculateFare`
+  (`/orders/calculate-fare`), `orders.book` (`/orders/book`),
+  `orders.scanHandoff`, `orders.scanCollection`, `riderOps.*`,
+  `notifications.*`, `/payments/webhook/:provider` (note: this is
+  `endpoints.ts`'s `payments.webhook`, singular and
   provider-parameterized — distinct from `API.md`'s documented
   `POST /payments/webhooks/paystack`, plural and Paystack-fixed; nothing
   in the frontend calls either one, this is a naming mismatch worth
-  flagging to backend docs, not a live gap). Of these, `/nodes/:id/status`
-  and `/franchise-nodes/onboard-operator` are defined in `endpoints.ts` but
-  **never called anywhere** — dead route definitions, safe to delete.
+  flagging to backend docs, not a live gap).
+  **Resolved/removed 2026-08-20**: `/corporate-ops/staff/elevate-superadmin`,
+  `/nodes/onboard`, `/nodes/operator/inventory`, `/nodes/:id/status`,
+  `/franchise-nodes/onboard-operator`, `maps.*` (`riderTelemetryPing`/
+  `track`), and `/admin/rider-earnings` are all gone from `endpoints.ts`
+  now — see the Earnings section above and
+  `docs/IMPLEMENTATION_LOG.md`'s 2026-08-20 entry for what replaced each
+  (or, for the four that were dead code with zero callers, that nothing
+  did). `/auth/consumer/request-otp`/`request-login-otp` remain, live and
+  load-bearing for Consumer signup/login — explicitly left as-is at the
+  user's direction this session rather than rebuilt against the
+  documented plain-`register`/`login` flow; still open.
   **Resolved 2026-08-12 for `orders.calculateFare`/`orders.book`**: these
   were the load-bearing route for the entire Consumer checkout flow;
   `deliveryService` no longer calls either one, `CheckoutScreen` now
@@ -288,40 +342,64 @@ moved 🟡→✅ in a same-day follow-up — see its row in the Auth section.)
   `POST /handoffs/orders/:id/collect` is the documented replacement,
   `CollectParcelScreen` implements it, and the old path
   (`ReleaseParcelScreen`, `use-release-parcel.ts`,
-  `vendorService.releaseParcel`, `/vendor/parcels/[parcelId]/release`)
+  `nodeService.releaseParcel`, `/vendor/parcels/[parcelId]/release`)
   has been deleted. It was the same 6-digit-code-at-the-counter shape
   but with a `qrNonce` and GPS the real contract has no concept of, a
   3-attempt limit instead of 5, and an auto-send-OTP-on-mount the
   documented flow must **not** have (resend costs a real email and is
   rate-limited 5/min) — and it was still reachable from the Node
   Dashboard, so the app was offering two different collection flows.
-- **Genuine API gaps found in the Handoffs module** (2026-08-14,
-  extended 2026-08-15), all needing a backend change:
-  1. **No rider-scoped "my deliveries" endpoint.** `GET /orders` is
-     Consumer-only and `/handoffs/available-orders` returns only
-     *unclaimed* orders, so an accepted order vanishes from every list
-     the rider can query — while they still need its `id` for
-     `request-code` at both ends of the trip. Bridged client-side with
-     `store/rider-jobs.store.ts` (localStorage, per-device, can drift
-     from server state; never trusted for authorization). Requested:
-     `GET /handoffs/my-deliveries`. Delete that store when it lands
-     rather than keeping it as a cache.
-  2. **The origin/destination lookup asymmetry.** `confirm-handoff`
-     needs a uuid the destination operator has no documented way to
-     obtain. Requested: widen `by-tracking-code` to match the
-     destination Node too (its response carries no receiver PII, so the
-     privacy rationale for the current scoping appears satisfied either
-     way), or accept a tracking code as the path param.
-     **Escalated 2026-08-15**: the three new collection endpoints
-     (`intake`, `collection-code/resend`, `collect`) are keyed on the
-     same uuid and scoped to the same destination Node, so this now
-     blocks **four of the six operator endpoints**, not one. Mitigated
-     by capturing the uuid from the `confirm-handoff` (`rider_arrival`)
-     response into `store/node-parcels.store.ts` — the one moment it
-     crosses the destination operator's session — but that store is
-     per-device and clearing site data strands every parcel at the Node
-     with no frontend recovery path. This is the single highest-value
-     backend fix outstanding for this module.
+- **Genuine API gaps found in the Handoffs module** (2026-08-14, extended
+  2026-08-15) — **both closed 2026-08-17**, when `docs/API.md` gained
+  `GET /handoffs/my-orders` and `GET /handoffs/my-node/orders`:
+  1. ~~No rider-scoped "my deliveries" endpoint.~~ **Closed.**
+     `GET /handoffs/my-orders` returns every order this rider has ever
+     been assigned, current and past. `store/rider-jobs.store.ts` (the
+     localStorage bridge this gap used to require) is **deleted**; see
+     `modules/rider/hooks/use-my-orders.ts`.
+  2. ~~The origin/destination lookup asymmetry.~~ **Closed.**
+     `GET /handoffs/my-node/orders` returns every order that's touched
+     the caller's Node as *either* origin or destination, with `myRole`
+     saying which — so the destination operator can now resolve the
+     uuid `confirm-handoff`/`intake`/`collection-code/resend`/`collect`
+     need, the same way the origin operator already could.
+     `store/node-outgoing.store.ts` and `store/node-parcels.store.ts`
+     (the two localStorage bridges this gap used to require) are
+     **deleted**; see `modules/node/hooks/use-my-node-orders.ts`.
+     `/vendor/rider-handoff` now shows the same pick-a-parcel flow for
+     both directions — the arrival-blocked card described below in the
+     2026-08-15 history is gone.
+     For the record, both gaps were probed live pre-fix (2026-08-15) and
+     confirmed absent at the time: `GET /handoffs/my-deliveries`,
+     `/handoffs/orders`, `/handoffs/node-orders`,
+     `/handoffs/incoming-orders`, `/handoffs/orders/at-node`,
+     `/nodes/operator/parcels`, `/nodes/me/parcels`, and a code-only
+     `POST /handoffs/confirm-handoff` all answered `Cannot GET/POST …`
+     (nonexistent route) rather than `UNAUTHENTICATED` (real route, no
+     session) — so neither client store had an undocumented server-side
+     alternative at that time. `my-orders`/`my-node/orders` are the real
+     routes that eventually shipped.
+  2b. **`GET /nodes/operator/inventory` does not exist on the deployed
+     backend** (confirmed 2026-08-15: `404 Cannot GET
+     /api/v1/nodes/operator/inventory`). Still undocumented, still
+     dead. **Closed for the Node Dashboard 2026-08-17**: `NodeHomeScreen`
+     no longer touches this endpoint at all — rebuilt on
+     `GET /node-operators/me` (Node identity/capacity) +
+     `GET /handoffs/my-node/orders` (the live parcel snapshot, "occupied"
+     derived client-side from which orders are currently physically at
+     the Node — see `use-node-dashboard.ts`'s header). Verified live
+     against the deployed backend: a fresh NodeOperator's `GET
+     /node-operators/me` correctly 404s before onboarding and returns
+     `status: "pending"` after, and `GET /handoffs/my-node/orders`
+     returns an empty list with no error for a brand-new Node — see
+     `docs/IMPLEMENTATION_LOG.md`'s 2026-08-17 (follow-up 2) entry.
+     **Fully closed 2026-08-20**: the Flag Issue screen — its one
+     remaining call site, and already unreachable from nav since
+     2026-08-17 — is deleted entirely (screen, route, both hooks,
+     `listParcels()`/`flagParcel()`/`mapInventoryResponse()`, the
+     `ENDPOINTS.nodes.operatorInventory` constant, and every type that
+     only existed for it). Nothing in the app targets this endpoint any
+     more, documented or not.
   3. **`identityConfirmed` has nothing to check against** (2026-08-15).
      `POST /collect` asks the operator to attest they matched the
      receiver's name, but no destination-side endpoint returns receiver
@@ -332,18 +410,20 @@ moved 🟡→✅ in a same-day follow-up — see its row in the Auth section.)
      implying a verification the app didn't perform would be worse than
      admitting the limit. Either surface the receiver name to the
      destination operator, or narrow what the field claims to mean.
-- **No rider-facing payout figure anywhere in the API** (2026-08-14).
-  `/handoffs/available-orders` omits `amountKobo` (that's the consumer's
-  fare, not a rider fee) and no rider-earnings endpoint exists, so the
-  job board shows route/size/distance and no money. Left out rather than
-  invented; the intended rider-facing economics need confirming. Note
-  this compounds the pre-existing `riderService.getEarningsSummary()`
-  `NOT_IMPLEMENTED` gap.
-  `API.md`'s own header states "if something you need isn't here, it isn't
-  built yet" — so each of these is either an undocumented-but-real backend
-  route, or the frontend is calling something that doesn't exist server-side.
-  Not re-verified against a live backend in this pass; flag to backend docs
-  owner.
+- ~~**Still no rider-facing payout figure anywhere in the API.**~~
+  **Resolved 2026-08-20.** `GET /earnings/mine` (new in `docs/API.md`)
+  is exactly this — the rider's own revenue-split entries.
+  `riderService.getEarningsSummary()` now reduces it into today/total
+  stats instead of throwing `NOT_IMPLEMENTED`; see the Earnings section
+  above. `/handoffs/available-orders` still omits any payout figure
+  pre-acceptance (a genuine, separate, and still-open gap — a rider
+  can't see what a job is worth before claiming it), and
+  `getJobHistory()` (declined/expired job history with a route/payout
+  breakdown) still has no real endpoint at all and stays
+  `NOT_IMPLEMENTED` — `MyEarningsScreen` (renamed from
+  `MyDeliveriesScreen`) is now built on `listMyEarnings()` instead,
+  which only covers completed orders' payout entries, not the fuller
+  job-history concept the old screen implied.
 - **`adminService.getTeamMembers()` throws `NOT_IMPLEMENTED` (no backend
   route), and `useAdminTeam()` swallows that into an empty array** (`query.data
   ?? []`) with `query.isError` never surfaced to `TeamManagementScreen`. The
@@ -354,17 +434,25 @@ moved 🟡→✅ in a same-day follow-up — see its row in the Auth section.)
   dashboard/orders/disputes/analytics screens (all throw by design per
   `admin.service.ts`'s file header, not re-audited screen-by-screen this
   pass since none of those endpoints are in `API.md`).
-- **No screens import mock data directly.** `src/core/mocks/*` is dead
-  code everywhere except one live fallback: `vendor.service.ts`'s
-  `mapInventoryResponse()` defaults to `MOCK_NODES[1]` when the real
-  `/nodes/operator/inventory` response is missing a `node` field. Per
-  `PROJECT_CONTEXT.md`, this is intentional and scheduled for a deliberate
-  cleanup pass at feature-complete, not incidental — not flagged as a bug
-  here.
+- ~~**No screens import mock data directly** — one live mock-data
+  fallback existed (`vendor.service.ts`'s `mapInventoryResponse()`
+  defaulting to `MOCK_NODES[1]`).~~ **Resolved 2026-08-20** — deleted
+  along with the rest of the dead Flag Issue feature (see item 2b
+  above). `src/core/mocks/` now holds only `mock-utils.ts`
+  (`generateId()`, a real still-used ID-generation helper, not fake
+  data) — `mock-vendor.ts`/`mock-deliveries.ts`/`mock-nodes.ts`/
+  `mock-rider.ts`/`mock-activity.ts` are all deleted, having been
+  either fully unreferenced or reachable only from dead commented-out
+  mock-service code.
 - **No duplicate services found.** Each domain (`auth`, `admin`, `nodes`,
-  `vendor`, `rider`, `delivery`) has exactly one real service object; the
-  commented-out mock variants share the file but are inert. The one
-  legacy/duplicate-looking pair this file used to flag —
+  `node`, `rider`, `delivery`) has exactly one real service object.
+  **2026-08-20**: the dead commented-out mock-service blocks that used
+  to share `node.service.ts`/`rider.service.ts` (inert since before
+  this project's AI-assisted work began) are deleted, not just
+  ignored. `vendor.service.ts`/`vendorService` renamed to
+  `node.service.ts`/`nodeService` throughout — a naming change, not a
+  new service. The one legacy/duplicate-looking pair this file used to
+  flag —
   `authService.submitRiderOnboarding` (→ `/identity/rider/:userId/onboarding`,
   undocumented) vs. `riderService.submitVerification` (→ `/riders/onboarding`,
   documented and real) — no longer exists: `submitRiderOnboarding` and
@@ -382,6 +470,12 @@ decisions below:
 
 - Custody transfers on a **6-digit code read aloud at the counter**, not
   a QR anyone scans. There is no `qrNonce` in this contract at all.
+  **That code is the entire rider→operator payload** — `request-code`
+  returns `{code, expiresAt}` with no order reference, and the code is
+  neither emailed nor logged. `confirm-handoff` still needs the order
+  uuid in its path, so the operator must resolve the parcel from their
+  *own* records. No screen may ask a rider for a tracking code
+  (corrected 2026-08-15, last session — `RiderHandoffScreen` used to).
 - **No write endpoint takes GPS.** Only `available-orders` takes
   coordinates, purely to sort one response.
 - **The two codes run in opposite directions**, which is the easiest
@@ -400,23 +494,27 @@ yet been removed — see Inconsistencies.
 | GET | `/handoffs/available-orders` | Rider job board | ✅ | `AvailableJobsScreen` (`/rider/available-jobs`), `AvailableJobCard` | `riderService.listAvailableOrders` via `useAvailableOrders` | None functionally. Paginated with real controls. Note the screen hides all distance figures when `useGeolocation` has fallen back to its Lagos default (permission denied/unsupported) — the sort is meaningless from a position the rider isn't at, and showing the numbers anyway would present fiction as fact. Verification-gated client-side (`useRiderVerification`) since the route is a guaranteed `403 RIDER_NOT_ACTIVE` otherwise. No payout shown — the contract carries no rider-facing figure (see Inconsistencies). |
 | POST | `/handoffs/orders/:id/accept` | Rider claims an order | ✅ | Same screen, "Accept" per row | `riderService.acceptAvailableOrder` via `useAcceptOrder` | None. Handles both `409`s: the lost accept race (`ILLEGAL_ORDER_TRANSITION`) refetches the board rather than retrying, per `API.md`; the 3-delivery cap (`RIDER_CAPACITY_UNAVAILABLE`) is also enforced client-side so the rider learns the limit before eating the error. The hook takes the whole `AvailableOrder`, not just its id — the accept response is a minimal receipt with no node names or addresses, and there's no rider-scoped endpoint to fetch them back later, so this is the only moment they can be captured. |
 | POST | `/handoffs/orders/:id/request-code` | Rider gets a handoff code | ✅ | `HandoffCodeScreen` (`/rider/active-deliveries/[orderId]/handoff`) | `riderService.requestHandoffCode` via `useHandoffCode` | None. Requested on tap, never on mount — a code issued at screen-open is usually dead by the time the rider reaches the counter, and each request supersedes the last, so an auto-firing query could invalidate a code mid-read-aloud. Live MM:SS countdown; expired codes are nulled at the hook boundary so the screen physically cannot display one. Digits rendered large enough for an operator to read across a counter. A `404` (rider not assigned — usually a stale store entry) prunes the entry and explains it. |
-| GET | `/handoffs/orders/by-tracking-code/:code` | Operator previews a drop-off | ✅ | `DropOffPreviewScreen` (`/vendor/drop-off/[trackingCode]`), reached from `QrScannerScreen` | `vendorService.lookupOrderByTrackingCode` via `useHandoffLookup` | None at the origin Node. `retry: false` and a `404`-specific empty state ("no order with that code at this Node") kept distinct from real fetch errors, same pattern as `useRiderVerification`'s `notStarted`. **Origin-scoped by design, which breaks the arrival flow — see Inconsistencies.** |
-| POST | `/handoffs/orders/:id/drop-off` | Operator confirms receipt | ✅ | Same screen, "Confirm Receipt" CTA | `vendorService.confirmDropOff` via `useHandoffLookup` | None. Server-side idempotent, but the button is still disabled in flight. Replaces the old scan-and-check-in-atomically flow: the operator now eyeballs the parcel against the description *before* accepting custody, which the previous `orders.scanHandoff` call site couldn't do. |
-| POST | `/handoffs/orders/:id/intake` | Operator checks a parcel in at the destination | 🟡 | `RiderHandoffScreen`'s arrival success state (inline), `AwaitingCollectionScreen` (`/vendor/awaiting-collection`) | `vendorService.confirmIntake` via `useParcelIntake` | Wired correctly and chained straight off the arrival confirm, since that's the same physical moment and intake is what emails the receiver their code. 🟡 only because it inherits the uuid gap below — it works when reached from the arrival confirm that produced the id, and is unreachable otherwise. |
-| POST | `/handoffs/orders/:id/collection-code/resend` | Operator re-emails the collection code | 🟡 | `CollectParcelScreen` (`/vendor/awaiting-collection/[orderId]/collect`) | `vendorService.resendCollectionCode` via `useCollectParcel` | Wired correctly. Deliberately a manual action placed below the primary CTA and never auto-fired — it sends real email and is rate-limited 5/min, unlike the old `sendReleaseOtp` no-op it replaces, which fired on mount. Resetting the local attempt counter on success is correct: a fresh code supersedes the old one's lockout. 🟡 for the uuid gap only. |
-| POST | `/handoffs/orders/:id/collect` | Receiver collects; order completed | 🟡 | Same screen | `vendorService.collectParcel` via `useCollectParcel` | Wired correctly. `identityConfirmed` is asked as an explicit two-option question with **no default** and gates the CTA until answered — per `API.md` it's an audit-trail attestation that doesn't block completion when `false`, so pre-selecting "yes" would record something the operator never said. Note the app **cannot show the expected receiver name** (no destination-side endpoint returns receiver PII), so the wording attests to a conversation rather than an on-screen match — see Inconsistencies. 🟡 for the uuid gap only. |
-| POST | `/handoffs/orders/:id/confirm-handoff` | Operator confirms a rider handoff | 🟡 | `RiderHandoffScreen` (`/vendor/rider-handoff`) | `vendorService.confirmRiderHandoff` via `useConfirmHandoff` | Wired correctly, and `rider_pickup` (origin) works end to end. **`rider_arrival` is only half-usable**: the endpoint is keyed on the order uuid, and the sole documented way to resolve a human-readable code into that uuid is the origin-scoped lookup above — so the destination operator has no documented way to obtain the id they must POST to. The screen asks them to type it directly as a stopgap, which means reading a uuid off the rider's phone. Backend fix needed, not a frontend one — see Inconsistencies. Error handling is otherwise complete: `INVALID_HANDOFF_CODE` copy deliberately doesn't hint whether the code was wrong/expired/used/locked-out (per `API.md`), the 5-attempt lockout is tracked as UX advice only and never gates the request, and `429`/`404`/`409` are distinguished. |
+| GET | `/handoffs/orders/by-tracking-code/:code` | Operator previews a drop-off | ✅ | `DropOffPreviewScreen` (`/node/drop-off/[trackingCode]`), reached from `QrScannerScreen` | `nodeService.lookupOrderByTrackingCode` via `useHandoffLookup` | None. `retry: false` and a `404`-specific empty state ("no order with that code at this Node") kept distinct from real fetch errors, same pattern as `useRiderVerification`'s `notStarted`. Origin-scoped by design — this used to also be the reason the arrival flow was blocked (see Inconsistencies' history), but `GET /handoffs/my-node/orders` (2026-08-17) is now what resolves the destination side, so this endpoint's scoping is no longer load-bearing for anything but the drop-off preview it's actually for. |
+| POST | `/handoffs/orders/:id/drop-off` | Operator confirms receipt | ✅ | Same screen, "Confirm Receipt" CTA | `nodeService.confirmDropOff` via `useHandoffLookup` | None. Server-side idempotent, but the button is still disabled in flight. Replaces the old scan-and-check-in-atomically flow: the operator now eyeballs the parcel against the description *before* accepting custody, which the previous `orders.scanHandoff` call site couldn't do. The confirm invalidates `GET /handoffs/my-node/orders` so the new order shows up on Home's Awaiting Pickup tab. |
+| GET | `/handoffs/my-node/orders` | Operator's full Node order history, either side | ✅ | `NodeHomeScreen` (`/node/home`) — all three tabs, plus `HandoffDetailScreen` (`/node/handoff/[orderId]`), `CollectParcelScreen`, and `ActivityScreen`'s Order History tab | `nodeService.getMyNodeOrders` via `use-my-node-orders.ts` (`useMyNodeOrders`/`useNodeOrder`), `use-node-dashboard.ts` (Home's tab-derived lists) | None. Closes the origin/destination lookup asymmetry described in Inconsistencies. `myRole` on each item drives every filter (`isAwaitingPickup`/`isAwaitingArrival`/`needsIntake`/`isReadyForCollection`); requested at `limit=100`, no pagination UI yet. Also the Node Dashboard's "occupied capacity" source (item 2b, Inconsistencies) — `isAwaitingPickup`/`needsIntake`/`isReadyForCollection` orders count as physically on-site, `isAwaitingArrival` (`in_transit`) doesn't. **2026-08-17 (later — Inventory retired)**: the standalone `InventoryScreen`/`HandoffOrderList`/`CollectionList`/`HistoryList` that used to be the primary consumers here are deleted; every tab they had moved to `NodeHomeScreen` (Pickup/Incoming), `CollectParcelScreen` (Collection), or `ActivityScreen` (History) instead — same query, same filters, no new endpoint. |
+| GET | `/handoffs/my-orders` | Rider's full order history | ✅ | `ActiveDeliveriesScreen` (`/rider/active-deliveries`), `HandoffCodeScreen` | `riderService.getMyOrders` via `use-my-orders.ts` | None. Added 2026-08-17 — closes the "no rider-scoped my-deliveries endpoint" gap described in Inconsistencies. `isActiveDelivery` filters it to the two legs a rider still owes a code for (`rider_assigned`/`in_transit`). Not wired to `MyEarningsScreen`'s "Earnings" tab (`GET /earnings/mine` is, as of 2026-08-20 — see the Earnings section) — no payout field exists on this response. |
+| POST | `/handoffs/orders/:id/intake` | Operator checks a parcel in at the destination | ✅ | `CollectParcelScreen`'s "needs check-in" branch (`/node/awaiting-collection/[orderId]/collect`, reached from Home's Ready for Collection tab) | `nodeService.confirmIntake` via `useParcelIntake` | None. One tap, "Check In & Email Receiver" — intake is what emails the receiver their code. **2026-08-17 (later — Inventory retired)**: moved here from `InventoryScreen`'s Collection tab, same hook, same call; the screen falls through to the "ready" branch on its own once the mutation invalidates `GET /handoffs/my-node/orders` and the order's status flips server-side — no manual navigation needed. |
+| POST | `/handoffs/orders/:id/collection-code/resend` | Operator re-emails the collection code | ✅ | `CollectParcelScreen` (`/node/awaiting-collection/[orderId]/collect`) | `nodeService.resendCollectionCode` via `useCollectParcel` | None. Deliberately a manual action placed below the primary CTA and never auto-fired — it sends real email and is rate-limited 5/min, unlike the old `sendReleaseOtp` no-op it replaces, which fired on mount. Resetting the local attempt counter on success is correct: a fresh code supersedes the old one's lockout. Was 🟡 for the uuid gap; closed 2026-08-17. |
+| POST | `/handoffs/orders/:id/collect` | Receiver collects; order completed | ✅ | Same screen | `nodeService.collectParcel` via `useCollectParcel` | None. `identityConfirmed` is asked as an explicit two-option question with **no default** and gates the CTA until answered — per `API.md` it's an audit-trail attestation that doesn't block completion when `false`, so pre-selecting "yes" would record something the operator never said. Note the app **cannot show the expected receiver name** (no destination-side endpoint returns receiver PII), so the wording attests to a conversation rather than an on-screen match — see Inconsistencies. Was 🟡 for the uuid gap; closed 2026-08-17. |
+| POST | `/handoffs/orders/:id/confirm-handoff` | Operator confirms a rider handoff | ✅ | `HandoffDetailScreen` (`/node/handoff/[orderId]`, reached from Home's Awaiting Pickup and Awaiting Arrival tabs) | `nodeService.confirmRiderHandoff` via `useConfirmHandoff` | None — both directions work end to end. Type the rider's 6 digits, confirm — identical interaction either direction, no tracking-code field, since a code box here reads as something to ask the rider for. The order comes from `GET /handoffs/my-node/orders` via `useNodeOrder(orderId)`, direction (`rider_pickup`/`rider_arrival`) inferred from the order's own `myRole`. **2026-08-17 (later — Inventory retired)**: moved from `InventoryScreen`'s Pickup + Incoming tabs, where rows expanded in place, to this dedicated per-order details page — same hook (`useConfirmHandoff`), same call, same copy, just reached via Home instead of a list-row expand. The screen falls back to a read-only view (no code panel) if the order isn't actually in a pickup/arrival-pending state when loaded, since a stale link would otherwise offer an action the server would reject. Error handling unchanged: `INVALID_HANDOFF_CODE` copy deliberately doesn't hint whether the code was wrong/expired/used/locked-out (per `API.md`), the 5-attempt lockout is tracked as UX advice only and never gates the request, and `429`/`404`/`409` are distinguished. |
 
 ## Out of scope for this file
 
-The app also calls `maps.*`, `riderOps.*`, `notifications.*`, and the
-still-undocumented `orders.calculateFare`/`orders.book`/
-`orders.scanHandoff`/`orders.scanCollection` routes — none of these
-appear in `docs/API.md`, so there's nothing to check them against here.
-Flag to whoever owns the backend docs if this file should expand to
-cover them; several (`orders.scanHandoff`, `orders.scanCollection`,
-`maps.riderTelemetryPing`, `riderOps.*`) are live, load-bearing call
-sites for the Vendor scan-in/release and Rider job flows, not dead
-code. (`orders.list`/`orders.detail` moved **out** of this out-of-scope
+The app still calls `notifications.*` (`node.service.ts`'s
+`listActivity()`, real but with no current caller — see Inconsistencies)
+and the still-undocumented `orders.calculateFare`/`orders.book` routes
+(both dead: unused constants kept only in case a real equivalent is
+ever confirmed) — none of these appear in `docs/API.md`, so there's
+nothing to check them against here. `riderOps.*`, `orders.scanHandoff`/
+`orders.scanCollection`, and `maps.*` — all previously listed here as
+live, undocumented call sites — are gone from `endpoints.ts` entirely
+as of 2026-08-15 and 2026-08-20 respectively; nothing in the app
+targets an undocumented route any more except the two dead `orders.*`
+constants above. (`orders.list`/`orders.detail` moved **out** of this
 note as of 2026-08-12 — `GET /orders`/`GET /orders/:id` are now
 documented and audited in the Orders section above.)

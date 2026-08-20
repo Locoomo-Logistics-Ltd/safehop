@@ -14,6 +14,7 @@ import {
 } from "@/components/icons";
 import { getFriendlyError } from "@/core/api/errors";
 import { ROUTES } from "@/core/config/constants";
+import { HANDOFF_CODE_LENGTH } from "@/core/types";
 import { useActiveDelivery } from "@/modules/rider/hooks/use-active-deliveries";
 import { useHandoffCode } from "@/modules/rider/hooks/use-handoff-code";
 import {
@@ -40,7 +41,7 @@ export function HandoffCodeScreen() {
   
   const orderId = params.orderId;
 
-  const { delivery, isHydrated, handoffType } = useActiveDelivery(orderId);
+  const { delivery, isLoading, handoffType } = useActiveDelivery(orderId);
   const {
     code,
     secondsRemaining,
@@ -52,7 +53,7 @@ export function HandoffCodeScreen() {
     hasRequested,
   } = useHandoffCode(orderId, handoffType ?? "rider_pickup");
 
-  if (!isHydrated) {
+  if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-bg-canvas">
         <div className="w-8 h-8 rounded-full border-2 border-border-default border-t-brand-blue animate-spin" />
@@ -60,9 +61,9 @@ export function HandoffCodeScreen() {
     );
   }
 
-  // Either the store never knew about this delivery (different device,
-  // cleared storage) or the server has just told us it isn't ours — the
-  // rider needs the same explanation either way.
+  // Either it isn't in this rider's order list at a step that still
+  // needs a code, or the server has just told us it isn't ours anymore
+  // — the rider needs the same explanation either way.
   if (!delivery || isNoLongerAssigned) {
     return (
       <div className="min-h-screen bg-bg-canvas">
@@ -70,8 +71,8 @@ export function HandoffCodeScreen() {
         <div className="px-4 md:px-6 pt-2 md:pt-6 pb-8 max-w-[480px] mx-auto">
           <EmptyState
             icon={<TruckIcon size={24} />}
-            title="This delivery isn't on this device"
-            description="It may already be complete, or you accepted it on another phone. Deliveries are stored per-device — the node operator can still find the parcel by its tracking code."
+            title="Nothing to hand off here"
+            description="This delivery isn't currently waiting on a code from you — it may already be complete, or it was never assigned to you."
             action={
               <Link href={ROUTES.riderActiveDeliveries}>
                 <Button size="md">Back to active deliveries</Button>
@@ -192,6 +193,15 @@ export function HandoffCodeScreen() {
                 Expires in {formatCountdown(secondsRemaining)}
               </span>
             </div>
+
+            {/* Said on the rider's side too, because it's the half of
+                the protocol they control: the operator resolves the
+                parcel from their own records, so a rider who starts
+                reciting a tracking code is slowing the counter down. */}
+            <p className="text-[11px] text-text-muted text-center max-w-[260px]">
+              These {HANDOFF_CODE_LENGTH} digits are all the operator needs — they
+              already have the parcel&apos;s details.
+            </p>
 
             <Button
               variant="ghost"

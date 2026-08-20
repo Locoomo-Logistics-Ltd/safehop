@@ -52,12 +52,11 @@ export interface LocoomoNode {
 /**
  * Real `GET /nodes`/`GET /nodes/nearby` Node shape, per docs/API.md —
  * distinct from `LocoomoNode` above, which models a still-unconfirmed
- * shape (`isOpenNow`, `capacity.occupied`/`.total`) that
- * `vendor.service.ts`'s still-undocumented `/nodes/operator/inventory`
- * endpoint assumes; don't conflate the two. There's no live
- * occupancy/open-now signal from the real backend — `capacity` is the
- * self-reported max, and there's no connectivity/hours-open concept at
- * all (same correction already applied to Admin's `AdminNodeRecord`).
+ * shape (`isOpenNow`, `capacity.occupied`/`.total`); don't conflate the
+ * two. There's no live occupancy/open-now signal from the real
+ * backend — `capacity` is the self-reported max, and there's no
+ * connectivity/hours-open concept at all (same correction already
+ * applied to Admin's `AdminNodeRecord`).
  */
 export interface PickupNode {
   id: string;
@@ -179,10 +178,10 @@ export interface BookOrderPayload {
 
 /** The four handoff moments in an order's lifecycle, per the real API's ProcessScanDto. */
 export type ScanHandoffType =
-  | "ORIGIN_CHECK_IN" // vendor scans an incoming consumer drop-off
+  | "ORIGIN_CHECK_IN" // Node operator scans an incoming consumer drop-off
   | "RIDER_PICKUP" // rider scans at the origin node
   | "DESTINATION_DROPOFF" // rider scans at the destination node
-  | "RECEIVER_COLLECTION"; // vendor/node staff scans the recipient's OTP
+  | "RECEIVER_COLLECTION"; // Node operator scans the recipient's OTP
 
 export interface ScanHandoffPayload {
   trackingCode: string;

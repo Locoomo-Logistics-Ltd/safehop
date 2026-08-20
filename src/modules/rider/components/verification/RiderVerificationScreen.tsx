@@ -17,7 +17,7 @@ import type { RiderVerificationProfile } from "@/core/types";
  * routes per docs/API.md (`GET /riders/verification/upload-signature`,
  * `POST /riders/onboarding`, `GET /riders/me`), previously
  * unintegrated. Reachable from Rider Profile — see
- * `RiderProfileScreen`. Modeled on `VendorNodeSetupScreen`, the
+ * `RiderProfileScreen`. Modeled on `NodeSetupScreen`, the
  * Node Operator module's equivalent self-onboarding-and-wait flow.
  */
 export function RiderVerificationScreen() {
@@ -78,6 +78,7 @@ function VerificationForm({
 }: {
   onSubmit: (args: {
     currentEmployer: string;
+    licenseNumber: string;
     documentType: "rating_screenshot";
     file: File;
   }) => void;
@@ -85,13 +86,19 @@ function VerificationForm({
   error: unknown;
 }) {
   const [currentEmployer, setCurrentEmployer] = useState("");
+  const [licenseNumber, setLicenseNumber] = useState("");
   const [file, setFile] = useState<File | null>(null);
 
-  const isValid = currentEmployer.trim().length > 0 && !!file;
+  const isValid = currentEmployer.trim().length > 0 && licenseNumber.trim().length > 0 && !!file;
 
   const handleSubmit = () => {
     if (!file) return;
-    onSubmit({ currentEmployer: currentEmployer.trim(), documentType: "rating_screenshot", file });
+    onSubmit({
+      currentEmployer: currentEmployer.trim(),
+      licenseNumber: licenseNumber.trim(),
+      documentType: "rating_screenshot",
+      file,
+    });
   };
 
   return (
@@ -111,6 +118,12 @@ function VerificationForm({
             placeholder="Current employer (e.g. Existing Delivery Co)"
             value={currentEmployer}
             onChange={(e) => setCurrentEmployer(e.target.value)}
+          />
+          <Input
+            placeholder="Driver's license number"
+            value={licenseNumber}
+            onChange={(e) => setLicenseNumber(e.target.value)}
+            maxLength={50}
           />
           <label className="flex items-center gap-3 h-12 rounded-[12px] border border-border-default bg-bg-card px-4 cursor-pointer text-text-muted">
             <CameraIcon size={16} />
@@ -186,6 +199,19 @@ function VerificationStatusView({ profile }: { profile: RiderVerificationProfile
             </p>
           </div>
         </Card>
+        {profile.licenseNumber && (
+          <Card padding="md" className="flex items-center gap-3">
+            <span className="w-9 h-9 rounded-[10px] bg-bg-subtle text-text-muted flex items-center justify-center shrink-0">
+              <ShieldCheckIcon size={16} />
+            </span>
+            <div className="min-w-0">
+              <p className="text-[10px] text-text-muted">License Number</p>
+              <p className="text-[13px] font-medium text-text-primary truncate">
+                {profile.licenseNumber}
+              </p>
+            </div>
+          </Card>
+        )}
         {profile.documents.map((doc) => (
           <a
             key={doc.documentType}

@@ -82,11 +82,6 @@ function clearPersistedSession() {
   window.localStorage.removeItem(STORAGE_KEYS.session);
 }
 
-// ── Mock implementation (unchanged public shape, local-only) ────
-
-
-
-
 // ── Real implementation ──────────────────────────────────────────
 
 const realAuthService = {
@@ -200,7 +195,7 @@ async confirmInvite(
     return httpClient.post<User>(ENDPOINTS.identity.consumerOnboarding(userId), payload);
   },
 
-  // Rider and NodeOperator (Vendor) registration/login previously
+  // Rider and NodeOperator registration/login previously
   // called undocumented routes (/auth/rider/register,
   // /auth/rider/login, /auth/node-staff/login,
   // /auth/node-staff/first-login-reset) — removed. Both roles now

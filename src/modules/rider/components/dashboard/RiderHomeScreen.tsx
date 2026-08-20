@@ -12,7 +12,6 @@ import { useRiderVerification } from "@/modules/rider/hooks/use-rider-verificati
 import { VerificationReminderSheet } from "@/modules/rider/components/verification";
 import { OnlineToggle } from "./OnlineToggle";
 import { EarningsStatCards } from "./EarningsStatCards";
-import { SurgeAlertBanner } from "./SurgeAlertBanner";
 
 /** Sticks for the browser tab's session so "Maybe Later" doesn't nag on every visit to Home, but reappears on a fresh session. */
 const VERIFICATION_REMINDER_DISMISSED_KEY = "locoomo_rider_verification_reminder_dismissed";
@@ -71,9 +70,6 @@ export function RiderHomeScreen() {
 
         {/* Earnings stats */}
         <EarningsStatCards />
-
-        {/* Surge alert — visible only when online */}
-        {availability === "online" && <SurgeAlertBanner />}
 
         {/* If offline, show a prompt to go online */}
         {availability === "offline" && (

@@ -1,49 +1,32 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
-import {
-  isDeliveryComplete,
-  nextHandoffType,
-  useRiderJobsStore,
-} from "@/store/rider-jobs.store";
+import { useMemo } from "react";
+import { isActiveDelivery, nextHandoffType, useMyOrders } from "@/modules/rider/hooks/use-my-orders";
 import { RIDER_MAX_CONCURRENT_DELIVERIES } from "@/core/types";
 
 /**
- * The rider's accepted deliveries, read from the device-local store.
- *
- * The store reads localStorage, which the server render can't see, so
- * hydration is kicked off from an effect rather than at module load —
- * rendering the list straight from storage would mismatch the server's
- * empty markup. `isHydrated` is what lets a screen distinguish "this
- * rider has no deliveries" from "we haven't looked yet"; treating the
- * first paint as empty would flash a wrong empty state on every load.
+ * The rider's currently-active deliveries — the two legs still on their
+ * plate (`rider_assigned` awaiting a pickup code, `in_transit` awaiting
+ * an arrival code), sliced from `GET /handoffs/my-orders`'s full history.
  */
 export function useActiveDeliveries() {
-  const deliveries = useRiderJobsStore((state) => state.deliveries);
-  const isHydrated = useRiderJobsStore((state) => state.isHydrated);
-  const hydrate = useRiderJobsStore((state) => state.hydrate);
+  const { orders, isLoading, refetch } = useMyOrders();
 
-  useEffect(() => {
-    hydrate();
-  }, [hydrate]);
-
-  const active = useMemo(
-    () => deliveries.filter((delivery) => !isDeliveryComplete(delivery)),
-    [deliveries]
-  );
+  const active = useMemo(() => orders.filter(isActiveDelivery), [orders]);
 
   return {
     deliveries: active,
-    isHydrated,
+    isLoading,
+    refetch,
     /** Mirrors the server's own cap — lets the board warn before an accept that would 409. */
     isAtCapacity: active.length >= RIDER_MAX_CONCURRENT_DELIVERIES,
     remainingCapacity: Math.max(0, RIDER_MAX_CONCURRENT_DELIVERIES - active.length),
   };
 }
 
-/** One delivery by id, for the handoff screen. `undefined` once hydrated means it isn't on this device. */
+/** One delivery by id, for the handoff screen. `undefined` once loaded means it isn't currently active for this rider. */
 export function useActiveDelivery(orderId: string) {
-  const { deliveries, isHydrated } = useActiveDeliveries();
+  const { deliveries, isLoading } = useActiveDeliveries();
 
   const delivery = useMemo(
     () => deliveries.find((item) => item.id === orderId),
@@ -52,7 +35,7 @@ export function useActiveDelivery(orderId: string) {
 
   return {
     delivery,
-    isHydrated,
+    isLoading,
     handoffType: delivery ? nextHandoffType(delivery) : null,
   };
 }

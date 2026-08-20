@@ -10,7 +10,7 @@ interface AppShellProps {
 
 /**
  * Top-level responsive shell for all authenticated screens, shared
- * across every role (User, Vendor, ...).
+ * across every role (User, Node Operator, Rider, ...).
  * Desktop: Sidebar (left) + content.
  * Mobile: full-width content + BottomNav (bottom).
  * Each child screen supplies its own TopBar/header as needed.

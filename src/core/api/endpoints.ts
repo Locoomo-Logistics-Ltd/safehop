@@ -29,11 +29,6 @@ export const ENDPOINTS = {
     consumerOnboarding: (userId: string) => `/identity/consumer/${userId}/onboarding`,
   },
 
-  // ── Corporate Operations Control (internal/admin — not used by app roles) ──
-  corporateOps: {
-    elevateSuperAdmin: "/corporate-ops/staff/elevate-superadmin",
-  },
-
   // ── Users Module ───────────────────────────────────────────────
   users: {
     // Real, confirmed route per docs/API.md — Admin-only, invites a
@@ -51,15 +46,11 @@ export const ENDPOINTS = {
   // ── Nodes Infrastructure Module ───────────────────────────────
   nodes: {
     nearby: "/nodes/nearby", // ?latitude&longitude&radiusInMeters
-    onboard: "/nodes/onboard",
-    operatorInventory: "/nodes/operator/inventory",
-    updateStatus: (id: string) => `/nodes/${id}/status`,
   },
 
-  // ── Node Operators (Vendor self-service onboarding) ────────────
+  // ── Node Operators (self-service onboarding) ────────────
   // Real, confirmed routes per docs/API.md. Requires an authenticated
-  // NodeOperator session. Distinct from `nodes.operatorInventory`
-  // above, which is the already-approved Node's live parcel data.
+  // NodeOperator session.
   nodeOperators: {
     onboarding: "/node-operators/onboarding",
     me: "/node-operators/me",
@@ -75,10 +66,6 @@ export const ENDPOINTS = {
     list: "/nodes",
     detail: (id: string) => `/nodes/${id}`,
   },
-  franchiseNodes: {
-    onboardOperator: "/franchise-nodes/onboard-operator",
-  },
-
   // ── Orders Engine ──────────────────────────────────────────────
   // `calculateFare`/`book` don't appear anywhere in docs/API.md and are
   // no longer called by delivery.service.ts as of 2026-08-12 — real
@@ -110,6 +97,10 @@ export const ENDPOINTS = {
     availableOrders: "/handoffs/available-orders",
     /** Rider (active). Race-safe claim; capped at 3 concurrent deliveries. */
     accept: (orderId: string) => `/handoffs/orders/${orderId}/accept`,
+    /** Rider. Every order you've ever been assigned, current and past, newest first. Query: page, limit. Real, confirmed per docs/API.md (2026-08-17) — closes the gap store/rider-jobs.store.ts used to paper over. */
+    myOrders: "/handoffs/my-orders",
+    /** NodeOperator. Every order that's touched your Node, as origin or destination, current and past, newest first — `myRole` on each item says which side. Query: page, limit. Real, confirmed per docs/API.md (2026-08-17) — closes the gap store/node-outgoing.store.ts and store/node-parcels.store.ts used to paper over. */
+    myNodeOrders: "/handoffs/my-node/orders",
     /** NodeOperator. Scoped to orders whose originNodeId is your own Node. */
     byTrackingCode: (code: string) =>
       `/handoffs/orders/by-tracking-code/${encodeURIComponent(code)}`,
@@ -126,12 +117,6 @@ export const ENDPOINTS = {
       `/handoffs/orders/${orderId}/collection-code/resend`,
     /** NodeOperator (destination). Final step: ready_for_collection → completed. */
     collect: (orderId: string) => `/handoffs/orders/${orderId}/collect`,
-  },
-
-  // ── Maps & Live Telemetry Module ──────────────────────────────
-  maps: {
-    riderTelemetryPing: "/maps/rider/telemetry-ping",
-    track: (trackingCode: string) => `/maps/track/${trackingCode}`,
   },
 
   // `riderOps.*` (job-board, accept-job, manifest, scan-pickup,
@@ -170,5 +155,26 @@ export const ENDPOINTS = {
   adminPricing: {
     create: "/admin/pricing",
     list: "/admin/pricing",
+  },
+
+  // ── Earnings (revenue split) ────────────────────────────────────
+  // Real, confirmed routes per docs/API.md. Every `completed` order's
+  // fee is split rider/origin-Node/platform per the Admin-configured
+  // ratio below, at the moment `handoffs.collect` succeeds.
+  earnings: {
+    /** Rider's own revenue-split entries, newest first. Paginated. */
+    mine: "/earnings/mine",
+    /** NodeOperator's own Node's revenue-split entries (origin-Node orders only), newest first. Paginated. */
+    myNode: "/earnings/my-node",
+  },
+  adminRevenueSplit: {
+    /** Admin. Sets the split ratio for every order completed from now on — append-only. */
+    create: "/admin/revenue-split",
+    /** Admin. Ratio history, newest first. Paginated. */
+    list: "/admin/revenue-split",
+    /** Admin. Every revenue-split entry across every completed order, newest first. Paginated. Query: partyType, payoutStatus. */
+    entries: "/admin/revenue-split/entries",
+    /** Admin. Records an entry as settled off-system. Idempotent. */
+    markEntryPaid: (entryId: string) => `/admin/revenue-split/entries/${entryId}/mark-paid`,
   },
 } as const;

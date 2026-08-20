@@ -1,3 +1,3 @@
-export { MyDeliveriesScreen } from "./MyDeliveriesScreen";
+export { MyEarningsScreen } from "./MyEarningsScreen";
 export { EarningsFilterTabs } from "./EarningsFilterTabs";
-export { DeliveryHistoryRow } from "./DeliveryHistoryRow";
+export { EarningsEntryRow } from "./EarningsEntryRow";

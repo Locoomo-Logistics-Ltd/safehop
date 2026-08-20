@@ -48,7 +48,7 @@ function parseRole(value: string | null): RegistrableRole {
  * `role` (read from `?role=`, set by RoleSelectScreen). Role-specific
  * steps (Rider KYC document upload, NodeOperator Node setup) happen
  * post-login, per docs/API.md — see `/rider/verification` and
- * `/vendor/node-setup`.
+ * `/node/setup`.
  */
 export function CreateAccountScreen() {
   const searchParams = useSearchParams();

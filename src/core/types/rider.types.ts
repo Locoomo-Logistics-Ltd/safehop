@@ -1,56 +1,21 @@
 /**
- * Rider domain types.
- * A Rider goes Online/Offline, receives delivery Job offers, accepts
- * or declines them, then progresses a job through pickup → transit →
- * delivered via QR scans, earning per completed job.
+ * Rider domain types. A Rider goes Online/Offline, claims orders off
+ * the job board, and carries them through pickup → transit → delivered
+ * via the 6-digit handoff codes in `core/types/handoff.types.ts`.
  */
-
-import type { GeoPoint } from "./delivery.types";
 
 export type RiderAvailability = "online" | "offline";
 
-export type JobStatus =
-  | "offered" // shown to rider, awaiting accept/decline
-  | "accepted" // en route to pickup
-  | "picked_up" // QR scanned at pickup, en route to dropoff
-  | "delivered" // QR scanned at dropoff, job complete
-  | "declined"
-  | "expired";
-
-/** Drives the 3-step Pickup → Transit → Delivered stepper. */
-export type JobStage = "pickup" | "transit" | "delivered";
-
-export interface JobLocation {
-  label: string; // e.g. "Central Hub Node Alpha"
-  address: string;
-  location: GeoPoint;
-}
-
-export interface DeliveryJob {
-  id: string;
-  status: JobStatus;
-  isHighPriority: boolean;
-  isHighDemandArea: boolean;
-  payout: number; // NGN
-  distanceKm: number;
-  etaMinutes: number;
-  pickup: JobLocation;
-  dropoff: JobLocation;
-  parcelCount: number;
-  parcelNote: string; // e.g. "1 Express 2Lb"
-  pickupQrCode: string; // tracking code expected at pickup scan
-  acceptedAt?: string;
-  pickedUpAt?: string;
-  deliveredAt?: string;
-  createdAt: string;
-}
-
+/**
+ * Reduced client-side from `GET /earnings/mine`'s revenue-split entries
+ * (`riderService.listMyEarnings()`) — the real API has no server-side
+ * "today" filter, aggregate, or rating field.
+ */
 export interface RiderEarningsSummary {
   todayEarnings: number;
   todayDeliveries: number;
   totalEarnings: number;
   totalDeliveries: number;
-  rating: number; // out of 5
 }
 
 export type EarningsFilterRange = "this_week" | "this_month" | "all_time";
@@ -63,15 +28,6 @@ export interface VehicleDetails {
 
 export interface RiderProfileDetails {
   vehicle: VehicleDetails;
-}
-
-export interface SendOtpPayload {
-  phone: string;
-}
-
-export interface VerifyOtpPayload {
-  phone: string;
-  otpCode: string;
 }
 
 // ── Rider verification / KYC onboarding ─────────────────────────
@@ -104,12 +60,16 @@ export interface RiderVerificationDocument {
 export interface RiderVerificationProfile {
   profileId: string;
   currentEmployer: string;
+  /** Self-reported, 1-50 chars, no format/document verification. `null` for riders who onboarded before this field existed (added to docs/API.md 2026-08-17). */
+  licenseNumber: string | null;
   status: RiderVerificationStatus;
   documents: RiderVerificationDocument[];
 }
 
 export interface SubmitRiderVerificationPayload {
   currentEmployer: string;
+  /** Self-reported, 1-50 chars — per docs/API.md, not checked against any document even though `documentType` is. */
+  licenseNumber: string;
   documentType: RiderVerificationDocumentType;
   cloudinaryPublicId: string;
 }

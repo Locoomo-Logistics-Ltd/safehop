@@ -6,7 +6,478 @@
 
 ## Current objective
 
-**Latest session (2026-08-15, latest — maps moved to Geoapify):** both
+**Latest session (2026-08-20 — full endpoint/mock audit, Revenue Split
+feature, Vendor→Node rename):** a complete re-audit of every API call
+against the current `docs/API.md` (now 47 documented endpoints, up
+from 39), a mock-data sweep, and — at the user's explicit mid-session
+request — a full rename of "Vendor" to "Node"/"Node Operator"
+throughout the codebase. Full detail in
+`docs/IMPLEMENTATION_LOG.md`'s 2026-08-20 entry and
+`docs/API_INTEGRATION_STATUS.md`'s matching update; short version:
+
+- **Deleted, undocumented and dead**: the Flag Issue screen (whole
+  feature — `/nodes/operator/inventory` 404s and was never in
+  `docs/API.md`; the screen had zero nav entries anywhere, fully
+  unreachable), Super Admin's elevation form
+  (`/corporate-ops/staff/elevate-superadmin` — no `super_admin` concept
+  exists in the role enum), rider GPS telemetry ping
+  (`/maps/rider/telemetry-ping` — undocumented *and* never actually
+  called from anywhere, despite `rider.service.ts`'s header implying it
+  was), and three more undocumented-and-unused endpoint constants
+  (`franchiseNodes.onboardOperator`, `nodes.onboard`,
+  `nodes.updateStatus`). **Not touched**, per the user's explicit
+  instruction: the Consumer OTP signup/login flow
+  (`/auth/consumer/request-otp`/`request-login-otp`) — also
+  undocumented (current `API.md` only has plain register/login), but
+  live and load-bearing; flagged, not rebuilt. See
+  `docs/API_INTEGRATION_STATUS.md`'s Inconsistencies section, item 9 on
+  its priority list.
+- **New real integrations — Earnings (revenue split)**: `docs/API.md`
+  gained a whole section (`GET /earnings/mine`, `GET /earnings/my-node`,
+  `admin/revenue-split` group) with zero prior frontend integration.
+  Built all three: Rider's Home/Profile stat cards and "Earnings" nav
+  tab now read real data (`riderService.getEarningsSummary`/
+  `listMyEarnings`) instead of throwing `NOT_IMPLEMENTED` — and no
+  longer show a fabricated `rating` field, since nothing in the real
+  API supplies one. New `NodeEarningsScreen` (`/node/earnings`,
+  reached from Node Profile). New `RevenueSplitScreen`
+  (`/admin/revenue-split`) replaces the old `RiderEarningsScreen`,
+  which had been wired to `/admin/rider-earnings` — an endpoint that
+  never appeared in `docs/API.md`.
+- **Mock-data audit**: `src/core/mocks/` is down to one file
+  (`mock-utils.ts`, kept for `generateId()` — a real ID-gen helper, not
+  fake data). The other five were deleted: either fully unreferenced,
+  or reachable only through dead commented-out mock-service blocks
+  (also deleted) and one live fallback (`node.service.ts`'s
+  `mapInventoryResponse()` defaulting to `MOCK_NODES[1]`) that went
+  away along with the Flag Issue feature above. Also deleted
+  `SurgeAlertBanner` (Rider Home) — a hardcoded fake "surge" card,
+  already commented out of use but still in the tree.
+- **Vendor→Node rename** (user's explicit request — "vendor and node
+  describe the same thing, use node"): `src/modules/vendor/` →
+  `src/modules/node/`, `vendor.service.ts`/`vendorService` →
+  `node.service.ts`/`nodeService`, `vendor.types.ts` → `node.types.ts`,
+  every `Vendor*` screen/hook → `Node*`, every `ROUTES.vendor*`/
+  `QUERY_KEYS.vendor*` → `ROUTES.node*`/`QUERY_KEYS.node*` **including
+  the URL paths** (`/vendor/home` → `/node/home`,
+  `/vendor-scan` → `/node-scan`, `/vendor/node-setup` → `/node/setup`,
+  etc. — not just internal identifiers), `VENDOR_NAV_ITEMS` →
+  `NODE_NAV_ITEMS`, and user-facing copy ("Shop Owner" → "Node
+  Operator" on the Node Profile screen). **If you're looking for
+  anything under `modules/vendor`, `vendor.service.ts`, or a
+  `/vendor/*` route and can't find it, this is why — it's under
+  `modules/node`/`node.service.ts`/`/node/*` now.**
+
+**Verified**: `npx tsc --noEmit` clean, `npx eslint src` clean, and —
+unlike most prior sessions in this log — a full `npx next build` was
+run and succeeded (47 routes generated, including the new
+`/admin/revenue-split` and `/node/earnings`), specifically because a
+rename this size is exactly what a type-checker alone can miss (Next's
+route-group folder resolution in particular). **The app was not run in
+a browser against a live backend this session** — the new Earnings/
+Revenue Split screens are built strictly from `docs/API.md`'s
+documented contract and share the same "not live-verified" caveat as
+every other screen flagged that way below.
+
+---
+
+**Previous session (2026-08-17, follow-up 5 — dummy activity toast
+removed, icon reflects real status):** the Activity screen's top card
+(`RiderHandoffToast`) was hardcoded demo data ("LC-482TX picked up by
+Rider — Tunde A., 2 mins ago") sitting above the real Activity Log.
+Deleted, not just unused — `GET /handoffs/my-node/orders` is already
+newest-first per docs/API.md, so the real most-recent order now sits
+in the exact spot the fabricated card used to occupy, with no re-sort
+needed. Also widened icon selection from a plain origin/destination
+split to a status-driven one (`activityEntryType()` in
+`ActivityScreen.tsx`, switching on the order's real `status`) — same
+existing `ActivityEventType` set, no invented icon.
+
+**Verified**: `npx tsc --noEmit` and `npx eslint src` clean across the
+repo. Per standing instruction, the app was not run, built, or tested
+this session.
+
+**Previous session (2026-08-17, follow-up 4 — Activity Log and Order
+History collapsed into one list):** follow-up 3 (below) gave
+`ActivityScreen` two tabs — the original notification-backed "Activity
+Log" and a new "Order History" tab for the data moved off the retired
+Inventory screen. Asked for one list instead, reusing the Activity
+Log's card for the history data.
+
+`ActivityScreen` now has no tabs. Its single list is sourced from
+`useMyNodeOrders()` (`GET /handoffs/my-node/orders`) instead of
+`useActivityLog()` (`GET /notifications/user/{userId}`) — a genuine
+data-source swap. A new mapper turns each order into the existing
+`ActivityLogEntry` shape so `ActivityLogItem` renders it unchanged:
+title = tracking code, description = parcel + destination/origin
+(direction from the real `myRole`), `type` picked from `myRole` for a
+representative icon, `tag` = the order's status label via a new
+exported `getHandoffStatusLabel()` on `HandoffStatusPill.tsx` (reuses
+its `STATUS_CONFIG` map rather than duplicating one).
+`ActivityTabs.tsx`/`OrderHistoryList.tsx` (both introduced earlier the
+same day) are deleted — fully superseded, no remaining caller.
+
+**The notification-backed integration is left in place, not deleted.**
+`useActivityLog()`/`vendorService.listActivity()`
+(`GET /notifications/user/{userId}`) now have no caller, but it's a
+real, working integration losing its only call site — not dead code
+from a broken endpoint like everything deleted in earlier sessions.
+Flagged in the service file's header and in
+`IMPLEMENTATION_LOG.md`'s matching entry; needs a product decision
+(remove it, or reserve it for a future notifications surface), not a
+silent removal.
+
+**Verified**: `npx tsc --noEmit` and `npx eslint src` clean across the
+whole repo; grep confirms no remaining reference to
+`ActivityTabs`/`OrderHistoryList`. Per standing instruction, the app
+was not run, built, or tested this session.
+
+**Previous session (2026-08-17, follow-up 3 — Inventory retired, its four
+tabs redistributed into Home and Activity):** the user asked for the
+standalone Inventory screen (shipped earlier the same day, then given
+inline rider-code entry in follow-up 2 below) to be retired — Pickup
+and Incoming into Home's Awaiting Pickup and a new Awaiting Arrival
+section, Collection into Home's Ready for Collection section, History
+into Activity. Home is now a pure summary/dashboard: every row just
+navigates to a dedicated details page for that order, which is where
+all the interaction (rider-code entry, check-in, collection) now lives
+— no more inline expand-in-place on Home's own rows.
+
+Read `docs/API.md` again before writing anything, per the user's
+explicit "do not invent, hardcode, or assume any data or actions not
+provided by the endpoints" instruction. Confirmed: **no endpoint
+anywhere in the Node Operator's API surface returns rider identity**
+(name/phone/anything) — the 6-digit code is the entire protocol — and
+**no destination-side endpoint returns receiver PII** (already true,
+already documented in `CollectParcelScreen`'s own header comment before
+this session). Neither is shown on the new details pages.
+
+New route `/vendor/handoff/[orderId]` (`HandoffDetailScreen`) — one
+screen for both Awaiting Pickup and Awaiting Arrival, direction
+inferred from the order's own `myRole` rather than two near-identical
+routes. Shows every `NodeOrderSummary` field, plus the rider-code entry
+reusing `useConfirmHandoff` verbatim (same hook, same
+`confirm-handoff` call, same copy) — just targeted at one order via a
+mount-time effect instead of a list-row expand. Falls back to a
+read-only view if the order isn't actually pickup/arrival-pending when
+loaded, since a stale link would otherwise offer an action the server
+would reject.
+
+`CollectParcelScreen` extended (not replaced) to cover Ready for
+Collection's other sub-state too: a new "needs check-in" branch shows
+full parcel info plus the check-in/"Send" action (`useParcelIntake`,
+the same hook Inventory's Collection tab used) — the exact action the
+task asked to preserve. On success the screen falls through to the
+existing "ready" branch on its own, since the intake mutation
+invalidates the same cached query the screen reads from. The "ready"
+branch's info card is also enriched with parcel/route/status details it
+didn't show before (previously just the tracking code).
+
+History moved into Activity as a second tab (`ActivityTabs`, new),
+fed by `useMyNodeOrders()` — already fetched elsewhere in the app, so
+TanStack Query dedupes rather than firing an extra request.
+
+**Inventory is deleted, not hidden**: the whole
+`src/modules/vendor/components/inventory/` directory and
+`src/app/(vendor)/vendor/inventory/` route are gone, along with the
+"Inventory" nav item. `ROUTES.vendorInventory` removed;
+`ROUTES.vendorHandoffDetail` added. Three stale `ROUTES.vendorInventory`
+references in `CollectParcelScreen` fixed to `ROUTES.vendorHome`.
+
+**Verified**: `npx tsc --noEmit` and `npx eslint` clean on every file
+touched; a full-repo grep confirms no remaining source reference to
+`vendorInventory`/`InventoryScreen`/`InventoryTabs`/`HandoffOrderList`/
+the old `CollectionList`/`HistoryList`. Per explicit instruction, **the
+app was not run, built, or tested this session** — `tsc`/`eslint` were
+treated as static verification, not as "running" anything; nothing has
+been seen rendered in a browser. Full detail in
+`IMPLEMENTATION_LOG.md`'s 2026-08-17 (follow-up 3) entry.
+
+**Previous session (2026-08-17, follow-up 2 — Node Dashboard rebuilt off
+real endpoints):** closed the gap the previous session flagged below as
+"the best next task": `VendorHomeScreen` (`/vendor/home`) read the
+undocumented `GET /nodes/operator/inventory`, which 404s on the
+deployed backend, and rendered the error identically to a genuine
+empty list — the app's own Home tab was a dead endpoint wearing a UI
+that looked fine.
+
+Rebuilt on the two real routes already wired elsewhere: `GET
+/node-operators/me` (Node identity/capacity — same route
+`useVendorNodeSetup` already polls) and `GET /handoffs/my-node/orders`
+(the live parcel snapshot, already built earlier the same day for
+Inventory). Neither returns an "occupied capacity" figure, so
+`use-node-dashboard.ts` derives it: any order currently physically at
+the Node on either side of the custody chain (`isAwaitingPickup`/
+`needsIntake`/`isReadyForCollection`; `in_transit` excluded — not
+physically here yet).
+
+UI now distinguishes three states the old build silently collapsed
+into "empty": **not onboarded** (404 → prompt to `/vendor/node-setup`),
+**onboarded but not yet Admin-approved** (`status !== "active"` →
+"waiting for approval", link back to Node Setup), and **active** (the
+real dashboard). `NodeParcelRow` (rendered the dead `NodeParcel` shape)
+is deleted; `NodeOrderRow` (new) renders `NodeOrderSummary` instead,
+using the same `HandoffStatusPill` Inventory already uses, and
+ready-for-collection rows deep-link straight to the collect screen now
+that the ids are real order uuids. The Flag Issue screen
+(`ROUTES.vendorFlag`) is no longer linked from Home — it was the
+non-ready rows' destination before, but `flagParcel()` throws
+`NOT_IMPLEMENTED` unconditionally (no backend route); routing a
+now-functional screen into a guaranteed-failure flow would be a
+regression.
+
+**Verified live against the deployed backend**: registered a
+throwaway NodeOperator account through the dev server's own API proxy
+and drove `GET /node-operators/me` (404 before onboarding, `200` with
+`status: "pending"` after), `POST /node-operators/onboarding`, and
+`GET /handoffs/my-node/orders` (empty list, no error) — confirming
+every branch `useVendorNode`/`useNodeDashboard` handles fires on real
+responses, not just assumed shapes. **Not verified**: no Admin session
+existed to approve the test Node, so the "active" happy path (real
+`CapacityBar` numbers, populated tabs) wasn't seen rendered — no
+browser automation tool was available in this session's environment,
+so this rests on `npx tsc --noEmit` / `npx eslint` / `next build`
+(all clean) plus the live API checks above, not a screenshot. Full
+detail in `IMPLEMENTATION_LOG.md`'s matching entry.
+
+**Previous session (2026-08-17, follow-up — the Node operator's three
+fragmented screens become one tabbed Inventory):** the user's framing:
+a screen-per-step design (a dedicated `RiderHandoffScreen` for pickup,
+another for arrival, then a separate `AwaitingCollectionScreen` for the
+shelf) doesn't scale, especially now that all three read the exact same
+underlying data (`GET /handoffs/my-node/orders`, shipped earlier the
+same day — see below). Asked for a single, tabbed, mobile-first
+Inventory view instead.
+
+**Built `InventoryScreen` at `/vendor/inventory`**, four tabs over one
+`useMyNodeOrders()` query:
+- **Pickup** — origin side, awaiting a rider (`isAwaitingPickup`).
+- **Incoming** — destination side, rider en route (`isAwaitingArrival`).
+- **Collection** — destination side, arrived: "needs check-in"
+  (`needsIntake`, one-tap email) or "ready for collection"
+  (`isReadyForCollection`, routes to the dedicated `CollectParcelScreen`
+  — code + identity attestation is a different shape of task, kept as
+  its own screen rather than another expandable row).
+- **History** — every order, unfiltered, newest first. New: no prior
+  screen showed this. Read-only by design (it's a record, not a queue).
+  Each row's timestamp is `createdAt` (order placement) labeled
+  "Placed" — `my-node/orders` carries no per-transition timestamp, so
+  "arrived X ago"/"checked in X ago" aren't shown anywhere anymore
+  (they weren't reliable after the stores were deleted earlier the same
+  day either — see below).
+
+Pickup/Incoming rows **expand in place** for the 6-digit code entry
+(mobile-first: the single most frequent counter action shouldn't need a
+page navigation). `useConfirmHandoff` is reused as-is, just consumed by
+Inventory instead of the old dedicated screen — its `handoffType` is
+kept in sync with whichever of Pickup/Incoming is the active tab via one
+effect. A toast (`useNotificationStore`) confirms success, since the
+confirmed row simply disappears from its tab once the query refetches
+rather than showing a dedicated success screen.
+
+**`RiderHandoffScreen` and `AwaitingCollectionScreen` are deleted, not
+deprecated** — along with their routes
+(`/vendor/rider-handoff`, `/vendor/awaiting-collection` as a list page).
+`/vendor/awaiting-collection/[orderId]/collect` (`CollectParcelScreen`)
+stays, reached from Inventory's Collection tab instead. `VENDOR_NAV_ITEMS`
+now has one "Inventory" entry (`ArchiveIcon`) where "Handoff" and
+"Collect" used to be two — net one fewer bottom-nav item, not one more.
+Two remaining cross-links fixed: `NodeParcelRow` (Node Dashboard) and
+`CollectParcelScreen`'s "Back to Counter" buttons now point at
+`ROUTES.vendorInventory`.
+
+**Explicitly out of scope this pass** (at the time — **closed in the
+follow-up 2 session above**): `VendorHomeScreen`'s own parcel list
+(`ParcelFilterTabs`/`NodeParcelRow`/`useNodeParcels`) was untouched
+and still silently empty in production — it was fed by the
+undocumented, 404ing `GET /nodes/operator/inventory`, a different,
+older gap than the one this session closed. Pointing Home's list at
+`use-my-node-orders.ts` instead was the natural next step and is
+exactly what the later session did; the "product decision on what the
+row should show" this paragraph flagged as blocking a straight
+data-source swap was resolved by dropping the sender/receiver fields
+`NodeOrderSummary` doesn't carry and showing origin/destination Node
+name instead, matching every other handoff-module row.
+
+**Verification**: `npx tsc --noEmit` clean, `npx eslint src` clean
+(one `react-hooks/set-state-in-effect` violation caught and fixed by
+keying the expanded code-entry panel per order id instead of resetting
+its state in an effect), `next build` from a cleared `.next` succeeds —
+`/vendor/rider-handoff` and `/vendor/awaiting-collection` are gone from
+the route table, `/vendor/inventory` and
+`/vendor/awaiting-collection/[orderId]/collect` are both present.
+`/vendor/inventory`, `/vendor/home`,
+`/vendor/awaiting-collection/[orderId]/collect` all return `200` from a
+dev server with no error markers. **Not verified**: no NodeOperator
+session available, so the expand-in-place confirm flow, the tab counts,
+and the History tab's real data have not been seen in a browser.
+
+**Earlier the same session (2026-08-17 — `docs/API.md` gained `GET
+/handoffs/my-orders`, `GET /handoffs/my-node/orders`, `GET
+/admin/rider-earnings`, and `licenseNumber` on rider onboarding; wired
+all four and used the first two to finally close the arrival gap):**
+
+The user pointed out that the previous session's "arrival is backend-
+blocked" conclusion was reasonable given what the API documented *at
+the time*, but `docs/API.md` had since been updated with exactly the
+endpoints that close it. This session re-read the whole doc rather than
+trusting the earlier summary, confirmed the new endpoints, and
+implemented against them:
+
+- **`GET /handoffs/my-node/orders`** — every order that's ever touched
+  the caller's Node, either as origin or destination, `myRole` on each
+  item saying which. This is what `confirm-handoff`/`intake`/
+  `collection-code/resend`/`collect` needed all along and never had: a
+  server-side way for the *destination* operator to resolve an order
+  uuid, the same way `by-tracking-code` already let the origin operator
+  do it. New hook `modules/vendor/hooks/use-my-node-orders.ts` wraps it
+  with four filters (`isAwaitingPickup`/`isAwaitingArrival`/
+  `needsIntake`/`isReadyForCollection`) derived from one query.
+- **`GET /handoffs/my-orders`** — every order a rider has ever been
+  assigned, current and past. Same fix on the rider side, closing the
+  "no rider-scoped my-deliveries endpoint" gap. New hook
+  `modules/rider/hooks/use-my-orders.ts`.
+- **`GET /admin/rider-earnings`** — read-only payout-readiness report,
+  one row per rider with a `completed` order. New screen
+  `RiderEarningsScreen` at `/admin/rider-earnings`, added to
+  `ADMIN_NAV_ITEMS` next to "Analytics".
+- **`licenseNumber`** added to `POST /riders/onboarding`'s request and
+  `RiderVerificationProfile`'s response. Added as a required field to
+  `RiderVerificationScreen`'s form and shown in the status view when
+  present (`null` for riders who onboarded before this field existed).
+
+**What this closed, concretely: `/vendor/rider-handoff` now works
+identically in both directions.** Pickup and arrival are the same
+pick-a-parcel shape — tap a row from `GET /handoffs/my-node/orders`
+(filtered by `myRole` + the status that direction expects), type the
+rider's 6 digits, confirm. The "arrival is blocked, here's a card
+explaining why" design from the last two sessions is gone, not just
+hidden — there's no code path left that renders it, because there's
+finally a real list to pick from.
+
+**Three localStorage stores deleted, not deprecated**:
+`store/rider-jobs.store.ts`, `store/node-outgoing.store.ts`,
+`store/node-parcels.store.ts`. Each one's own header said "delete this
+when the matching endpoint lands" — this is that. Everything that read
+them now reads a TanStack Query hook instead:
+`use-confirm-handoff.ts`, `use-handoff-lookup.ts`,
+`use-awaiting-collection.ts`, `use-collect-parcel.ts`,
+`use-parcel-intake.ts` (vendor side), `use-active-deliveries.ts`,
+`use-accept-order.ts`, `use-handoff-code.ts` (rider side). One
+consequence worth knowing: `AwaitingCollectionScreen` and
+`CollectParcelScreen` used to show "arrived X ago" / "checked in X ago"
+timestamps from the old stores' own bookkeeping (`arrivedAt`/
+`intakeAt`) — `NodeOrderSummary` doesn't carry per-transition
+timestamps, only `createdAt` (order placement), so those relative-time
+lines were dropped rather than backed by a stale/wrong value. If that
+granularity matters, it needs a real field on the API response, not a
+client-side guess.
+
+**Deliberately not wired to the new endpoints**: `MyDeliveriesScreen`
+("My Deliveries" earnings tab). Its `DeliveryHistoryRow` needs a
+`payout` amount per job — `GET /handoffs/my-orders` doesn't return one
+(no rider fee/payout field exists anywhere in `docs/API.md`), and
+`riderService.getEarningsSummary()`/`getJobHistory()` both stay
+`NOT_IMPLEMENTED` for that reason. Wiring `getMyOrders()` into that
+screen would mean inventing numbers; see `rider.service.ts`'s header.
+
+**Verification**: `npx tsc --noEmit` clean, `npx eslint src` clean,
+`next build` from a cleared `.next` succeeds (`/admin/rider-earnings`
+appears in the route table). `/vendor/rider-handoff`,
+`/vendor/awaiting-collection`, `/rider/active-deliveries`,
+`/rider/verification`, and `/admin/rider-earnings` all return `200`
+with no `Application error`/`__next_error__` markers from a dev server.
+**Not verified**: no NodeOperator/Rider/Admin session was available, so
+none of the new list endpoints, the arrival pick-list, or the earnings
+table have been seen against real data — same open item every session
+in this module has left.
+
+**Previous session (2026-08-16 — finished wiring `RiderHandoffScreen` to
+the hooks the previous session already rebuilt):** the previous
+session's design below (pick-list for pickup, blocked card for arrival)
+was correct and already lived in `use-confirm-handoff.ts`,
+`use-handoff-lookup.ts`, `use-outgoing-parcels.ts` and
+`store/node-outgoing.store.ts` — but `RiderHandoffScreen.tsx` itself
+never finished the migration to match it. The component on disk still
+destructured removed hook exports (`resolveByTrackingCode`,
+`resolvedOrder`, `isResolving`, `lookupNotFound`, `lookupError`) behind
+comments, never called the hook's `selectOrder`, and its confirm button
+called `confirmHandoff(code)` unconditionally. Since the hook only
+mutates when `selectedOrderId` is set, **pickup could not actually
+complete** despite the doc below (and `API_INTEGRATION_STATUS.md`)
+describing it as working end to end — nothing in the UI ever set that
+id. This session rebuilt the screen body to actually use
+`outgoingParcels`/`isOutgoingHydrated`/`selectedOrderId`/`selectOrder`
+for the pickup pick-list, render the arrival-blocked card in place of
+any form, and gate the confirm button on `isPickup && selectedOrderId &&
+code.length === HANDOFF_CODE_LENGTH`. No hook/store/type changed —
+`docs/API.md` was re-read and the existing design already matched it.
+`npx tsc --noEmit`, `npx eslint src`, and a cleared-`.next` `next build`
+all pass; `/vendor/rider-handoff` returns `200` from both prod build
+output and a dev server. Still no NodeOperator session available, so the
+pick-list, scan-to-recover, and prune-on-409 paths remain unexercised
+against a live backend — see the previous session's note below, which
+still applies unchanged.
+
+**Previous session (2026-08-15, last — the operator stops asking the rider
+for a tracking code):** `RiderHandoffScreen` required a tracking code
+*and* the 6-digit code before an operator could confirm a handoff, and
+hinted the tracking code could be read off the rider's screen. The
+contract has no such step: `request-code` returns `{code, expiresAt}`
+and nothing else, the code is neither emailed nor logged, so six digits
+is the entire rider→operator payload. The endpoints were wired
+correctly all along — the mistake was expecting the rider to supply the
+order identity that `confirm-handoff` needs in its path.
+
+**`/vendor/rider-handoff` now has exactly one input: the 6 digits.**
+There is no tracking-code field on it at all, in either direction. That
+was a deliberate second pass — a code box on this screen reads as
+something to ask the rider for, which is the whole confusion being
+removed.
+
+**How the operator gets the uuid now:**
+- **Pickup (origin).** From their own drop-off confirms. `POST /drop-off`
+  returns the uuid, and `use-handoff-lookup.ts` records it into a new
+  `src/store/node-outgoing.store.ts`. The handoff screen shows that as a
+  pick-list: tap the parcel, type six digits, confirm.
+- **Recovery, when a parcel isn't on the list** (drop-off taken on
+  another device, storage cleared): scan its label at `/vendor-scan`.
+  The drop-off preview's *lookup alone* now re-adds it to the outgoing
+  list — no state change implied — because `by-tracking-code` is scoped
+  to exactly this Node's outgoing orders. So unlike the destination
+  store, **this list is rebuildable**, and the rebuild lives on the
+  scanner where a code box means "read the label", not "ask the rider".
+- **Arrival (destination).** Backend-blocked, and the screen now says so
+  instead of showing a form. There is no list to pick from and no lookup
+  that resolves one (`by-tracking-code` is origin-scoped, so it 404s
+  here by design). **This is a real loss of a maybe-working path**: if
+  the deployed backend is laxer than its docs, the old field might have
+  worked. Reinstating arrivals properly needs the backend fix below —
+  a destination-scoped lookup or an inbound-orders list — after which
+  arrival becomes the same pick-a-parcel flow as pickup.
+
+The rider screen says the same thing from its side ("These 6 digits are
+all the operator needs"), so nobody starts reciting a tracking code at a
+counter.
+
+**Confirmed live against the deployed backend this session** (route
+probes; the API distinguishes `Cannot GET …` from `UNAUTHENTICATED`):
+**`GET /nodes/operator/inventory` does not exist — 404.** The Node
+Dashboard renders its error state as the same "No parcels here" empty
+state as a genuine empty list, so **that list is silently always empty
+in production.** Not fixed here (out of scope) and the best next task
+for whoever picks this up. Also confirmed absent: `my-deliveries`, every
+node-scoped orders list guessed at, and any code-only confirm endpoint —
+so neither localStorage store has an undocumented server-side
+alternative.
+
+`npx tsc --noEmit`, `npx eslint src` and a cleared-`.next` `yarn build`
+all pass, and `/vendor/rider-handoff` + `/vendor/drop-off/[trackingCode]`
+both return 200 from a dev server. **No browser click-through and no
+NodeOperator session**, so the pick-list, the scan-to-recover path and
+the prune-on-409 path are unexercised.
+
+**Previous session (2026-08-15, latest — maps moved to Geoapify):** both
 maps and address→coordinate geocoding now run on Geoapify (Leaflet for
 rendering) instead of Google, behind a `NEXT_PUBLIC_MAPS_PROVIDER`
 switch. Google needs a billing account even on its free tier; Geoapify's
@@ -690,11 +1161,13 @@ still open):
      already models all of them) — extending the "Manage" panel into
      a full edit form is a natural follow-up if the design calls for
      it, not currently required.
-   - `elevateSuperAdmin` (Super Admin screen) is still wired to the
-     unconfirmed `/corporate-ops/staff/elevate-superadmin` — `API.md`
-     has no `super_admin` role concept, so there may genuinely be no
-     real equivalent to correct it to. Worth confirming with backend
-     before spending more time on it.
+   - ~~`elevateSuperAdmin` (Super Admin screen) is still wired to the
+     unconfirmed `/corporate-ops/staff/elevate-superadmin`~~ **Removed
+     2026-08-20** — `API.md` has no `super_admin` role concept at all,
+     so there's no real equivalent to correct it to. The elevation form
+     is deleted; `SuperAdminScreen` now shows an Admin-facing "isn't
+     available yet" notice in its place. The overview stat cards (a
+     separate, still-real gap) are untouched.
    - ~~`GET /node-operators/pending` + `PATCH /node-operators/:id/approve`
      and `GET /riders/pending` + `PATCH /riders/:id/approve` are real,
      confirmed routes with no screen in the current 8-frame design~~
@@ -709,8 +1182,9 @@ still open):
    not just `endpoints.ts`) for: Dashboard summary stats, network-wide
    recent orders, network status/telemetry, admin-scoped order
    list/detail, Dispute Center (anything), Analytics (anything), and
-   "elevate to super admin" (API.md's role enum has no `super_admin`
-   concept — only `consumer` / `node_operator` / `rider` / `admin`).
+   "elevate to super admin" (`API.md`'s role enum has no `super_admin`
+   concept — only `consumer` / `node_operator` / `rider` / `admin`; the
+   elevation form itself is deleted as of 2026-08-20, see above).
    Leave all of these `NOT_IMPLEMENTED`; don't invent shapes for them.
 9. **Visual/browser verification still hasn't been done** for any
    Admin screen, including the new login screen — Claude in Chrome
@@ -906,15 +1380,21 @@ concept at all, so it may have no real equivalent.
   non-admin account. This has not been verified in a real browser
   against a live backend session yet (see #9 above) — treat it as
   implemented, not as verified.
-- Super Admin's elevation form still points at an endpoint unconfirmed
-  against `API.md` (`elevateSuperAdmin`) — clicking it will hit the
-  live backend if a session cookie is present, and will most likely
-  4xx rather than succeed. That's expected (fail-loud, not silent).
-  Node Network's forms and Team Management's invite no longer have
-  this problem.
+- ~~Super Admin's elevation form still points at an endpoint unconfirmed
+  against `API.md`~~ **Removed 2026-08-20** — see "Current objective"
+  above; `SuperAdminScreen` no longer offers this action at all.
+- **New 2026-08-20, not live-verified**: the Earnings/Revenue Split
+  screens (`NodeEarningsScreen`, `MyEarningsScreen`'s rebuilt
+  "Earnings" tab, `RevenueSplitScreen`, and `getEarningsSummary()`'s
+  new real implementation) are built strictly from `docs/API.md`'s
+  documented `earnings`/`admin/revenue-split` contract — none of it has
+  been exercised against a live backend session with an actual
+  `completed` order to produce a real entry. Same caveat as every other
+  "not live-verified" item in this list.
 - Carried over, still true: fragile session trust model (no
   `/auth/me`, no auto-refresh-on-401), reachable `NOT_IMPLEMENTED`
-  throws in several Vendor/Rider screens, no real payment collection.
+  throws in several Node Operator/Rider screens, no real payment
+  collection.
 - **`/accept-invite` is implemented but not verified against a live
   backend response** (see "Remaining work" #10) — the
   `401 INVALID_INVITE_TOKEN` branch and the success path are both
@@ -958,7 +1438,7 @@ concept at all, so it may have no real equivalent.
 | File | Why it matters |
 |---|---|
 | `docs/API.md` | Source of truth for the real backend contract — read this before trusting `core/api/endpoints.ts` for anything Admin-related |
-| `src/core/api/services/admin.service.ts` | Read this first for any Admin data question — its header comment lists real vs. `NOT_IMPLEMENTED`; only `elevateSuperAdmin` is still unconfirmed |
+| `src/core/api/services/admin.service.ts` | Read this first for any Admin data question — its header comment lists real vs. `NOT_IMPLEMENTED`. `elevateSuperAdmin` (unconfirmed route) removed 2026-08-20; `createRevenueSplitRatio`/`getRevenueSplitRatios`/`getRevenueSplitEntries`/`markRevenueSplitEntryPaid` (all real, confirmed) added the same day |
 | `src/core/api/services/auth.service.ts` | `loginAdmin` — the one Admin auth method that exists, added this session |
 | `src/components/layout/AuthGuard.tsx` | Now supports `allowedRoles`; `(admin)/layout.tsx` is the only current caller that passes it |
 | `src/modules/admin/components/auth/AdminLoginScreen.tsx`, `src/app/admin-login/page.tsx` | New this session — the only way into `/admin/*` |
@@ -967,10 +1447,10 @@ concept at all, so it may have no real equivalent.
 | `docs/design/admin_UI.png` | Source design — a single low-resolution 8-frame sprite sheet; doesn't include node-operator/rider approval queues (see "Remaining work" #7) |
 | `src/modules/user/components/auth/AcceptInviteScreen.tsx`, `src/app/accept-invite/page.tsx` | New this session — the invitee-facing half of `POST /users/invite`; modeled on `ResetPasswordScreen` |
 | `src/modules/user/components/auth/ResetPasswordScreen.tsx` | The template `AcceptInviteScreen` was built from — read this first if extending either one, they should stay in sync stylistically |
-| `src/core/api/services/vendor.service.ts` | Vendor's data layer — `onboardNode`/`getMyNodeOperatorProfile` (new, real routes) live alongside the existing inventory/scan/release methods; header comment lists the real API gaps |
-| `src/modules/vendor/hooks/use-vendor-node-setup.ts`, `src/modules/vendor/components/node-setup/VendorNodeSetupScreen.tsx`, `src/app/(vendor)/vendor/node-setup/page.tsx` | New this session — Vendor's self-service Node onboarding + approval-status screen |
+| `src/core/api/services/node.service.ts` | **Renamed from `vendor.service.ts` 2026-08-20** (`vendorService` → `nodeService`). Node Operator's data layer — `onboardNode`/`getMyNodeOperatorProfile`/`getMyNodeEarnings` (all real routes) alongside the handoffs custody-chain methods; header comment lists the real API gaps |
+| `src/modules/node/hooks/use-node-setup.ts`, `src/modules/node/components/setup/NodeSetupScreen.tsx`, `src/app/(node)/node/setup/page.tsx` | **Renamed from `use-vendor-node-setup.ts`/`VendorNodeSetupScreen.tsx`/`/vendor/node-setup` 2026-08-20.** Node Operator's self-service Node onboarding + approval-status screen |
 | `src/core/api/services/rider.service.ts` | Rider's data layer — `getVerificationUploadSignature`/`uploadVerificationDocument`/`submitVerification`/`getVerificationProfile` (new, real routes) live alongside the existing job-board/manifest/scan methods; header comment lists the real API gaps (availability, earnings, job history, profile) |
-| `src/modules/rider/hooks/use-rider-verification.ts`, `src/modules/rider/components/verification/RiderVerificationScreen.tsx`, `src/app/(rider)/rider/verification/page.tsx` | Rider's self-service KYC verification + approval-status screen, modeled directly on `VendorNodeSetupScreen`/`useVendorNodeSetup` (same three-state shape: form / pending / approved) |
+| `src/modules/rider/hooks/use-rider-verification.ts`, `src/modules/rider/components/verification/RiderVerificationScreen.tsx`, `src/app/(rider)/rider/verification/page.tsx` | Rider's self-service KYC verification + approval-status screen, modeled directly on `NodeSetupScreen`/`useNodeSetup` (same three-state shape: form / pending / approved; both renamed from `Vendor*` 2026-08-20) |
 | `src/modules/rider/components/verification/VerificationReminderSheet.tsx` | New 2026-08-07 (gating pass) — dismissible bottom-sheet nudge shown on `RiderHomeScreen` for an unverified Rider, modeled on `ManualCodeEntrySheet`'s overlay pattern |
 | `src/modules/rider/components/dashboard/RiderHomeScreen.tsx` | New 2026-08-07: reads `useRiderVerification()` and renders `VerificationReminderSheet` when not yet `active`; this is now the Rider's post-login landing page |
 | `src/modules/rider/components/job-offer/JobOfferScreen.tsx` | New 2026-08-07: the one Rider screen that hard-blocks on verification status — reads `useRiderVerification()` before rendering job-board content |
@@ -987,6 +1467,17 @@ concept at all, so it may have no real equivalent.
 | `src/modules/user/hooks/use-auth.ts` | 2026-08-07: the one hook driving Consumer + Rider + NodeOperator register/login; `loginMutation`'s role-redirect map is the thing to edit if a new role or a new post-login destination is ever needed |
 | `src/modules/user/components/auth/CreateAccountScreen.tsx` | 2026-08-07: now shared by all three self-registerable roles via `?role=`; `ROLE_COPY` is the place to add per-role heading/subheading copy |
 | `src/modules/user/components/auth/RoleSelectScreen.tsx`, `src/modules/user/constants/roles.ts` | 2026-08-07: `ROLE_OPTIONS`' `role` values now match the real backend enum and route into `/create-account?role=` |
+| `src/core/types/handoff.types.ts` | The custody-chain contract in one file — lifecycle transitions, both 6-digit codes and which direction each travels. **Read its header before touching any handoff screen**; point 1 is the rule that the rider's code is the whole rider→operator payload |
+| `src/store/node-outgoing.store.ts`, `src/store/node-parcels.store.ts`, `src/store/rider-jobs.store.ts` | **Deleted 2026-08-17.** Each held order uuids client-side because no server-side list existed yet; `GET /handoffs/my-node/orders`/`GET /handoffs/my-orders` landed in `docs/API.md` that day, exactly what each store's header asked for. If you find any of these three filenames again (a stale branch, a bad merge), that's a regression — the replacement is `use-my-node-orders.ts`/`use-my-orders.ts` below. |
+| `src/modules/node/hooks/use-my-node-orders.ts` | New 2026-08-17, **renamed from `modules/vendor/` 2026-08-20**. `GET /handoffs/my-node/orders`, wrapped in a TanStack Query hook with four `myRole`+`status` filters. Source of truth for every screen that used to read `node-outgoing.store.ts`/`node-parcels.store.ts` |
+| `src/modules/rider/hooks/use-my-orders.ts` | New 2026-08-17 — `GET /handoffs/my-orders`, same pattern, rider side. Supersedes `rider-jobs.store.ts` |
+| `src/modules/node/hooks/use-confirm-handoff.ts` | **Renamed from `modules/vendor/` 2026-08-20.** Owns the whole operator-side handoff decision: direction, which order, prune-on-stale. Rewritten 2026-08-17 to source `pickableOrders` from `use-my-node-orders.ts` instead of `node-outgoing.store.ts`; its header is the canonical write-up of where the order uuid comes from in each direction now that both directions have one |
+| `src/modules/vendor/components/handoff/RiderHandoffScreen.tsx`, `src/modules/vendor/components/collection/AwaitingCollectionScreen.tsx`, `src/modules/vendor/components/inventory/` | **Deleted 2026-08-17, before the 2026-08-20 Vendor→Node rename** — these paths never existed under `modules/node`, they're purely historical. Both screens' entire job — "the rider gives you six digits and nothing else," and the destination-side shelf list — became one tab each on `InventoryScreen` (also deleted the same day, see the next entry down for what replaced it: Home's tabs + `CollectParcelScreen`, now at `src/modules/node/components/collection/CollectParcelScreen.tsx`) |
+| `src/modules/admin/components/rider-earnings/`, `src/modules/admin/hooks/use-rider-earnings.ts` | **Deleted 2026-08-20** — wired to `GET /admin/rider-earnings`, an endpoint that never appeared in `docs/API.md`. Replaced by `src/modules/admin/components/revenue-split/RevenueSplitScreen.tsx` (`/admin/revenue-split`) and, for the Rider/NodeOperator sides of the same underlying data, `MyEarningsScreen`/`NodeEarningsScreen` below |
+| `src/core/types/earnings.types.ts` | New 2026-08-20 — shared revenue-split types (`MyRevenueSplitEntry`, `RevenueSplitRatio`, `AdminRevenueSplitEntry`, etc.) used by Rider, NodeOperator, and Admin's earnings screens alike |
+| `src/modules/admin/hooks/use-admin-revenue-split.ts`, `src/modules/admin/components/revenue-split/` | New 2026-08-20 — Admin's split-ratio config form + payout-readiness entries table with a per-row "Mark Paid" action (`/admin/revenue-split`) |
+| `src/modules/node/hooks/use-node-earnings.ts`, `src/modules/node/components/earnings/NodeEarningsScreen.tsx` | New 2026-08-20 — this Node's own revenue-split entries (`GET /earnings/my-node`), reached from Node Profile (`/node/earnings`) |
+| `src/modules/rider/hooks/use-my-earnings.ts`, `src/modules/rider/components/history/MyEarningsScreen.tsx` | **Renamed from `use-job-history.ts`/`MyDeliveriesScreen.tsx` 2026-08-20** — the "Earnings" nav tab (`/rider/deliveries`) now lists real `GET /earnings/mine` entries instead of a job-history concept (declined/expired jobs with a payout) that has no backing endpoint at all |
 
 ## Context another AI engineer needs before continuing
 
@@ -997,8 +1488,12 @@ concept at all, so it may have no real equivalent.
 - **Before wiring any more Admin endpoints, check the route against
   `docs/API.md` directly** — don't assume an entry already present in
   `core/api/endpoints.ts` is real just because it compiles and has a
-  plausible-looking name. The original audit found three that weren't;
-  only `corporateOps.elevateSuperAdmin` is still unconfirmed.
+  plausible-looking name. A full re-audit 2026-08-20 found and removed
+  six more undocumented call sites beyond the original three
+  (`corporateOps.elevateSuperAdmin` included — deleted, not just
+  flagged, since `API.md`'s role enum has no `super_admin` concept to
+  correct it to) — see `docs/API_INTEGRATION_STATUS.md`'s
+  Inconsistencies section for the full list and what replaced each.
 - **`session.user.role` is now trustworthy — it wasn't before
   2026-08-07.** `UserRole` previously declared `"user"`/`"vendor"` as
   two of its four values, but the real backend has only ever returned

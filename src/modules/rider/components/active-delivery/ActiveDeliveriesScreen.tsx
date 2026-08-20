@@ -8,10 +8,9 @@ import {
   PackageIcon,
   NavigationIcon,
   ChevronRightIcon,
-  HelpCircleIcon,
 } from "@/components/icons";
 import { ROUTES } from "@/core/config/constants";
-import { nextHandoffType } from "@/store/rider-jobs.store";
+import { nextHandoffType } from "@/modules/rider/hooks/use-my-orders";
 import { useActiveDeliveries } from "@/modules/rider/hooks/use-active-deliveries";
 import {
   HANDOFF_LEG_COPY,
@@ -19,23 +18,21 @@ import {
   isAppleDevice,
   parcelSizeLabel,
 } from "@/modules/rider/lib/handoff-format";
-import type { AcceptedDelivery } from "@/core/types";
+import type { MyOrderSummary } from "@/core/types";
 
 /**
  * The deliveries this rider is currently carrying.
  *
- * Reads entirely from device-local storage, because no rider-scoped
- * orders endpoint exists (see store/rider-jobs.store.ts). That's a
- * limitation the rider has to be told about rather than one we can hide
- * — a delivery that "vanishes" after a reinstall or a device switch
- * looks like lost money, so the footer note explains it plainly and
- * points at the recovery path (the node operator can look the parcel up
- * by tracking code).
+ * Sourced from `GET /handoffs/my-orders` (`use-active-deliveries.ts`) —
+ * real, server-backed, and shared across every device this rider signs
+ * into. Supersedes the 2026-08-14 device-local version of this screen,
+ * which read `store/rider-jobs.store.ts` because no rider-scoped orders
+ * endpoint existed yet; that store is deleted.
  */
 export function ActiveDeliveriesScreen() {
-  const { deliveries, isHydrated } = useActiveDeliveries();
+  const { deliveries, isLoading } = useActiveDeliveries();
 
-  if (!isHydrated) {
+  if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-bg-canvas">
         <div className="w-8 h-8 rounded-full border-2 border-border-default border-t-brand-blue animate-spin" />
@@ -77,28 +74,12 @@ export function ActiveDeliveriesScreen() {
             ))}
           </div>
         )}
-
-        <Card padding="md" className="flex items-start gap-2.5 bg-bg-subtle">
-          <span className="w-8 h-8 rounded-[9px] bg-bg-card text-text-muted flex items-center justify-center shrink-0">
-            <HelpCircleIcon size={14} />
-          </span>
-          <div>
-            <p className="text-[13px] font-semibold text-text-primary">
-              This list lives on this device
-            </p>
-            <p className="text-[12px] text-text-muted mt-0.5 leading-[1.6]">
-              Signing in on another phone won&apos;t show these deliveries, and clearing your
-              browser data will empty the list. The parcel itself is unaffected — a node
-              operator can always find it by its tracking code.
-            </p>
-          </div>
-        </Card>
       </div>
     </div>
   );
 }
 
-function ActiveDeliveryRow({ delivery }: { delivery: AcceptedDelivery }) {
+function ActiveDeliveryRow({ delivery }: { delivery: MyOrderSummary }) {
   const handoffType = nextHandoffType(delivery);
   const leg = HANDOFF_LEG_COPY[handoffType];
 

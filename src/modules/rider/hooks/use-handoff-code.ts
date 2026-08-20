@@ -1,10 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { riderService } from "@/core/api/services";
+import { QUERY_KEYS } from "@/core/config/constants";
 import { isApiError } from "@/core/api/errors";
-import { useRiderJobsStore } from "@/store/rider-jobs.store";
 import { HANDOFF_CODE_TTL_SECONDS } from "@/core/types";
 import type { HandoffType } from "@/core/types";
 
@@ -24,18 +24,17 @@ import type { HandoffType } from "@/core/types";
  * either; if it's lost, the rider asks for a new one.
  */
 export function useHandoffCode(orderId: string, type: HandoffType) {
-  const removeDelivery = useRiderJobsStore((state) => state.removeDelivery);
+  const queryClient = useQueryClient();
 
   const mutation = useMutation({
     mutationFn: () => riderService.requestHandoffCode(orderId, type),
 
     onError: (error) => {
       // `404` here means the server doesn't consider this rider assigned
-      // to this order — almost always a delivery that finished (or was
-      // never really theirs) still sitting in the device-local store.
-      // Prune it so the active list stops lying.
+      // to this order — almost always a delivery that's since moved past
+      // this leg. Refetch so the active list stops showing it.
       if (isApiError(error) && error.code === "NOT_FOUND") {
-        removeDelivery(orderId);
+        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.riderMyOrders });
       }
     },
   });

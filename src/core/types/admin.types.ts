@@ -242,11 +242,6 @@ export interface SuperAdminOverview {
   pendingElevationRequests: number;
 }
 
-/** Shape guessed from the route name — unverified, see admin.service.ts header. */
-export interface ElevateSuperAdminPayload {
-  userId: string;
-}
-
 // ── Pricing ──────────────────────────────────────────────────────
 // POST/GET /admin/pricing — real, confirmed routes per docs/API.md.
 // Append-only: POST never edits an existing rule, it adds a new one
@@ -296,3 +291,9 @@ export interface OrdersTrendPoint {
   placed: number;
   completed: number;
 }
+
+// Revenue-split (rider/Node/platform payout) types live in
+// `core/types/earnings.types.ts` — shared with the Rider and
+// NodeOperator earnings views, not Admin-only. Distinct from
+// `RiderPerformanceSummary` above, which is the still-`NOT_IMPLEMENTED`
+// analytics leaderboard.

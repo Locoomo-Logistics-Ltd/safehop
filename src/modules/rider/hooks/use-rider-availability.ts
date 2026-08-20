@@ -37,9 +37,9 @@ export function useRiderAvailability() {
   });
 
   return {
-    availability: query.data ?? "offline",
+    availability: query.data ?? "online",
     isLoading: query.isLoading,
-    toggle: () => mutation.mutate(query.data === "online" ? "offline" : "online"),
+    toggle: () => mutation.mutate(query.data === "offline" ? "online" : "offline"),
     isToggling: mutation.isPending,
   };
 }

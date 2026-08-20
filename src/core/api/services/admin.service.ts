@@ -14,18 +14,22 @@ import type {
   AdminOrderDetail,
   AdminOrderListItem,
   AdminAnalyticsSummary,
+  AdminRevenueSplitEntry,
+  AdminRevenueSplitEntryFilters,
   AdminTeamMember,
   AdminOrderSummary,
   CreatePricingRulePayload,
-  ElevateSuperAdminPayload,
+  CreateRevenueSplitRatioPayload,
   InvitedStaffMember,
   InviteStaffPayload,
+  MarkEntryPaidResult,
   NetworkStatusSummary,
   OnboardNodePayload,
   OrdersTrendPoint,
   PendingNodeOperator,
   PendingRider,
   PricingRule,
+  RevenueSplitRatio,
   RiderPerformanceSummary,
   SuperAdminOverview,
   TopNodePerformance,
@@ -80,20 +84,22 @@ function mapNodeRecord(node: AdminNodeRecord): AdminNodeStatus {
  *      `GET /admin/pricing` (Pricing screen). Added 2026-08-12.
  *      Append-only per `docs/API.md` — `createPricingRule` never edits
  *      an existing rule, it adds a new one that becomes "current."
+ *    - `createRevenueSplitRatio` / `getRevenueSplitRatios` /
+ *      `getRevenueSplitEntries` / `markRevenueSplitEntryPaid` →
+ *      `POST/GET /admin/revenue-split`, `GET .../entries`,
+ *      `PATCH .../entries/:id/mark-paid` (Revenue Split screen). Added
+ *      2026-08-20, replacing an earlier "Rider Earnings" screen that
+ *      was wired to `GET /admin/rider-earnings` — that endpoint never
+ *      appeared in `docs/API.md` and has been removed. Distinct from
+ *      the still-`NOT_IMPLEMENTED` `getRiderPerformance` leaderboard
+ *      below, which has no real route.
  *
- * 2. **Wired, but to a route that does NOT appear anywhere in
- *    `docs/API.md`** — a previous pass guessed this from the route
- *    name alone before `API.md` existed as a reference. It still
- *    compiles and will fire a real request, but treat it as
- *    unconfirmed, not as a working integration, until corrected:
- *    - `elevateSuperAdmin` → wired to `corporateOps.elevateSuperAdmin`
- *      (`POST /corporate-ops/staff/elevate-superadmin`); `API.md` has
- *      no `super_admin` concept at all (role enum is only
- *      `consumer`/`node_operator`/`rider`/`admin`), so there may be no
- *      real equivalent.
- *
- * Every other method the Admin UI needs has **no backend route at
- * all** per `API.md`:
+ * Every method the Admin UI needs beyond the above has **no backend
+ * route at all** per `API.md` (Super Admin elevation included — there's
+ * no `super_admin` concept in the role enum, and no route resembling
+ * one anywhere in the doc; the elevation form this file used to wire to
+ * a guessed `corporate-ops/staff/elevate-superadmin` route was removed
+ * for the same reason):
  *   - Dashboard summary stats (active deliveries / online riders /
  *     completed today / open disputes)
  *   - Network-wide recent-orders feed for the dashboard
@@ -215,11 +221,6 @@ const realAdminService = {
     });
   },
 
-  /** Guessed shape — see this file's header. Real route exists. */
-  async elevateSuperAdmin(payload: ElevateSuperAdminPayload): Promise<void> {
-    await httpClient.post<void>(ENDPOINTS.corporateOps.elevateSuperAdmin, payload);
-  },
-
   /** Real, confirmed route — creates a Node immediately `active` (Admin authorship is the trust gate per docs/API.md). */
   async onboardPartnerNode(payload: OnboardNodePayload): Promise<AdminNodeStatus> {
     const raw = await httpClient.post<AdminNodeRecord>(ENDPOINTS.adminNodes.create, payload);
@@ -268,6 +269,43 @@ const realAdminService = {
   async getPricingRules(): Promise<PricingRule[]> {
     const raw = await httpClient.get<PaginatedList<PricingRule>>(`${ENDPOINTS.adminPricing.list}?limit=100`);
     return raw.items;
+  },
+
+  // ── Revenue split ────────────────────────────────────────────────
+  // Real, confirmed routes per docs/API.md. Every `completed` order's
+  // fee is split rider/origin-Node/platform per the ratio these set,
+  // recorded as one entry per party — not a payout flow: the actual
+  // transfer stays off-system (bank, cash, etc.); this is what an
+  // Admin reads before running one, and marks paid after.
+
+  /** Sets the split ratio for every order completed from now on — append-only, never edits a prior ratio. */
+  async createRevenueSplitRatio(payload: CreateRevenueSplitRatioPayload): Promise<RevenueSplitRatio> {
+    return httpClient.post<RevenueSplitRatio>(ENDPOINTS.adminRevenueSplit.create, payload);
+  },
+
+  /** Ratio history, newest first. */
+  async getRevenueSplitRatios(): Promise<RevenueSplitRatio[]> {
+    const raw = await httpClient.get<PaginatedList<RevenueSplitRatio>>(
+      `${ENDPOINTS.adminRevenueSplit.list}?limit=100`
+    );
+    return raw.items;
+  },
+
+  /** Every revenue-split entry across every completed order, newest first — three rows per order (rider, origin Node, platform). */
+  async getRevenueSplitEntries(filters?: AdminRevenueSplitEntryFilters): Promise<AdminRevenueSplitEntry[]> {
+    const query = new URLSearchParams({ limit: "100" });
+    if (filters?.partyType) query.set("partyType", filters.partyType);
+    if (filters?.payoutStatus) query.set("payoutStatus", filters.payoutStatus);
+
+    const raw = await httpClient.get<PaginatedList<AdminRevenueSplitEntry>>(
+      `${ENDPOINTS.adminRevenueSplit.entries}?${query.toString()}`
+    );
+    return raw.items;
+  },
+
+  /** Records an entry as settled off-system. No request body. Idempotent — marking an already-paid entry again just returns its current state. */
+  async markRevenueSplitEntryPaid(entryId: string): Promise<MarkEntryPaidResult> {
+    return httpClient.patch<MarkEntryPaidResult>(ENDPOINTS.adminRevenueSplit.markEntryPaid(entryId));
   },
 
   // ── Analytics (no endpoints) ────────────────────────────────────

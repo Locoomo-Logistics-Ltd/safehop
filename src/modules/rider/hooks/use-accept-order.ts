@@ -5,30 +5,30 @@ import { useRouter } from "next/navigation";
 import { riderService } from "@/core/api/services";
 import { isApiError } from "@/core/api/errors";
 import { QUERY_KEYS, ROUTES } from "@/core/config/constants";
-import { useRiderJobsStore } from "@/store/rider-jobs.store";
-import type { AvailableOrder } from "@/core/types";
+import type { AvailableOrder, MyOrderSummary } from "@/core/types";
 
 /**
  * Claims an order off the board.
  *
- * Takes the whole `AvailableOrder` rather than just its id because the
- * accept response is a minimal receipt (id, trackingCode, status, two
- * node ids) — no node names, no addresses, no parcel description. Those
- * only ever exist in the board row we're holding right now, and there's
- * no rider-scoped endpoint to fetch them back later, so this is the one
- * moment they can be captured. See store/rider-jobs.store.ts for why
- * that matters and what it costs.
+ * Still takes the whole `AvailableOrder`, not just its id: the accept
+ * response is a minimal receipt (id, trackingCode, status, two node
+ * ids) with no node names/addresses/parcel description, and the
+ * handoff screen this navigates to needs those immediately — a
+ * background refetch of `GET /handoffs/my-orders` (real, confirmed per
+ * docs/API.md, 2026-08-17) would land a beat too late and flash an
+ * empty state. So the accepted board row is seeded straight into that
+ * query's cache, then the query is invalidated anyway so the next
+ * natural refetch reconciles with the server's own copy.
  */
 export function useAcceptOrder() {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const addDelivery = useRiderJobsStore((state) => state.addDelivery);
 
   const mutation = useMutation({
     mutationFn: (order: AvailableOrder) => riderService.acceptAvailableOrder(order.id),
 
     onSuccess: (summary, order) => {
-      addDelivery({
+      const accepted: MyOrderSummary = {
         id: summary.id,
         trackingCode: summary.trackingCode,
         status: summary.status,
@@ -40,10 +40,15 @@ export function useAcceptOrder() {
         destinationNodeAddress: order.destinationNodeAddress,
         parcelDescription: order.parcelDescription,
         parcelSize: order.parcelSize,
-        acceptedAt: new Date().toISOString(),
-      });
+        createdAt: order.createdAt,
+      };
+      queryClient.setQueryData<MyOrderSummary[]>(QUERY_KEYS.riderMyOrders, (existing) => [
+        accepted,
+        ...(existing ?? []).filter((o) => o.id !== accepted.id),
+      ]);
 
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.riderAvailableOrdersRoot });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.riderMyOrders });
       router.push(ROUTES.riderHandoff(summary.id));
     },
 

@@ -12,7 +12,7 @@ a network of physical pickup/drop-off points called **Nodes**:
 
 - **User (Consumer)** — sends a parcel: pick an origin Node, enter a
   destination address, get a server-calculated fare, pay, track.
-- **Vendor (Node Staff / Shop Owner)** — runs a physical Node: scans
+- **Node Operator (Vendor, renamed 2026-08-20)** — runs a physical Node: scans
   parcels in via camera QR, assigns shelf space, releases parcels to
   recipients via OTP, flags issues, views an activity log.
 - **Rider** — delivers between Nodes and/or to recipients: goes
@@ -39,7 +39,7 @@ breakdown — it is well-maintained and this document doesn't duplicate
 it wholesale. Highlights:
 
 - Real camera-based QR scanning (`@yudiel/react-qr-scanner`) for both
-  Vendor check-in and Rider pickup/dropoff — no mock, real camera API.
+  Node Operator check-in and Rider pickup/dropoff — no mock, real camera API.
 - Live Google Maps on the User "Select Nodes" screen
   (`@vis.gl/react-google-maps`), with graceful "Map unavailable"
   fallback when no API key is configured.
@@ -82,15 +82,15 @@ client state (not server data) lives in `src/store/` (Zustand). See
 
 | Folder | Purpose |
 |---|---|
-| `src/app/` | Routes only. Route groups `(user)/`, `(vendor)/`, `(rider)/` each have a `layout.tsx` that wraps children in `AuthGuard` + `AppShell` with role-specific nav items. Several routes sit **outside** the groups deliberately (see ARCHITECTURE.md § Routing). |
+| `src/app/` | Routes only. Route groups `(user)/`, `(node)/`, `(rider)/` each have a `layout.tsx` that wraps children in `AuthGuard` + `AppShell` with role-specific nav items. Several routes sit **outside** the groups deliberately (see ARCHITECTURE.md § Routing). |
 | `src/modules/<role>/` | Feature/business logic per role: `components/` (screens, grouped by sub-feature), `hooks/` (TanStack Query wrappers), `schemas/` (Zod, User module only currently), `constants/` (User module only). |
-| `src/core/api/` | `client.ts` (fetch wrapper), `endpoints.ts` (route string catalogue), `errors.ts` (`ApiError` + friendly-message mapping), `services/` (one file per domain: auth, delivery, vendor, rider, nodes). |
+| `src/core/api/` | `client.ts` (fetch wrapper), `endpoints.ts` (route string catalogue), `errors.ts` (`ApiError` + friendly-message mapping), `services/` (one file per domain: auth, delivery, node, rider, nodes, admin). |
 | `src/core/mocks/` | Mock data fixtures. **Mostly dead code as of this analysis** — see the discrepancy noted below. |
 | `src/core/types/` | Canonical domain + payload types, barrel-exported via `index.ts`. |
 | `src/core/config/` | `env.ts` (all `process.env` reads — the only place that should touch it) + `constants.ts` (`ROUTES`, `QUERY_KEYS`, a couple of business constants). |
 | `src/components/ui/` | Design-system primitives (Button, Input, Card, PinPad, OtpInputBoxes, StatusBadge, etc.), shared by every role. |
 | `src/components/layout/` | `AppShell`, `Sidebar`, `BottomNav`, `TopBar`, `AuthGuard`, `nav-config.ts` (per-role nav item lists). |
-| `src/components/scanner/` | `QrScannerView` — shared real camera QR scanner (Vendor check-in + Rider pickup scan). |
+| `src/components/scanner/` | `QrScannerView` — shared real camera QR scanner (Node Operator check-in + Rider pickup scan). |
 | `src/store/` | Zustand stores: `auth.store.ts`, `delivery-draft.store.ts`, `notification.store.ts`. |
 | `src/lib/` | Pure utilities: `cn()` (Tailwind class merge), `format.ts`, `geo.ts` (haversine distance). |
 
@@ -102,9 +102,9 @@ client state (not server data) lives in `src/store/` (Zustand). See
 - **`AuthGuard`** (`components/layout/AuthGuard.tsx`) — renders a
   spinner while the session is initializing, redirects to `/login` if
   there's no session, otherwise renders children. Wraps every
-  `(user|vendor|rider)/layout.tsx`.
+  `(user|node|rider)/layout.tsx`.
 - **`QrScannerView`** (`components/scanner/QrScannerView.tsx`) — real
-  camera QR scanning shared by Vendor and Rider; the two modules'
+  camera QR scanning shared by the Node Operator and Rider; the two modules'
   original copies now just re-export it (see DECISIONS.md).
 - **`GoogleMapView`** (`modules/user/components/delivery/GoogleMapView.tsx`) —
   live map with graceful no-API-key fallback.
@@ -142,18 +142,30 @@ in a component.
 
 ## Authentication overview
 
-Three structurally different auth flows, one per role — see
-`FRONTEND_API_INTEGRATION_MAP.md` (root) for the canonical write-up.
-Short version:
+**Rewritten 2026-08-07** — this section originally described three
+structurally different flows (temp-password NodeOperator provisioning,
+phone/password Rider login, separate undocumented routes per role).
+None of that is current; `FRONTEND_API_INTEGRATION_MAP.md`'s
+description is now stale too, don't trust it on this point. Consumer,
+Rider, and NodeOperator all share the same two documented routes:
 
-- **User (Consumer)** — email+password login (`/auth/login`); signup
-  is `request-otp` → `register`.
-- **Vendor (Node Staff)** — accounts are admin-provisioned with a
-  temporary password; first login detects the temp password and
-  routes into a `first-login-reset` flow instead of completing login.
-- **Rider** — password-based (`/auth/rider/login`), UX shaped as a
-  phone-then-second-screen flow but the second screen is a real
-  password field, not OTP (no rider OTP endpoint exists).
+- **Consumer, Rider, NodeOperator** — `POST /auth/register` (role
+  field: `consumer`/`rider`/`node_operator`) to sign up,
+  `POST /auth/login` (role-agnostic) to log in. Registration does
+  **not** log the user in — the frontend always routes to `/login`
+  after a successful `register` call. Role-specific onboarding
+  (Rider KYC, NodeOperator Node setup) happens post-login, as separate
+  documented steps — see the Riders/Node Operators sections of
+  `docs/API_INTEGRATION_STATUS.md`.
+- **Admin** — accounts are backend-provisioned only
+  (`POST /users/invite` by an existing Admin), never self-registered;
+  logs in via the same `POST /auth/login` every other role uses.
+- **Consumer's `/auth/consumer/request-otp`/`request-login-otp`** — an
+  OTP step that doesn't appear anywhere in `docs/API.md`. Live,
+  load-bearing, and — as of a 2026-08-20 audit — deliberately left
+  unresolved at the user's explicit direction rather than rebuilt
+  against the plain register/login flow above. Flagged, not fixed; see
+  `docs/API_INTEGRATION_STATUS.md`'s Inconsistencies section.
 
 Session state: `AuthSession = { user: User }` — **no access/refresh
 token field**. `useAuthStore` (Zustand) holds it in memory;
@@ -187,28 +199,24 @@ claim and what the current code actually does. They were found by
 reading the live source, not assumed — verify against the code before
 trusting either side if more time has passed since 2026-08-06.
 
-1. **The mock/real API switch is dead.** `env.useMockApi`
-   (`NEXT_PUBLIC_USE_MOCK_API`) is still read in `core/config/env.ts`,
-   and `.env.example`/`README.md` both describe it as live and
-   defaulting to `true`. But every service file
-   (`auth`, `delivery`, `vendor`, `rider`, `nodes`) has its mock
-   implementation **entirely commented out** and hardcodes
-   `export const xService = realXService`. Flipping the env var does
-   nothing. `src/core/mocks/*` (468 lines) is effectively unused dead
-   code except for one live fallback import (`MOCK_NODES` used as a
-   default profile in `vendor.service.ts`'s `mapInventoryResponse`).
-   Don't trust README instructions about developing against mock data
-   — the app always hits the real API now.
-
-   **Project owner's direction (2026-08-06)**: mock data/services are
-   no longer wanted, but removing `src/core/mocks/*` and the commented
-   mock blocks now would break the app — some live code still has a
-   hard dependency on the mocks folder (e.g. `vendor.service.ts`'s
-   `mapInventoryResponse()` imports `MOCK_NODES` as a fallback
-   default). **Do not remove the mock code until the project is
-   feature-complete.** Treat mock removal as a deliberate, separate
-   cleanup pass at the end, not incidental cleanup during unrelated
-   work.
+1. ~~**The mock/real API switch is dead.**~~ **Mock code removed
+   2026-08-20** — this item described a 2026-08-06 snapshot; the
+   situation it warned about (don't delete mocks until feature-complete)
+   has since been resolved, not just re-flagged. `env.useMockApi`
+   (`NEXT_PUBLIC_USE_MOCK_API`) is still read in `core/config/env.ts`
+   and still does nothing — every service file (`auth`, `delivery`,
+   `node`, `rider`, `nodes`, `admin`) exports its `real<X>Service`
+   directly, no mock variant exists to switch to any more. The
+   commented-out `mock<X>Service` blocks that used to sit in every
+   service file are deleted, along with the `src/core/mocks/*` fixture
+   files they were the last reason to keep — `mock-vendor.ts`,
+   `mock-deliveries.ts`, `mock-nodes.ts`, `mock-rider.ts`,
+   `mock-activity.ts` are gone. `src/core/mocks/mock-utils.ts` is the
+   one survivor — `generateId()` is a real, still-used ID-generation
+   helper (`node.service.ts`), not fake data. Don't trust README
+   instructions about developing against mock data — the app always
+   hits the real API now, and there's no mock path left to fall back
+   to even in theory.
 
 2. **No bearer-token attachment exists**, despite
    `API_INTEGRATION.md` stating "every request goes through
@@ -242,13 +250,20 @@ trusting either side if more time has passed since 2026-08-06.
    (Paystack/Flutterwave/etc.) is integrated. Do not treat the
    checkout flow as production-ready for real money.
 
-6. **Several Vendor/Rider features throw `NOT_IMPLEMENTED`** in real
-   mode by design (shelf assignment, flag-issue, rider
-   availability/earnings/job-history/profile) because the backend has
-   no endpoint yet. This is intentional (surfaces the gap loudly
-   rather than faking success) — see `API_INTEGRATION.md`'s table for
-   the full list and which service methods to fix once the backend
-   adds routes.
+6. **A few Node Operator/Rider features still throw `NOT_IMPLEMENTED`**
+   in real mode, by design, because the backend has no endpoint yet:
+   rider availability toggle (no dedicated endpoint), rider job
+   history with a payout figure (`GET /handoffs/my-orders` carries no
+   `amountKobo`), and rider/node profile details beyond onboarding.
+   This is intentional (surfaces the gap loudly rather than faking
+   success) — see `docs/API_INTEGRATION_STATUS.md` for the current,
+   authoritative list; this item's earlier mention of shelf assignment
+   and flag-issue is stale, both features are deleted entirely as of
+   2026-08-15 and 2026-08-20 respectively, not just left
+   `NOT_IMPLEMENTED`. Rider/NodeOperator's own earnings summary is
+   **no longer** on this list — `GET /earnings/mine`/`GET
+   /earnings/my-node` landed in `docs/API.md` and are wired as of
+   2026-08-20.
 
 7. **`AGENTS.md` (this repo's root instructions) tells engineers to
    read `node_modules/next/dist/docs/` before writing code.** That

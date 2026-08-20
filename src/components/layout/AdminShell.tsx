@@ -11,7 +11,7 @@ interface AdminShellProps {
  * Top-level shell for every Admin screen — parallels `AppShell` but
  * swaps in the dark, orange-accented `AdminSidebar`/`AdminTopBar`
  * pairing the design reference uses instead of the light
- * `Sidebar`/blue accents the User/Vendor/Rider roles share.
+ * `Sidebar`/blue accents the User/Node Operator/Rider roles share.
  * Mobile still falls back to the shared `BottomNav` for basic nav
  * parity with the rest of the app. `AdminTopBar`'s refresh button
  * invalidates every `["admin", ...]`-keyed query itself, so no

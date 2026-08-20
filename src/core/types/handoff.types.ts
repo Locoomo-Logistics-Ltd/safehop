@@ -1,18 +1,23 @@
 /**
  * Handoffs module — the real, documented custody-chain contract
- * (`/handoffs/*`, added to docs/API.md 2026-08-14).
+ * (`/handoffs/*`, added to docs/API.md 2026-08-14, extended 2026-08-17
+ * with `GET /handoffs/my-orders` and `GET /handoffs/my-node/orders`).
  *
- * This is the documented replacement for the older, undocumented
- * scan-based flow (`orders.scanHandoff`, `riderOps.jobBoard`/
- * `acceptJob`/`scanPickup`/`scanDropoff` in endpoints.ts). Two
- * structural differences worth internalizing before touching the
+ * Two structural things worth internalizing before touching the
  * screens:
  *
  * 1. **Nobody scans a rider.** Custody transfer is a 6-digit code the
  *    rider requests and reads/shows to the Node operator, who types it
  *    into `POST /handoffs/orders/:id/confirm-handoff`. There is no
  *    `qrNonce` anywhere in this contract — `decodeQrPayload()` in
- *    delivery.types.ts is not part of it.
+ *    delivery.types.ts is not part of it. **The code carries no order
+ *    identity** — it isn't logged or emailed, and `confirm-handoff`
+ *    still needs the order's uuid in its path. As of 2026-08-17 that
+ *    uuid comes from a real, server-backed list rather than a
+ *    device-local cache: `GET /handoffs/my-node/orders` for the Node
+ *    operator (`NodeOrderSummary`, below) and `GET /handoffs/my-orders`
+ *    for the rider (`MyOrderSummary`, below). Never build a screen that
+ *    asks the rider for a tracking code.
  * 2. **No GPS is required or accepted** on any handoff write. The only
  *    endpoint that takes coordinates is `GET /handoffs/available-orders`,
  *    and only to sort that one response — nothing is stored.
@@ -100,7 +105,8 @@ export interface ListAvailableOrdersParams {
  * Shared response shape of `accept`, `drop-off`, and `confirm-handoff`
  * — a minimal receipt confirming the new status, not a full order. The
  * screens keep the richer record they already had (`AvailableOrder` /
- * `HandoffOrderPreview`) and merge this status onto it.
+ * `HandoffOrderPreview` / `NodeOrderSummary`) and merge this status onto
+ * it.
  */
 export interface HandoffOrderSummary {
   id: string;
@@ -130,6 +136,39 @@ export interface HandoffOrderPreview {
   createdAt: string;
 }
 
+/** Which side of an order a Node played, per `GET /handoffs/my-node/orders`'s `myRole` field. */
+export type NodeOrderRole = "origin" | "destination";
+
+/**
+ * One item from `GET /handoffs/my-node/orders` — real, confirmed per
+ * docs/API.md (2026-08-17). Every order that has ever touched the
+ * caller's Node, either as origin or destination, current and past,
+ * newest first. `myRole` tells you which side this particular order was
+ * played on (a Node is an origin for some orders and a destination for
+ * others).
+ *
+ * This is what resolves the order **uuid** `confirm-handoff` needs,
+ * for both `rider_pickup` (filter `myRole === "origin"`) and
+ * `rider_arrival` (filter `myRole === "destination"`) — closing the gap
+ * `store/node-outgoing.store.ts` and `store/node-parcels.store.ts` used
+ * to paper over with device-local caches. Delete-on-sight if you find
+ * either of those two files again; they're superseded by
+ * `modules/node/hooks/use-my-node-orders.ts`.
+ */
+export interface NodeOrderSummary {
+  id: string;
+  trackingCode: string;
+  status: OrderStatus;
+  originNodeId: string;
+  originNodeName: string;
+  destinationNodeId: string;
+  destinationNodeName: string;
+  parcelDescription: string;
+  parcelSize: OrderParcelSize;
+  createdAt: string;
+  myRole: NodeOrderRole;
+}
+
 export interface RequestHandoffCodePayload {
   type: HandoffType;
 }
@@ -153,16 +192,14 @@ export interface ConfirmHandoffPayload {
 }
 
 /**
- * A delivery the rider has accepted, held client-side.
- *
- * There is no rider-scoped "my active deliveries" endpoint in
- * docs/API.md — `GET /orders` is Consumer-only, and the handoffs module
- * only exposes the *unclaimed* board. So once a rider accepts, the
- * order disappears from every list they can query, and the only way
- * they can still reach `request-code` for it is if the client
- * remembered it. See store/rider-jobs.store.ts.
+ * One item from `GET /handoffs/my-orders` — real, confirmed per
+ * docs/API.md (2026-08-17). Every order this rider has ever been
+ * assigned, current and past, newest first. Closes the gap
+ * `store/rider-jobs.store.ts` used to paper over with a device-local
+ * cache — see `modules/rider/hooks/use-my-orders.ts`, which supersedes
+ * it. No receiver details, same reasoning as `AvailableOrder`.
  */
-export interface AcceptedDelivery {
+export interface MyOrderSummary {
   id: string;
   trackingCode: string;
   status: OrderStatus;
@@ -174,7 +211,7 @@ export interface AcceptedDelivery {
   destinationNodeAddress: string;
   parcelDescription: string;
   parcelSize: OrderParcelSize;
-  acceptedAt: string;
+  createdAt: string;
 }
 
 /**
@@ -202,34 +239,6 @@ export interface CollectParcelPayload {
    * one thing it's for.
    */
   identityConfirmed: boolean;
-}
-
-/**
- * A parcel sitting at the destination Node between `intake` and
- * `collect`, held client-side.
- *
- * Same API gap as `AcceptedDelivery` above, one step further along:
- * `intake`, `collection-code/resend` and `collect` are all keyed on the
- * order **uuid** and scoped to the destination Node, but
- * `GET /handoffs/orders/by-tracking-code/:code` — the only documented
- * way to resolve a human-readable code into a uuid — is scoped to the
- * *origin* Node. So the destination operator can never look up an order
- * they're responsible for.
- *
- * The uuid does pass through their hands exactly once: `confirm-handoff`
- * (`rider_arrival`) returns it when the rider hands the parcel over.
- * That's the only moment it can be captured, so it's captured then. See
- * store/node-parcels.store.ts.
- */
-export interface AwaitingCollectionParcel {
-  id: string;
-  trackingCode: string;
-  status: OrderStatus;
-  destinationNodeId: string;
-  /** When the rider handed it over (`confirm-handoff`, `rider_arrival`). */
-  arrivedAt: string;
-  /** When `intake` ran and the receiver was emailed their code — absent until then. */
-  intakeAt?: string;
 }
 
 /** Collection codes live an hour, per docs/API.md — twelve times the rider codes' 5 minutes, since the receiver has to read an email and travel. */

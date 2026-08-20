@@ -21,27 +21,26 @@ export const ROUTES = {
   track: (id: string) => `/delivery/${id}/track`,
   trackList: "/track",
 
-  // Vendor (Shop Owner / Node Operator)
-  vendorHome: "/vendor/home",
-  vendorScan: "/vendor-scan",
-  vendorActivity: "/vendor/activity",
-  vendorFlag: (parcelId: string) => `/vendor/parcels/${parcelId}/flag`,
-  vendorProfile: "/vendor/profile",
-  vendorNodeSetup: "/vendor/node-setup",
+  // Node Operator (manages one Node — a Pickup Station)
+  nodeHome: "/node/home",
+  nodeScan: "/node-scan",
+  nodeActivity: "/node/activity",
+  nodeProfile: "/node/profile",
+  /** This Node's revenue-split entries (origin-Node orders only) — `GET /earnings/my-node`. Reached from Profile. */
+  nodeEarnings: "/node/earnings",
+  nodeSetup: "/node/setup",
   /** Consumer drop-off preview + confirm — `GET /handoffs/orders/by-tracking-code/:code` then `POST .../drop-off`. Reached from the scanner or manual code entry. */
-  vendorDropOff: (trackingCode: string) => `/vendor/drop-off/${trackingCode}`,
-  /** Operator types the rider's 6-digit code — `POST /handoffs/orders/:id/confirm-handoff`, both `rider_pickup` (origin) and `rider_arrival` (destination). */
-  vendorRiderHandoff: "/vendor/rider-handoff",
-  /** Parcels at this Node between arrival and collection. Client-side list — no destination-scoped orders endpoint exists (see store/node-parcels.store.ts). */
-  vendorAwaitingCollection: "/vendor/awaiting-collection",
-  /** Receiver collection: code entry + identity attestation — `POST /handoffs/orders/:id/collect`. */
-  vendorCollect: (orderId: string) => `/vendor/awaiting-collection/${orderId}/collect`,
+  nodeDropOff: (trackingCode: string) => `/node/drop-off/${trackingCode}`,
+  /** Details page for one Awaiting Pickup / Awaiting Arrival order — full order info + the rider's 6-digit code entry, `POST /handoffs/orders/:id/confirm-handoff` (`type` inferred from the order's own `myRole`). Reached from Home's Awaiting Pickup/Awaiting Arrival tabs. Added 2026-08-17 when the standalone Inventory screen was retired — its Pickup/Incoming tabs moved here. */
+  nodeHandoffDetail: (orderId: string) => `/node/handoff/${orderId}`,
+  /** Receiver collection: complete collection info, the check-in/"Send" action (`POST .../intake`) when the parcel hasn't been checked in yet, or code entry + identity attestation (`POST .../collect`) once it has. Reached from Home's Ready for Collection tab. */
+  nodeCollect: (orderId: string) => `/node/awaiting-collection/${orderId}/collect`,
 
   // Rider
   riderHome: "/rider/home",
   /** The job board — `GET /handoffs/available-orders`. */
   riderAvailableJobs: "/rider/available-jobs",
-  /** Rider's own accepted deliveries. Client-side only — no rider-scoped orders endpoint exists (see store/rider-jobs.store.ts). */
+  /** Rider's own accepted deliveries — `GET /handoffs/my-orders`, filtered to non-terminal statuses. */
   riderActiveDeliveries: "/rider/active-deliveries",
   /** Where the rider requests + shows the 6-digit handoff code for one delivery. */
   riderHandoff: (orderId: string) => `/rider/active-deliveries/${orderId}/handoff`,
@@ -60,6 +59,8 @@ export const ROUTES = {
   adminPricing: "/admin/pricing",
   adminDisputes: "/admin/disputes",
   adminAnalytics: "/admin/analytics",
+  /** Split-ratio config + payout-readiness entries — `POST/GET /admin/revenue-split`, `GET .../entries`, `PATCH .../mark-paid`. Replaces the old `/admin/rider-earnings` screen (undocumented endpoint, removed) next to "Analytics" (its closest thematic neighbour). */
+  adminRevenueSplit: "/admin/revenue-split",
   adminSettings: "/admin/settings",
 } as const;
 
@@ -71,15 +72,22 @@ export const QUERY_KEYS = {
   delivery: (id: string) => ["deliveries", id] as const,
   paymentIntent: (id: string) => ["payment-intent", id] as const,
 
-  vendorNodeProfile: ["vendor", "node-profile"] as const,
-  vendorNodeOperatorProfile: ["vendor", "node-operator-profile"] as const,
-  vendorParcels: ["vendor", "parcels"] as const,
-  vendorActivity: ["vendor", "activity"] as const,
+  nodeOperatorProfile: ["node", "operator-profile"] as const,
+  nodeParcels: ["node", "parcels"] as const,
+  nodeActivity: ["node", "activity"] as const,
+  /** `GET /handoffs/my-node/orders` — every order that's touched this Node, either side. Source for the rider-handoff pick-lists and the awaiting-collection screen alike; invalidate this after any handoff/intake/collect mutation. */
+  nodeMyOrders: ["node", "my-node-orders"] as const,
+  /** `GET /earnings/my-node` — this Node's revenue-split entries (origin-Node orders only). */
+  nodeEarnings: ["node", "earnings"] as const,
 
   riderAvailability: ["rider", "availability"] as const,
+  /** `GET /earnings/mine` — the rider's own revenue-split entries, reduced client-side into today/total stats. */
   riderEarnings: ["rider", "earnings"] as const,
   riderVerification: ["rider", "verification"] as const,
-  riderJobHistory: ["rider", "job-history"] as const,
+  /** `GET /earnings/mine`'s raw entry list — distinct from `riderEarnings` above (same endpoint, different query fn/shape: reduced summary vs. raw entries). */
+  riderEarningsEntries: ["rider", "earnings-entries"] as const,
+  /** `GET /handoffs/my-orders` — every order this rider has ever been assigned. Source for the active-deliveries list; invalidate after accept/request-code (404). */
+  riderMyOrders: ["rider", "my-orders"] as const,
 
   // Handoffs module. `availableOrders` is keyed on the coordinates it
   // was sorted against and the page — a different position is a
@@ -88,8 +96,8 @@ export const QUERY_KEYS = {
   riderAvailableOrdersRoot: ["rider", "available-orders"] as const,
   riderAvailableOrders: (latitude: number, longitude: number, page: number) =>
     ["rider", "available-orders", latitude, longitude, page] as const,
-  vendorHandoffOrder: (trackingCode: string) =>
-    ["vendor", "handoff-order", trackingCode] as const,
+  nodeHandoffOrder: (trackingCode: string) =>
+    ["node", "handoff-order", trackingCode] as const,
 
   adminDashboardStats: ["admin", "dashboard-stats"] as const,
   adminRecentOrders: ["admin", "recent-orders"] as const,
@@ -109,6 +117,8 @@ export const QUERY_KEYS = {
   adminTopNodes: ["admin", "top-nodes"] as const,
   adminRiderPerformance: ["admin", "rider-performance"] as const,
   adminOrdersTrend: ["admin", "orders-trend"] as const,
+  adminRevenueSplitRatios: ["admin", "revenue-split-ratios"] as const,
+  adminRevenueSplitEntries: ["admin", "revenue-split-entries"] as const,
 };
 
 /** Business rules shared between UI validation and quote calculation */

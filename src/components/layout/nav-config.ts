@@ -1,5 +1,4 @@
 import {
-  ArchiveIcon,
   HomeIcon,
   TrackIcon,
   UserIcon,
@@ -33,27 +32,30 @@ export const USER_NAV_ITEMS: NavItem[] = [
 ];
 
 /**
- * Vendor (Shop Owner) nav — Home / Scan / Activity / Profile per Figma,
- * plus "Handoff" (2026-08-14), which has no home in the original design:
- * `POST /handoffs/orders/:id/confirm-handoff` is operator-initiated from
- * a code the rider states, so it can't hang off the QR scanner the way
- * consumer drop-off does. Placed next to "Scan" as its closest
- * thematic neighbour — both are counter actions on a parcel in hand.
+ * Node Operator nav — Home / Scan / Activity / Profile per Figma.
  *
- * "Collect" joined them 2026-08-15 for the same reason. Scan / Handoff /
- * Collect are now the three custody moments at a counter — consumer in,
- * rider through, receiver out — so they sit together, ahead of the two
- * secondary screens. Six items is the ceiling for `BottomNav`'s
- * equal-width tabs; a seventh would need the nav restructured rather
- * than extended.
+ * "Inventory" (added 2026-08-17, one screen tabbed into Pickup/Incoming/
+ * Collection/History) is retired the same day, not just hidden — its
+ * four tabs were fully redistributed rather than deleted: Pickup and
+ * Incoming became Home's "Awaiting Pickup"/"Awaiting Arrival" tabs
+ * (`NodeHomeScreen`, same `GET /handoffs/my-node/orders` query,
+ * same confirm-handoff flow, now reached via a dedicated details page
+ * — `HandoffDetailScreen` at `ROUTES.nodeHandoffDetail`); Collection
+ * became Home's "Ready for Collection" tab (`CollectParcelScreen`,
+ * extended to also cover the check-in/"Send" step); History became a
+ * second tab on the Activity screen (`ActivityScreen`'s "Order
+ * History"). Home is now the single place a Node operator sees
+ * everything happening at their counter — a "dashboard" that Inventory
+ * duplicated rather than fed — so it doesn't need its own nav item
+ * anymore. "Handoff" (2026-08-14) and "Collect" (2026-08-15) were the
+ * two screens Inventory itself replaced; see that day's history if
+ * you're tracing this further back.
  */
-export const VENDOR_NAV_ITEMS: NavItem[] = [
-  { label: "Home", href: ROUTES.vendorHome, icon: HomeIcon },
-  { label: "Scan", href: ROUTES.vendorScan, icon: QrCodeIcon },
-  { label: "Handoff", href: ROUTES.vendorRiderHandoff, icon: TruckIcon },
-  { label: "Collect", href: ROUTES.vendorAwaitingCollection, icon: ArchiveIcon },
-  { label: "Activity", href: ROUTES.vendorActivity, icon: ActivityIcon },
-  { label: "Profile", href: ROUTES.vendorProfile, icon: UserIcon },
+export const NODE_NAV_ITEMS: NavItem[] = [
+  { label: "Home", href: ROUTES.nodeHome, icon: HomeIcon },
+  { label: "Scan", href: ROUTES.nodeScan, icon: QrCodeIcon },
+  { label: "Activity", href: ROUTES.nodeActivity, icon: ActivityIcon },
+  { label: "Profile", href: ROUTES.nodeProfile, icon: UserIcon },
 ];
 
 /**
@@ -82,9 +84,15 @@ export const RIDER_NAV_ITEMS: NavItem[] = [
  * `admin/pricing`) with no home in the original 8-frame design, so
  * they're placed after "Team" (their closest thematic neighbor —
  * account/role administration) rather than invented a new design
- * section. "Settings" (Super Admin) is rendered separately, pinned to
- * the bottom of the sidebar, same as the account footer pattern
- * already used there.
+ * section. "Revenue Split" (`/admin/revenue-split`) joined them
+ * 2026-08-20, placed next to "Analytics" — its closest thematic
+ * neighbour — rather than a new section, same reasoning as above; it
+ * replaces an earlier "Rider Earnings" screen built against
+ * `/admin/rider-earnings`, an endpoint that doesn't exist in
+ * docs/API.md.
+ * "Settings" (Super Admin) is rendered separately, pinned to the bottom
+ * of the sidebar, same as the account footer pattern already used
+ * there.
  */
 export const ADMIN_NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: ROUTES.adminDashboard, icon: HomeIcon },
@@ -95,6 +103,7 @@ export const ADMIN_NAV_ITEMS: NavItem[] = [
   { label: "Pricing", href: ROUTES.adminPricing, icon: CreditCardIcon },
   { label: "Disputes", href: ROUTES.adminDisputes, icon: AlertTriangleIcon },
   { label: "Analytics", href: ROUTES.adminAnalytics, icon: BarChartIcon },
+  { label: "Revenue Split", href: ROUTES.adminRevenueSplit, icon: WalletIcon },
 ];
 
 export const ADMIN_SETTINGS_NAV_ITEM: NavItem = {

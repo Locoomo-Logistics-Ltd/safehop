@@ -1,10 +1,6 @@
 
 import { httpClient } from "@/core/api/client";
 import { ENDPOINTS } from "@/core/api/endpoints";
-// import { ApiError } from "@/core/api/errors";
-// import { mockDelay, generateId } from "@/core/mocks/mock-utils";
-// import { MOCK_DELIVERIES } from "@/core/mocks/mock-deliveries";
-// import { MOCK_NODES } from "@/core/mocks/mock-nodes";
 import type { PaginatedList } from "@/core/api/types";
 import type {
   CreatePaymentIntentPayload,
@@ -27,37 +23,7 @@ import type {
  * no-op `pay()` flow, which targeted undocumented routes and never
  * actually collected payment — see docs/API_INTEGRATION_STATUS.md's
  * "Payments" section for the before/after.
- *
- * The commented-out mock block below still assumes the old
- * `Delivery`/`DeliveryQuote` shapes (core/types/delivery.types.ts) —
- * left untouched per the project's standing "don't remove mock code
- * until feature-complete" instruction, but it no longer matches this
- * file's real methods and shouldn't be un-commented as-is.
  */
-
-// ── In-memory mock store (persists for the session only) ───────
-
-// let mockDeliveryStore: Delivery[] = [...MOCK_DELIVERIES];
-
-// const mockDeliveryService = {
-//   async list(): Promise<Delivery[]> {
-//     await mockDelay();
-//     return [...mockDeliveryStore].sort(
-//       (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-//     );
-//   },
-
-//   async getById(id: string): Promise<Delivery> {
-//     await mockDelay(300);
-//     const delivery = mockDeliveryStore.find((d) => d.id === id);
-//     if (!delivery) {
-//       throw new ApiError({ message: "Delivery not found.", status: 404, code: "NOT_FOUND" });
-//     }
-//     return delivery;
-//   },
-// };
-
-// ── Real implementation ─────────────────────────────────────────
 
 const realDeliveryService = {
   /** GET /orders — the requesting Consumer's own orders. Real, confirmed route per docs/API.md. */

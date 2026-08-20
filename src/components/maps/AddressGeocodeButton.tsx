@@ -16,13 +16,13 @@ interface AddressGeocodeButtonProps {
  * "Find Coordinates from Address" — resolves latitude/longitude from an
  * Address/City/State combo, instead of requiring whoever's creating a
  * Node (Admin's `OnboardNodeForm`, a NodeOperator's own
- * `VendorNodeSetupScreen`) to type raw coordinates by hand. A wrong or
+ * `NodeSetupScreen`) to type raw coordinates by hand. A wrong or
  * placeholder lat/lng here is exactly what makes a Node invisible to
  * `GET /nodes/nearby` for every Consumer searching from a real
  * location, so getting this right matters more than it looks like it
  * should.
  *
- * Shared between `modules/admin` and `modules/vendor` (promotion
+ * Shared between `modules/admin` and `modules/node` (promotion
  * pattern — see `ARCHITECTURE.md`'s note on `QrScannerView`/
  * `OtpInputBoxes`). Provider-agnostic: it calls `geocodingService` and
  * doesn't know or care whether Geoapify or Google answered.

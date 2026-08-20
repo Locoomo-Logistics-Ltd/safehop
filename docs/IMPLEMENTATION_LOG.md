@@ -1979,3 +1979,1103 @@ rendering and a real geocode response have not been seen. The response
 parsing is written defensively (missing `features`, non-numeric
 `lat`/`lon`, and a 200-with-no-results are each handled) but the happy
 path is unexercised.
+
+---
+
+## 2026-08-15 (last — rider handoff: the operator stops asking the rider for a tracking code)
+
+**Feature**: Reworked the Node operator's rider-handoff flow so the only
+thing a rider has to produce at a counter is their 6-digit code, which
+is all `docs/API.md` ever said passes between them. The operator now
+resolves *which parcel* from their own Node's records instead.
+
+**The bug, stated precisely**: `RiderHandoffScreen` made "tracking code"
+a required first field and hinted the operator could "read it off the
+rider's screen." Nothing in the contract supports that.
+`POST /handoffs/orders/:id/request-code` returns `{code, expiresAt}` —
+no order reference — and the code is neither emailed nor logged, so it
+is *the entire* rider→operator payload. Every rider therefore arrived
+with six digits and was asked for a second identifier the app had no
+right to expect. The endpoint layer was already correct; what was wrong
+was where the frontend expected the order **uuid** to come from.
+
+**Where the uuid actually comes from, per direction** (this is the whole
+design):
+
+- **`rider_pickup` (origin).** The origin operator already handled this
+  parcel — they looked it up by tracking code and confirmed its drop-off
+  at their own counter, and `POST /drop-off` hands back the uuid in its
+  response. That is now captured into a new
+  `store/node-outgoing.store.ts`, and the handoff screen shows it as a
+  pick-list. Operator taps the parcel, types six digits, done.
+- **`rider_arrival` (destination).** Still blocked backend-side (gap #2
+  below, unchanged). The destination Node hears about a parcel for the
+  first time when the rider walks in, and `by-tracking-code` is
+  origin-scoped. The screen still offers a lookup, but keyed on the code
+  **printed on the parcel label** — the object is in the operator's
+  hands — and its `404` copy now says plainly that arrivals can't be
+  looked up yet rather than implying operator error.
+
+**Files changed**:
+- Created `src/store/node-outgoing.store.ts` — parcels this Node is
+  holding for a rider. Origin-side twin of `node-parcels.store.ts`, with
+  one important difference documented in its header: **this list is
+  recoverable.** `by-tracking-code` is scoped to exactly this Node's
+  outgoing orders, so a cleared browser or a drop-off taken on the shop's
+  other tablet can be rebuilt from the parcel label. The destination
+  store has no such path. `addParcel` merges rather than replaces, so a
+  record captured from a bare `HandoffOrderSummary` (codes only) gains
+  its description/destination when re-resolved — rows an operator can't
+  tell apart are useless at a counter.
+- Created `src/modules/vendor/hooks/use-outgoing-parcels.ts` — mirrors
+  `use-awaiting-collection.ts` exactly (effect-based hydration,
+  `isHydrated` so the picker never flashes an empty state). Filters to
+  the two statuses a pickup can legally confirm.
+- `src/core/types/handoff.types.ts` — added `OutgoingParcel`; extended
+  the module header's point 1 to say the code carries no order identity,
+  so no screen may ever ask a rider for a tracking code.
+- `src/modules/vendor/hooks/use-handoff-lookup.ts` — the drop-off
+  confirm now records the order into the outgoing store, merging in the
+  preview's `parcelDescription`/`parcelSize`/`destinationNodeName`.
+- `src/modules/vendor/hooks/use-confirm-handoff.ts` — owns
+  `selectedOrderId`; `confirmHandoff(code)` now takes only a code.
+  Pickup success prunes the row; arrival success still captures into
+  `node-parcels.store.ts` (unchanged, and still the only moment that
+  uuid exists for a destination operator). New: a confirm that returns
+  `409 ILLEGAL_ORDER_TRANSITION`/`404 NOT_FOUND` on a *listed* parcel
+  proves the local row stale, so it's pruned and its tracking code
+  returned as `prunedTrackingCode` — a row vanishing mid-tap with no
+  explanation is worse than the stale row was.
+- `src/modules/vendor/components/handoff/RiderHandoffScreen.tsx` —
+  step 2 rebuilt: radio-style parcel rows for pickup, a collapsed
+  "not listed?" label-code fallback (auto-opened when the list is
+  empty), one shared "what you're confirming" card for both paths, and a
+  pre-flight warning when the selected parcel is still
+  `awaiting_drop_off` (a guaranteed 409). Step 3's copy now ends "That's
+  the only thing they need to give you."
+- `src/modules/rider/components/active-delivery/HandoffCodeScreen.tsx` —
+  says the same thing from the rider's side ("These 6 digits are all the
+  operator needs"), so a rider doesn't start reciting a tracking code at
+  the counter. Its "not on this device" empty state no longer tells the
+  rider the operator can find the parcel by tracking code — true at an
+  origin Node, false at a destination one.
+
+**Backend finding, confirmed live this session** (unauthenticated route
+probes against `https://locoomo-api.up.railway.app`, which distinguishes
+`Cannot GET …` from `UNAUTHENTICATED`):
+- `GET /nodes/operator/inventory` → **`404 Cannot GET`. The route does
+  not exist on the deployed backend.** `VendorHomeScreen` renders its
+  `isError` state as the same "No parcels here" empty state as a genuine
+  empty list, so **the Node Dashboard's parcel list is silently, always
+  empty in production.** Not fixed here (out of scope), but it is why
+  the outgoing list had to be built from drop-off confirms rather than
+  from the dashboard's list, and it should be the next thing someone
+  picks up.
+- `GET /handoffs/my-deliveries`, `/handoffs/orders`,
+  `/handoffs/node-orders`, `/handoffs/incoming-orders`,
+  `/handoffs/orders/at-node`, `/nodes/operator/parcels`,
+  `/nodes/me/parcels`, `POST /handoffs/confirm-handoff` (code-only, no
+  order id) → all `404 Cannot GET/POST`. So neither client store has a
+  server-side alternative hiding behind an undocumented route, and there
+  is no code-only confirm endpoint. `by-tracking-code`,
+  `available-orders` and `confirm-handoff` all answer `UNAUTHENTICATED`,
+  i.e. they exist as documented.
+
+**Verification**: `npx tsc --noEmit` clean, `npx eslint src` clean,
+`yarn build` from a cleared `.next` succeeds; `/vendor/rider-handoff`
+and `/rider/active-deliveries/[orderId]/handoff` both return `200` from
+a running dev server. **Not verified**: nothing was clicked through in a
+browser (no browser tooling available in this session) and no
+NodeOperator session exists to exercise the endpoints, so the pickup
+pick-list, the prune-on-409 path and the arrival lookup's real
+behaviour against the deployed backend are all unexercised. The single
+open question that only a live NodeOperator account can settle is
+whether the deployed `by-tracking-code` is as origin-scoped as its docs
+say — if it isn't, arrivals already work through the label fallback.
+
+---
+
+## 2026-08-15 (last, follow-up — the parcel-lookup field comes off `/vendor/rider-handoff` entirely)
+
+**Feature**: Removed the tracking-code input and its "Find" button from
+the rider-handoff screen. The screen now has exactly one input in either
+direction: the rider's 6 digits.
+
+**Why, on top of the pass above**: that pass kept the lookup as a
+fallback for a parcel missing from the outgoing list, collapsed behind a
+"not listed?" link. Reviewed at the counter, that's still wrong — **any
+code box on this screen reads as something to ask the rider for**, which
+is the exact confusion the whole change exists to remove. The field
+being technically optional doesn't help an operator who's already
+looking at a rider.
+
+**What replaced it, per direction**:
+- **Pickup.** Pick-list only. The recovery for a parcel that isn't on
+  it moved to the scanner: `useHandoffLookup` now records into
+  `store/node-outgoing.store.ts` on the **lookup**, not just the
+  drop-off confirm, so scanning a parcel's label at `/vendor-scan` puts
+  it back on the list with no state change implied. That's the same
+  origin-scoped `by-tracking-code` call as before, just reached from the
+  screen where a code box unambiguously means "read the label". The
+  empty-list state now links straight to the scanner.
+- **Arrival.** No form at all — a card explaining that a Node can only
+  see parcels it sent out, so there is nothing to match the rider's code
+  against, and this needs a backend change. **This is a deliberate loss
+  of a maybe-working path**: `by-tracking-code` is documented as
+  origin-scoped, but nobody has ever tested it with a live NodeOperator
+  session, so a laxer deployment might have made the old field work.
+  Recorded here so it isn't rediscovered as a regression — reinstating
+  arrivals is gated on the backend ask in `use-confirm-handoff.ts`'s
+  header, after which arrival becomes the same pick-a-parcel flow as
+  pickup.
+
+**Files changed**:
+- `src/modules/vendor/components/handoff/RiderHandoffScreen.tsx` —
+  removed the `Input`/Find pair, `trackingCode`/`isLookupOpen` state, the
+  lookup error branches and the now-redundant "selected parcel" summary
+  card (the picked row is already highlighted). Arrival renders the
+  blocked-state card instead of steps 2 and 3.
+- `src/modules/vendor/hooks/use-confirm-handoff.ts` — the lookup
+  mutation is gone; selection comes only from the outgoing list.
+  `selectedParcel` is a plain find over it. Everything else (direction,
+  prune-on-stale, attempt counting, the arrival capture into
+  `node-parcels.store.ts`) is unchanged.
+- `src/modules/vendor/hooks/use-handoff-lookup.ts` — records the
+  resolved order into the outgoing store from an effect on the lookup
+  query's data, gated on `isAwaitingRiderPickup` so parcels past pickup
+  aren't re-added just to 409 later.
+
+**Verification**: `npx tsc --noEmit` clean, `npx eslint src` clean,
+`yarn build` from a cleared `.next` succeeds; `/vendor/rider-handoff`
+and `/vendor/drop-off/[trackingCode]` both return 200 from a dev server.
+Still no browser click-through and no NodeOperator session — the
+pick-list, the scan-to-recover path and the prune-on-409 path remain
+unexercised against anything real.
+
+---
+
+## 2026-08-16 — `RiderHandoffScreen` actually wired to the rebuilt hooks
+
+**Feature**: None — this is a correctness fix. The previous session
+("2026-08-15, last, follow-up") rebuilt `use-confirm-handoff.ts`,
+`use-handoff-lookup.ts`, `use-outgoing-parcels.ts` and
+`store/node-outgoing.store.ts` around "the rider gives you six digits
+and nothing else," and its log entry describes `RiderHandoffScreen.tsx`
+as already rebuilt to match — a pick-list for pickup, an honest blocked
+card for arrival. That description did not match the file on disk.
+
+**The bug, stated precisely**: `RiderHandoffScreen.tsx` still had its
+old body, with the tracking-code/order-id lookup UI commented out and
+the hook destructure still naming removed exports
+(`resolveByTrackingCode`, `resolvedOrder`, `isResolving`,
+`lookupNotFound`, `lookupError`) in commented-out lines. The "Which
+parcel?" step was entirely commented out, so `selectOrder` was never
+called from the UI. `useConfirmHandoff`'s `confirmHandoff(code)` is a
+no-op when `selectedOrderId` is unset (`if (!selectedOrderId) return;`),
+so **pickup could not complete** — the confirm button was reachable and
+enabled (`canConfirm` only checked code length) but tapping it silently
+did nothing. Re-reading `docs/API.md` confirmed the hook layer's design
+was correct as documented: `confirm-handoff` takes `type` and `code` in
+the body but needs the order **uuid** in its path, and the rider's code
+carries no order identity, so an order must be resolved client-side
+before the request can be made.
+
+**Fix**: Rebuilt `RiderHandoffScreen.tsx`'s body to match the hooks that
+were already correct:
+- Pickup renders a pick-list from `outgoingParcels`
+  (`use-outgoing-parcels.ts`, gated on `isOutgoingHydrated` to avoid an
+  empty-state flash), each row calling `selectOrder(parcel.id)`. An
+  empty list shows a card linking to `/vendor-scan` (the documented
+  recovery path — scanning a label re-adds a parcel via
+  `by-tracking-code`, which is origin-scoped). `prunedTrackingCode` is
+  surfaced when a listed parcel turns out to be stale.
+- Arrival renders the blocked-state card only — no form, no code input,
+  no confirm button, since there is no way to set `selectedOrderId` for
+  that direction (backend gap, unchanged, documented in
+  `use-confirm-handoff.ts`'s header and
+  `API_INTEGRATION_STATUS.md`'s Inconsistencies section).
+- `canConfirm` is now `isPickup && !!selectedOrderId && code.length ===
+  HANDOFF_CODE_LENGTH` — previously it only checked code length, which
+  is what let the button sit enabled with nothing selected.
+- Removed the dead commented-out block and its unused imports (`Input`,
+  the tracking-code/order-id state).
+- The success screen (pickup/arrival copy, chained `useParcelIntake`
+  check-in for arrival) was already correct and is unchanged — arrival's
+  branch stays in place for when the backend gap closes, per the prior
+  session's reasoning; it just can't be reached today.
+
+**Files changed**:
+- `src/modules/vendor/components/handoff/RiderHandoffScreen.tsx` — body
+  rebuilt as above. No change to `use-confirm-handoff.ts`,
+  `use-handoff-lookup.ts`, `use-outgoing-parcels.ts`,
+  `store/node-outgoing.store.ts`, `store/node-parcels.store.ts`,
+  `use-parcel-intake.ts`, or any type — all of those already matched
+  `docs/API.md`.
+
+**Verification**: `npx tsc --noEmit` clean, `npx eslint src` clean,
+`next build` from a cleared `.next` succeeds; `/vendor/rider-handoff`
+returns `200` from both the production build and a dev server, with no
+`Application error`/`__next_error__` markers in the response body.
+**Not verified**: no NodeOperator session was available, so the
+pick-list rendering with real data, the scan-to-recover path, and the
+prune-on-409 path are still unexercised against a live backend — same
+open item the previous two sessions left, unchanged by this fix.
+
+---
+
+## 2026-08-17 — `my-orders`/`my-node/orders` land, arrival handoff finally works, rider payouts + license number
+
+**Feature**: `docs/API.md` gained four things since the last session:
+`GET /handoffs/my-orders` (rider), `GET /handoffs/my-node/orders`
+(NodeOperator, either side via `myRole`), `GET /admin/rider-earnings`
+(Admin payout report), and `licenseNumber` on `POST /riders/onboarding`.
+This session implemented all four and used the first two to finish the
+rider-handoff work the last two sessions had to leave half-done.
+
+**The bug the last session left standing**: `/vendor/rider-handoff`
+could only ever complete a `rider_pickup`. Arrival was rendered as a
+static "can't be done yet" card, because `confirm-handoff` needs the
+order's uuid in its path and, at the time, there was no documented way
+for a *destination* Node operator to learn one before the rider showed
+up — `by-tracking-code` is origin-scoped, and nothing else existed.
+That was a correct read of `docs/API.md` as it stood. It stopped being
+correct the moment `GET /handoffs/my-node/orders` shipped.
+
+**What changed, per endpoint**:
+
+- **`GET /handoffs/my-node/orders`** returns every order that's ever
+  touched the caller's Node, either as origin or destination, `myRole`
+  on each item saying which. New hook
+  `src/modules/vendor/hooks/use-my-node-orders.ts` wraps it in one
+  TanStack Query and exports four pure filters —
+  `isAwaitingPickup`/`isAwaitingArrival`/`needsIntake`/
+  `isReadyForCollection` — each a `myRole` + `status` predicate.
+- **`GET /handoffs/my-orders`** returns every order a rider has ever
+  been assigned, current and past. New hook
+  `src/modules/rider/hooks/use-my-orders.ts`, with
+  `isActiveDelivery`/`nextHandoffType` filters mirroring the vendor
+  side's shape.
+- **`GET /admin/rider-earnings`** — read-only payout-readiness report,
+  one row per rider with a `completed` order, sorted by amount owed
+  descending, each row expandable to that rider's individual orders.
+  New `RiderPayoutSummary`/`RiderPayoutOrder` types, `getRiderEarnings`
+  on `adminService`, `useRiderEarnings` hook, `RiderEarningsScreen` at
+  `/admin/rider-earnings`, added to `ADMIN_NAV_ITEMS` next to
+  "Analytics" (its closest thematic neighbour, same placement reasoning
+  as "Pricing"/"Approvals" before it).
+- **`licenseNumber`** — added to `SubmitRiderVerificationPayload` and
+  `RiderVerificationProfile` (`string | null`, `null` for pre-existing
+  riders). `RiderVerificationScreen`'s form gained a required input;
+  the approved-status view shows it when present.
+
+**The actual fix — `RiderHandoffScreen` rebuilt for symmetric pickup/
+arrival**: Both directions now render the identical shape of pick-list,
+sourced from `useConfirmHandoff`'s `pickableOrders` (which filters
+`use-my-node-orders.ts`'s `orders` by `isAwaitingPickup` or
+`isAwaitingArrival` depending on the selected direction). Tap a row,
+type the rider's 6 digits, confirm — same interaction, same code, same
+endpoint (`confirm-handoff`), differing only in `type` and which filter
+picked the list. `useConfirmHandoff` no longer owns any localStorage
+state; `selectOrder`/`selectedOrderId` are the only client state left,
+and every mutation (`confirmHandoff`, `useCollectParcel`,
+`useParcelIntake`, `useHandoffLookup`'s drop-off confirm) now
+invalidates `QUERY_KEYS.vendorMyNodeOrders` instead of hand-writing a
+store update.
+
+**Three stores deleted, not deprecated**: `store/rider-jobs.store.ts`,
+`store/node-outgoing.store.ts`, `store/node-parcels.store.ts`. Every
+consumer was rewired to the two new hooks:
+- Vendor: `use-confirm-handoff.ts`, `use-handoff-lookup.ts`,
+  `use-awaiting-collection.ts`, `use-collect-parcel.ts`,
+  `use-parcel-intake.ts`, `AwaitingCollectionScreen.tsx`,
+  `CollectParcelScreen.tsx`.
+- Rider: `use-active-deliveries.ts`, `use-accept-order.ts`,
+  `use-handoff-code.ts`, `ActiveDeliveriesScreen.tsx`,
+  `HandoffCodeScreen.tsx`.
+
+One behavior change worth flagging: `AwaitingCollectionScreen` and
+`CollectParcelScreen` used to show "arrived X ago"/"checked in X ago"
+relative-time text, backed by timestamps the old stores recorded
+themselves (`arrivedAt`, `intakeAt`) the moment each transition
+happened on-device. `NodeOrderSummary` (the `my-node/orders` item
+shape) carries no per-transition timestamp, only `createdAt` (order
+placement) — so those lines were removed rather than reattached to a
+value that would now be wrong or misleading. If per-transition timing
+is wanted back, it needs a real field on the API response.
+
+Also, `useAcceptOrder` (rider) seeds the accepted order straight into
+`QUERY_KEYS.riderMyOrders`'s cache via `setQueryData` before navigating
+to the handoff-code screen, rather than relying on the invalidated
+query's refetch to land in time — a network round-trip between accept
+and the handoff screen mounting would otherwise flash "nothing to hand
+off here" for a beat.
+
+**Deliberately not wired**: `MyDeliveriesScreen` ("My Deliveries"
+earnings tab / `useJobHistory` / `DeliveryHistoryRow`). Its row needs a
+`payout` amount per job; neither `my-orders` nor any other route in
+`docs/API.md` returns a rider-facing fee figure — `GET
+/admin/rider-earnings` is Admin-only and reports the consumer-paid
+`amountKobo`, not a rider payout rate, which still doesn't exist as a
+concept anywhere in the contract. Wiring `getMyOrders()` into that
+screen would mean fabricating numbers the API doesn't provide, so
+`riderService.getEarningsSummary()`/`getJobHistory()` both stay
+`NOT_IMPLEMENTED`, documented in that file's header.
+
+**Files changed**:
+- `src/core/types/handoff.types.ts` — added `NodeOrderRole`,
+  `NodeOrderSummary`, `MyOrderSummary`; removed `OutgoingParcel`,
+  `AwaitingCollectionParcel`, `AcceptedDelivery` (the three
+  store-shaped types, now dead); updated the module header.
+- `src/core/types/rider.types.ts` — `licenseNumber` on
+  `RiderVerificationProfile`/`SubmitRiderVerificationPayload`.
+- `src/core/types/admin.types.ts` — added `RiderPayoutSummary`,
+  `RiderPayoutOrder`.
+- `src/core/api/endpoints.ts` — `handoffs.myOrders`,
+  `handoffs.myNodeOrders`, `adminRiderEarnings.list`.
+- `src/core/config/constants.ts` — `ROUTES.adminRiderEarnings`;
+  `QUERY_KEYS.vendorMyNodeOrders`/`riderMyOrders`/`adminRiderEarnings`.
+- `src/core/api/services/vendor.service.ts` — `getMyNodeOrders`.
+- `src/core/api/services/rider.service.ts` — `getMyOrders`.
+- `src/core/api/services/admin.service.ts` — `getRiderEarnings`.
+- New: `src/modules/vendor/hooks/use-my-node-orders.ts`,
+  `src/modules/rider/hooks/use-my-orders.ts`,
+  `src/modules/admin/hooks/use-rider-earnings.ts`,
+  `src/modules/admin/components/rider-earnings/` (`RiderEarningsScreen.tsx`,
+  `index.ts`), `src/app/(admin)/admin/rider-earnings/page.tsx`.
+- Deleted: `src/store/rider-jobs.store.ts`,
+  `src/store/node-outgoing.store.ts`, `src/store/node-parcels.store.ts`,
+  `src/modules/vendor/hooks/use-outgoing-parcels.ts` (folded into
+  `use-my-node-orders.ts`).
+- Rewritten: `src/modules/vendor/hooks/use-confirm-handoff.ts`,
+  `use-handoff-lookup.ts`, `use-awaiting-collection.ts`,
+  `use-collect-parcel.ts`, `use-parcel-intake.ts`;
+  `src/modules/vendor/components/handoff/RiderHandoffScreen.tsx`;
+  `src/modules/vendor/components/collection/AwaitingCollectionScreen.tsx`,
+  `CollectParcelScreen.tsx`; `src/modules/rider/hooks/use-active-deliveries.ts`,
+  `use-accept-order.ts`, `use-handoff-code.ts`;
+  `src/modules/rider/components/active-delivery/ActiveDeliveriesScreen.tsx`,
+  `HandoffCodeScreen.tsx`; `src/modules/rider/hooks/use-rider-verification.ts`,
+  `src/modules/rider/components/verification/RiderVerificationScreen.tsx`.
+- `src/components/layout/nav-config.ts` — "Rider Earnings" nav item.
+
+**Verification**: `npx tsc --noEmit` clean, `npx eslint src` clean,
+`next build` from a cleared `.next` succeeds (`/admin/rider-earnings`
+appears in the route table alongside the rest). `/vendor/rider-handoff`,
+`/vendor/awaiting-collection`, `/rider/active-deliveries`,
+`/rider/verification`, `/admin/rider-earnings` all return `200` from a
+dev server with no `Application error`/`__next_error__` markers in the
+response body. **Not verified**: no NodeOperator, Rider, or Admin
+session was available, so none of the four new endpoints, the arrival
+pick-list, the collection screens' new timestamp-free rows, or the
+earnings table have been exercised against real data — the same open
+item every session in this module has left, unchanged by this pass.
+
+---
+
+## 2026-08-17 (follow-up) — three fragmented screens become one tabbed Inventory
+
+**Feature**: Replaced the Node operator's screen-per-step design
+(`RiderHandoffScreen` for `rider_pickup`/`rider_arrival`,
+`AwaitingCollectionScreen` for the destination-side shelf) with a
+single tabbed `InventoryScreen` at `/vendor/inventory`. The user's
+framing: that split stopped making sense once both screens turned out
+to read the exact same data — `GET /handoffs/my-node/orders`, wired
+earlier the same day — so a mobile-first PWA counter app should show
+one inventory, not three disconnected screens plus a nav item each.
+
+**Design**: Four tabs, one `useMyNodeOrders()` query, sliced four ways
+(`use-my-node-orders.ts`'s existing filters — nothing new needed there):
+- **Pickup** (`isAwaitingPickup`) — origin side, waiting on a rider.
+- **Incoming** (`isAwaitingArrival`) — destination side, rider en route.
+- **Collection** — `needsIntake` (one-tap "Check In & Email Receiver")
+  and `isReadyForCollection` (routes to `CollectParcelScreen`, kept
+  separate since code + identity attestation is a materially different
+  task than a list row).
+- **History** — every order, unfiltered, newest first per docs/API.md.
+  New: nothing before this showed the full record. Read-only, no
+  action affordance on any row.
+
+Pickup and Incoming rows **expand in place** rather than navigating —
+mobile-first means the single most frequent counter action (type six
+digits, confirm) shouldn't cost a page transition. `useConfirmHandoff`
+is unchanged and reused as-is; `InventoryScreen` keeps its
+`handoffType` synced to whichever of Pickup/Incoming is the active tab
+via one effect, and surfaces success via a toast
+(`useNotificationStore`) since the confirmed row just disappears from
+its tab on the next refetch rather than a dedicated success screen.
+
+**A lint fix worth noting**: the first draft of the expandable code
+panel kept `code` state at the list level and reset it in a
+`useEffect` keyed on `selectedOrderId` — `eslint-plugin-react-hooks`'s
+`set-state-in-effect` rule correctly flagged this as the "adjusting
+state in an effect" anti-pattern. Fixed by extracting the panel into
+its own `ConfirmPanel` subcomponent, rendered with `key={order.id}` —
+switching rows now mounts a fresh component with blank state instead
+of an effect reaching back to clear the previous one.
+
+**`RiderHandoffScreen.tsx` and `AwaitingCollectionScreen.tsx` deleted,
+not deprecated** — same-day files, retired same day, once their
+replacement existed. Their routes went with them: `/vendor/rider-handoff`
+(whole folder) and `/vendor/awaiting-collection/page.tsx` (the list
+page only — `/vendor/awaiting-collection/[orderId]/collect/page.tsx`
+survives unchanged, since Next's App Router doesn't require a parent
+segment to have its own `page.tsx`). `VENDOR_NAV_ITEMS` now has one
+"Inventory" entry (`ArchiveIcon`) where "Handoff" and "Collect" used to
+be two — net *fewer* bottom-nav items, not more. Two remaining
+cross-links fixed to point at `ROUTES.vendorInventory`:
+`NodeParcelRow.tsx` (Node Dashboard's ready-for-collection rows) and
+`CollectParcelScreen.tsx`'s two "Back to Counter" buttons.
+
+**Deliberately out of scope**: `VendorHomeScreen`'s own parcel list
+(`ParcelFilterTabs`/`NodeParcelRow`/`useNodeParcels`) is untouched. It's
+fed by the undocumented, still-404ing `GET /nodes/operator/inventory` —
+a real, older, separately-tracked gap, not the one this session closed.
+Pointing it at `use-my-node-orders.ts` is the natural next step, but
+`NodeParcel` (its current type) carries sender/receiver names that
+`NodeOrderSummary` doesn't — that's a product decision about what the
+row should show, not a data-source swap, so it's flagged rather than
+guessed at.
+
+**Files changed**:
+- New: `src/modules/vendor/components/inventory/` — `InventoryScreen.tsx`,
+  `InventoryTabs.tsx`, `HandoffOrderList.tsx`, `CollectionList.tsx`,
+  `HistoryList.tsx`, `index.ts`; `src/app/(vendor)/vendor/inventory/page.tsx`.
+- Deleted: `src/modules/vendor/components/handoff/RiderHandoffScreen.tsx`,
+  `src/modules/vendor/components/collection/AwaitingCollectionScreen.tsx`,
+  `src/app/(vendor)/vendor/rider-handoff/` (folder),
+  `src/app/(vendor)/vendor/awaiting-collection/page.tsx`.
+- `src/modules/vendor/components/handoff/index.ts`,
+  `src/modules/vendor/components/collection/index.ts` — drop the deleted
+  screens' exports.
+- `src/core/config/constants.ts` — `ROUTES.vendorInventory` replaces
+  `vendorRiderHandoff`/`vendorAwaitingCollection`.
+- `src/components/layout/nav-config.ts` — `VENDOR_NAV_ITEMS`'s
+  "Handoff"/"Collect" collapsed into one "Inventory" entry.
+- `src/modules/vendor/components/dashboard/NodeParcelRow.tsx`,
+  `src/modules/vendor/components/collection/CollectParcelScreen.tsx` —
+  cross-links repointed at `ROUTES.vendorInventory`.
+
+**Verification**: `npx tsc --noEmit` clean, `npx eslint src` clean
+(after the `ConfirmPanel` extraction above), `next build` from a
+cleared `.next` succeeds — `/vendor/rider-handoff` and
+`/vendor/awaiting-collection` are absent from the route table,
+`/vendor/inventory` and `/vendor/awaiting-collection/[orderId]/collect`
+are both present. `/vendor/inventory`, `/vendor/home`, and
+`/vendor/awaiting-collection/[some-id]/collect` all return `200` from a
+dev server with no `Application error`/`__next_error__` markers. **Not
+verified**: no NodeOperator session available, so the expand-in-place
+confirm flow, the tab count badges, and the History tab's real data
+have not been exercised against live orders.
+
+---
+
+## 2026-08-17 (follow-up 2) — Node Dashboard (`/vendor/home`) rebuilt off real endpoints
+
+**Feature**: closes the gap the previous entry explicitly flagged as
+"the best next task" — the Node Operator's Home screen
+(`VendorHomeScreen`) read the undocumented `GET
+/nodes/operator/inventory`, which 404s on the deployed backend
+(`docs/API_INTEGRATION_STATUS.md` item 2b). The screen's error state
+rendered identically to a genuine empty list ("No parcels here"), so
+the app's own Home tab was a dead endpoint behind a UI that looked
+fine — no error, no crash, just permanently wrong content.
+
+**Fix**: rebuilt the whole screen on the two real, confirmed routes
+already wired elsewhere in the app, rather than waiting on
+`/nodes/operator/inventory` to ever ship:
+- **`GET /node-operators/me`** (`vendorService.getMyNodeOperatorProfile()`)
+  for Node identity, address, and the self-reported max `capacity` —
+  same route `useVendorNodeSetup` already polls for approval status,
+  reused at the same `QUERY_KEYS.vendorNodeOperatorProfile` query key so
+  TanStack Query dedupes the two call sites.
+- **`GET /handoffs/my-node/orders`** (`useMyNodeOrders()`, already built
+  2026-08-17 earlier the same day for `InventoryScreen`) for the live
+  parcel snapshot.
+
+Neither real endpoint returns an "occupied capacity" figure — the old
+mock/dead-endpoint shape invented one. `use-node-dashboard.ts` derives
+it instead: any order currently physically at this Node, on either
+side of the custody chain (`isAwaitingPickup` — origin, not yet handed
+to a rider; `needsIntake` — destination, arrived but not checked in;
+`isReadyForCollection` — destination, checked in, waiting on the
+receiver). `in_transit` orders are deliberately excluded — the parcel
+isn't on the premises yet. `isHighFull` keeps the old mock's 60%
+threshold.
+
+**UI adjusted, not just re-plumbed** — a Node dashboard has three real
+states the old build never distinguished (it just silently rendered
+empty either way):
+- **Not onboarded** (`GET /node-operators/me` → `404 NOT_FOUND`) — an
+  `EmptyState` pointing at `/vendor/node-setup`, instead of a blank
+  capacity bar.
+- **Onboarded, not yet Admin-approved** (`node.status !== "active"`) —
+  a "Waiting for approval" `EmptyState` with a link back to Node Setup,
+  instead of showing capacity/parcels for a Node that can't legally
+  receive anything yet.
+- **Active** — the real dashboard: `CapacityBar` (unchanged component,
+  now fed real numbers), the same three filter tabs re-pointed at the
+  real predicates (`isAwaitingPickup`/`isReadyForCollection`/all
+  on-site), and a row per order.
+
+**Row component swapped, not patched**: `NodeParcelRow` (rendered the
+now-dead `NodeParcel` shape, sender/receiver names included) is
+deleted; `NodeOrderRow` (new) renders `NodeOrderSummary` instead —
+tracking code, description, origin/destination Node name, and the
+shared `HandoffStatusPill` used everywhere else in the vendor module
+(`HandoffOrderList`/`CollectionList`/`HistoryList`), for one consistent
+status-pill look across Home and Inventory. This is the product
+decision the previous entry flagged as blocking a straight data-source
+swap: `NodeOrderSummary` has no sender/receiver names, so the row shows
+what every other handoff-module row already shows instead of inventing
+fields the real response doesn't have. Ready-for-collection rows now
+deep-link straight to `ROUTES.vendorCollect(order.id)` — safe now that
+the id is a real order uuid from `my-node/orders`, unlike the old
+dashboard's ids from the 404ing endpoint. Every other row lands on
+`/vendor/inventory`, where the actual pickup/arrival code entry and
+check-in actions live.
+
+**`ROUTES.vendorFlag` (Flag Issue screen) is no longer linked from
+Home.** It was the non-ready rows' destination on the old
+`NodeParcelRow`, but `vendorService.flagParcel()` throws
+`NOT_IMPLEMENTED` unconditionally — no backend route exists. Routing a
+now-functional screen into a guaranteed-failure flow would be a
+regression, not a fix. The Flag screen/route/hook are untouched and
+still reachable by direct URL, but the app no longer links to them from
+anywhere active — a separate, already-documented backend gap
+(`docs/API_INTEGRATION_STATUS.md`'s "Genuine API gaps" section), not
+something this session's endpoint swap should paper over.
+
+**Verified live against the deployed backend**, not just typechecked:
+registered a throwaway NodeOperator account through the app's own dev
+proxy (`npm run dev`, hitting `https://locoomo-api.up.railway.app` via
+`next.config.ts`'s rewrite), and drove the exact sequence
+`useVendorNode`/`useNodeDashboard` make:
+1. `GET /node-operators/me` before onboarding → real `404 NOT_FOUND`,
+   confirming the `notOnboarded` branch fires on the real error shape.
+2. `POST /node-operators/onboarding` → `201`, response matches
+   `NodeOperatorProfile`/`NodeOperatorNode` exactly as typed.
+3. `GET /node-operators/me` after onboarding → `200`, `node.status:
+   "pending"`, confirming the "waiting for approval" branch's gate
+   (`status !== "active"`) fires correctly.
+4. `GET /handoffs/my-node/orders?limit=100` → `200`, `{items: [],
+   total: 0}` — confirms the dashboard doesn't crash or error on a
+   brand-new Node with no orders yet (`total` from `capacity`, `occupied:
+   0`, `isHighFull: false`).
+
+**Not verified**: no Admin session exists to approve the test Node, so
+the "active" happy-path render (real `CapacityBar` numbers, populated
+tabs, `NodeOrderRow` list) was exercised via `npx tsc --noEmit` / `next
+build` / logic review only, not seen rendered in a browser — no
+browser automation tool (`chromium-cli`, Playwright, `claude-in-chrome`)
+was available in this session's environment. `npx tsc --noEmit` clean,
+`npx eslint` clean on every file touched, `next build` from a clean
+tree succeeds with `/vendor/home` present in the route table.
+
+**Files changed**:
+- Rewritten: `src/modules/vendor/hooks/use-vendor-node.ts` (now reads
+  `GET /node-operators/me` instead of `/nodes/operator/inventory`;
+  shared by `VendorProfileScreen`, which gets the same fix for free —
+  it only ever read `node.name`/`node.address`, both present on the new
+  shape).
+- New: `src/modules/vendor/hooks/use-node-dashboard.ts` (combines
+  `useVendorNode` + `useMyNodeOrders`, derives capacity/tab state).
+- New: `src/modules/vendor/components/dashboard/NodeOrderRow.tsx`
+  (replaces `NodeParcelRow.tsx`, deleted).
+- Rewritten: `src/modules/vendor/components/dashboard/VendorHomeScreen.tsx`
+  (loading/not-onboarded/pending-approval/active states),
+  `src/modules/vendor/components/dashboard/ParcelFilterTabs.tsx`
+  (retyped onto `DashboardFilterTab` from the new hook).
+- `src/modules/vendor/components/dashboard/index.ts` — barrel updated
+  for the `NodeParcelRow` → `NodeOrderRow` rename.
+- `src/core/api/services/vendor.service.ts` — deleted the now-unused
+  `getNodeProfile()` method; `listParcels()` and `mapInventoryResponse()`
+  are untouched, still load-bearing for the Flag screen's parcel lookup
+  (`use-parcel-detail.ts`) — a separate, already-`NOT_IMPLEMENTED`
+  backend gap, out of scope here.
+- Deleted: `src/modules/vendor/hooks/use-node-parcels.ts` (fully dead
+  after the rewrite above — its only consumer was the old
+  `VendorHomeScreen`).
+- Docs: this entry; `docs/HANDOFF.md`'s "Current objective" and the
+  "Explicitly out of scope this pass" note it superseded;
+  `docs/API_INTEGRATION_STATUS.md`'s item 2b; `docs/ARCHITECTURE.md`'s
+  Vendor flow block.
+
+---
+
+## 2026-08-17 (follow-up 3) — Inventory retired: its four tabs redistributed into Home and Activity
+
+**Feature**: the user asked for the standalone Inventory screen
+(follow-up 2's session, and the 2026-08-17-earlier one before it) to be
+retired — its Pickup/Incoming data folded into Home's existing
+Awaiting Pickup section, Collection into Home's existing Ready for
+Collection section, a new Awaiting Arrival section added to Home for
+Incoming, and History moved into the Activity Log. Home becomes a pure
+summary/dashboard: tapping any pickup, arrival, or collection row now
+navigates to a dedicated details page for that order, showing every
+field the backing endpoint returns, instead of any list-level row
+offering its own inline action.
+
+**Read `docs/API.md` again before touching anything**, per the user's
+explicit instruction not to invent data. Confirmed: no endpoint in the
+Node Operator's API surface returns rider identity (name/phone) — the
+6-digit code the rider reads aloud is the entire handoff protocol —
+and no destination-side endpoint returns receiver PII (already
+documented in `CollectParcelScreen`'s own header comment, predating
+this session). Neither is shown on the new details pages; neither was
+invented. See "Not available from the endpoints" below.
+
+**Home (`VendorHomeScreen`) rewritten** — same tab mechanism
+(`ParcelFilterTabs`, kept per explicit user preference over a stacked-
+sections dashboard layout), three tabs instead of the previous
+Awaiting Pickup/Ready for Collection/All:
+- **Awaiting Pickup** — unchanged filter (`isAwaitingPickup`), but rows
+  (`NodeOrderRow`) are now pure navigation — no more inline
+  `HandoffOrderList` expand (that was this session's *previous*
+  iteration, now superseded again by the details-page requirement).
+- **Awaiting Arrival** — new tab, `isAwaitingArrival` (`in_transit`,
+  destination side) — the exact filter Inventory's "Incoming" tab used,
+  now visible on Home for the first time. Deliberately **excluded**
+  from "occupied" capacity — the parcel isn't physically on the
+  premises yet, only the on-its-way state is now visible.
+- **Ready for Collection** — `CollectionSummaryList` (new), the two
+  sub-groups the old `CollectionList` had (needs check-in / ready),
+  same grouping and copy, but every row is a plain link now — no more
+  inline "Check In & Email Receiver" button, since that action moved to
+  the details page.
+- The old "All" tab is gone — its role (an unfiltered overview) is now
+  Activity's Order History tab, not a fourth Home tab.
+
+**New details page: `HandoffDetailScreen`** (`/vendor/handoff/[orderId]`,
+`ROUTES.vendorHandoffDetail`) — one route for both Awaiting Pickup and
+Awaiting Arrival, direction inferred from the order's own `myRole`
+rather than two near-identical routes. Shows every field
+`NodeOrderSummary` has (tracking code, status, parcel description/size,
+origin/destination Node names, `myRole`, placement date) plus the
+rider-code entry, reusing `useConfirmHandoff` — the same hook, same
+`POST /handoffs/orders/:id/confirm-handoff` call, same copy Inventory's
+Pickup/Incoming tabs used, just driven by a `useEffect` that selects
+this one order (`selectHandoffType` + `selectOrder`) instead of a
+row-click in a list. The code panel only renders while
+`isAwaitingPickup`/`isAwaitingArrival` is still true for the loaded
+order — a stale link (already confirmed, already progressed) falls
+back to a read-only view instead of offering an action the server
+would 404/409 on. New hook: `useNodeOrder(orderId)`
+(`use-my-node-orders.ts`) — finds the order in the already-cached
+`GET /handoffs/my-node/orders` list, no separate fetch.
+
+**`CollectParcelScreen` extended, not replaced** — it's now the Ready
+for Collection details page for *both* of that tab's sub-states, not
+just "ready":
+- **Needs check-in** (`needsIntake`) — new branch: full parcel info +
+  the "Check In & Email Receiver" action (`useParcelIntake`, the same
+  hook Inventory's Collection tab used for its one-tap button — this is
+  the "Send" action the task asked for). On success, the screen falls
+  through to the "ready" branch on its own: `useParcelIntake`'s success
+  invalidates `GET /handoffs/my-node/orders`, the order's status flips
+  server-side, `useAwaitingCollectionParcel` re-derives from the
+  refetched cache, and the same component re-renders into the other
+  branch — no manual redirect needed.
+- **Ready** (`isReadyForCollection`) — unchanged behavior (code entry +
+  identity attestation + resend), but its info card is enriched with
+  the same parcel/route/status details the needs-check-in branch and
+  the new pickup/arrival details page show — previously it showed only
+  the tracking code, which undersold "complete collection information."
+- Three `ROUTES.vendorInventory` references (two "back" buttons, one in
+  the success screen) fixed to `ROUTES.vendorHome` — the route they
+  pointed at no longer exists. The success screen's two buttons
+  ("Back to Counter" / "Dashboard", both effectively the same
+  destination now) collapsed to one ("Back to Dashboard").
+
+**History moved into Activity, not duplicated**: `ActivityScreen` gains
+a second tab (`ActivityTabs`, new — same pill style as
+`ParcelFilterTabs`) — "Activity Log" (unchanged, `GET
+/notifications/user/{userId}`) and "Order History" (`OrderHistoryList`,
+relocated verbatim from the deleted `HistoryList.tsx`, fed by
+`useMyNodeOrders()`). This is a second data source sharing one screen,
+same pattern Inventory itself used for its four tabs. `useMyNodeOrders()`
+is already fetched by Home and the handoff details page elsewhere in
+the app — TanStack Query dedupes by query key, so opening this tab
+doesn't fire an extra request within the 30s `staleTime` unless the
+cache has actually gone stale.
+
+**Inventory deleted, not hidden** — `src/modules/vendor/components/inventory/`
+(`InventoryScreen.tsx`, `InventoryTabs.tsx`, `HandoffOrderList.tsx`,
+`CollectionList.tsx`, `HistoryList.tsx`, `index.ts`) and
+`src/app/(vendor)/vendor/inventory/` are both gone. `VENDOR_NAV_ITEMS`
+no longer has an "Inventory" entry — Home is now the one place an
+operator sees everything at their counter, which is exactly what
+Inventory duplicated rather than fed. `ROUTES.vendorInventory` removed
+from `constants.ts`; `ROUTES.vendorHandoffDetail` added in its place.
+
+**Not available from the endpoints** (per the user's explicit
+instruction to inspect real responses before assuming anything, and
+not invent what isn't there):
+- **Rider details** (name, phone, any identifier) — no endpoint in the
+  Node Operator's API surface returns this. `NodeOrderSummary`,
+  `HandoffOrderPreview`, and the `confirm-handoff`/`request-code`
+  responses carry no rider field at all; the 6-digit code is the entire
+  protocol. `HandoffDetailScreen` does not show a "rider" section.
+- **Collection person's name** — no destination-side endpoint returns
+  receiver PII (already documented in `CollectParcelScreen`'s header
+  comment before this session touched it). `identityConfirmed` remains
+  what it always was: an attestation the operator made about a
+  conversation, not a verification against anything on screen.
+- **Per-status-transition timestamps** (when a parcel was picked up,
+  arrived, checked in, or collected) — `NodeOrderSummary` carries only
+  `createdAt` (order placement). `HandoffDetailScreen` and the enriched
+  `CollectParcelScreen` info card both label it "Placed", not "Arrived"
+  or "Checked in", for the same reason `OrderHistoryList` already did.
+
+**Files changed**:
+- New: `src/modules/vendor/components/handoff/HandoffDetailScreen.tsx`;
+  `src/app/(vendor)/vendor/handoff/[orderId]/page.tsx`;
+  `src/modules/vendor/components/dashboard/CollectionSummaryList.tsx`;
+  `src/modules/vendor/components/activity/ActivityTabs.tsx`,
+  `OrderHistoryList.tsx`.
+- Rewritten: `src/modules/vendor/components/dashboard/VendorHomeScreen.tsx`,
+  `NodeOrderRow.tsx` (simplified — always links to the new details
+  page), `ParcelFilterTabs.tsx` (new tab set);
+  `src/modules/vendor/hooks/use-node-dashboard.ts` (adds
+  `awaitingArrival`, drops the old "all" combined list);
+  `src/modules/vendor/components/activity/ActivityScreen.tsx`.
+- Extended: `src/modules/vendor/components/collection/CollectParcelScreen.tsx`
+  (needs-intake branch, enriched info card, route fixes);
+  `src/modules/vendor/hooks/use-my-node-orders.ts` (adds
+  `useNodeOrder(orderId)`).
+- `src/core/config/constants.ts` — `vendorInventory` removed,
+  `vendorHandoffDetail` added.
+- `src/components/layout/nav-config.ts` — "Inventory" removed from
+  `VENDOR_NAV_ITEMS`, `ArchiveIcon` import dropped (now unused there).
+- Barrels updated: `dashboard/index.ts`, `handoff/index.ts`,
+  `activity/index.ts`.
+- Deleted: `src/modules/vendor/components/inventory/` (whole
+  directory), `src/app/(vendor)/vendor/inventory/` (whole directory).
+- Docs: this entry; `docs/ARCHITECTURE.md`'s Vendor flow block;
+  `docs/API_INTEGRATION_STATUS.md`'s `my-node/orders`/`intake`/
+  `confirm-handoff` rows; `docs/HANDOFF.md`'s "Current objective".
+  **`docs/API.md` intentionally untouched** — read-only per the user's
+  explicit instruction; it's the backend/project owner's file.
+
+**Verification**: `npx tsc --noEmit` clean, `npx eslint` clean on every
+file touched, a full-repo grep confirms no remaining reference to
+`vendorInventory`, `InventoryScreen`, `InventoryTabs`,
+`HandoffOrderList`, or the old `CollectionList`/`HistoryList` anywhere
+in `src/` (only historical mentions in doc comments describing what was
+retired). Per the user's explicit instruction, **the app was not run,
+built, or tested this session** — no dev server, no `next build`, no
+test suite. `npx tsc --noEmit` and `npx eslint` were treated as static
+verification, not "running" the app, and were run for the same reason
+they're run in every other session in this log. Nothing here has been
+seen rendered in a browser.
+
+---
+
+## 2026-08-17 (follow-up 4) — Activity Log and Order History collapsed back into one list
+
+**Feature**: follow-up 3 gave `ActivityScreen` two tabs — the original
+notification-backed "Activity Log" and a new "Order History" tab for
+the data moved off the retired Inventory screen. The user asked for
+one list instead: reuse the Activity Log's card (`ActivityLogItem`)
+to render the history data, drop the tab switcher entirely.
+
+**`ActivityScreen` rewritten**: no more `ActivityTabs`/tab state. The
+single list is now sourced from `useMyNodeOrders()`
+(`GET /handoffs/my-node/orders`) instead of `useActivityLog()`
+(`GET /notifications/user/{userId}`) — a genuine data-source swap, not
+just a rendering change. A new local mapper,
+`mapOrderToActivityEntry()`, turns each `NodeOrderSummary` into an
+`ActivityLogEntry` so the existing `ActivityLogItem` component renders
+it unchanged:
+- `title` = tracking code, `description` = parcel description +
+  destination/origin (arrow direction from the real `myRole` field,
+  same convention `OrderHistoryList`/`NodeOrderRow` already used).
+- `type` (drives the icon) is chosen from `myRole` alone —
+  `handoff_to_rider` for origin-side orders, `parcel_checked_in` for
+  destination-side — a representative icon for a real, known fact
+  (which side of custody), not an invented event.
+- `tag` = the order's status label, via a new exported
+  `getHandoffStatusLabel()` (`HandoffStatusPill.tsx`) — reuses that
+  component's own `STATUS_CONFIG` map so the tag text can never drift
+  from what the pill itself would say, instead of duplicating a
+  second status→label table.
+- `isException` is always `false` — orders have no exception/flag
+  concept in the real API, only a status, so nothing here claims one.
+
+**`ActivityTabs.tsx` and `OrderHistoryList.tsx` deleted** — both were
+introduced in follow-up 3 earlier the same day and are fully superseded
+by this change; neither has a remaining caller.
+
+**The notification-backed integration is left in place, not deleted.**
+`useActivityLog()` and `vendorService.listActivity()`
+(`GET /notifications/user/{userId}`) now have no caller anywhere in the
+app, but unlike the dead-endpoint code deleted in earlier sessions
+(`/nodes/operator/inventory`'s old consumers, the retired Inventory
+screen), this is a *real, working* integration losing its only call
+site — a different situation from cleaning up something broken.
+Deleting it would also flip `GET /notifications/user/{userId}` from
+integrated back to unintegrated in `API_INTEGRATION_STATUS.md`'s
+bookkeeping, which felt like a call for the user to make explicitly
+rather than a side effect of a UI request. Flagged in both the service
+file's header comment and here — tell me if you want it removed too,
+or reserved for a future notifications surface.
+
+**Files changed**:
+- Rewritten: `src/modules/vendor/components/activity/ActivityScreen.tsx`.
+- Deleted: `src/modules/vendor/components/activity/ActivityTabs.tsx`,
+  `OrderHistoryList.tsx`.
+- `src/modules/vendor/components/handoff/HandoffStatusPill.tsx` — new
+  exported `getHandoffStatusLabel()`.
+- Barrels: `activity/index.ts` (drops the two deleted exports),
+  `handoff/index.ts` (adds `getHandoffStatusLabel`).
+- `src/core/api/services/vendor.service.ts` — header comment updated to
+  note `listActivity()` is now unused, not deleted.
+- Docs: this entry; `docs/ARCHITECTURE.md`'s `vendor/activity` line and
+  the Inventory-retirement note below it; `docs/HANDOFF.md`'s "Current
+  objective". **`docs/API.md` untouched**, per standing instruction.
+
+**Verification**: `npx tsc --noEmit` and `npx eslint src` both clean
+across the whole repo; grep confirms no remaining reference to
+`ActivityTabs`/`OrderHistoryList` anywhere in `src/`. Per standing
+instruction, the app was not run, built, or tested this session.
+
+---
+
+## 2026-08-17 (follow-up 5) — Dummy activity toast removed, icon reflects real status
+
+**Feature**: the Activity screen's top card (`RiderHandoffToast`) was
+hardcoded demo data — a fixed "LC-482TX picked up by Rider — Tunde A.,
+2 mins ago" — sitting above the real, now-live Activity Log. Asked to
+remove it and let the real most-recent activity occupy that top spot,
+plus have each entry's icon reflect what actually happened rather than
+a coarse origin/destination split.
+
+**`RiderHandoffToast.tsx` deleted**, not just unused — it was
+fabricated data, and the whole point of the last two sessions was
+replacing invented/mocked content with real `GET /handoffs/my-node/orders`
+data. `GET /handoffs/my-node/orders` is already documented newest-first
+per docs/API.md and `ActivityScreen` never re-sorted it, so removing
+the toast is sufficient on its own: the real most-recent order is now
+the first row on the screen, in the exact position the dummy card used
+to occupy.
+
+**Icon selection widened from a 2-way split to a status-driven one** —
+`activityEntryType()` (new, `ActivityScreen.tsx`) switches on the
+order's real `status` field rather than just `myRole`:
+`parcel_received_at_origin`/`rider_assigned`/`arrived_at_destination` →
+`batch_received` (ArchiveIcon — just landed at this Node, from the
+consumer or a rider); `in_transit` → `handoff_to_rider` (TruckIcon —
+with a rider right now); `ready_for_collection` → `parcel_checked_in`
+(PackageIcon); `completed` → `parcel_released` (PackageIcon). No new
+icon or `ActivityEventType` member — every case maps onto the existing
+set from `ActivityLogItem.tsx`'s `ICON_MAP`. Falls back to the
+previous `myRole`-based split for `awaiting_drop_off` and any status
+this build doesn't recognize yet.
+
+**Files changed**: `src/modules/vendor/components/activity/ActivityScreen.tsx`
+(new `activityEntryType()`, `RiderHandoffToast` import/usage removed);
+deleted `RiderHandoffToast.tsx`; `activity/index.ts` barrel updated.
+
+**Verification**: `npx tsc --noEmit` and `npx eslint src` clean across
+the repo; grep confirms no remaining reference to `RiderHandoffToast`
+outside one explanatory doc comment. Per standing instruction, the app
+was not run, built, or tested this session.
+
+---
+
+## 2026-08-20 — Full endpoint/mock audit, Revenue Split feature, Vendor→Node rename
+
+**Feature**: a complete re-audit of every API call in the codebase
+against the current `docs/API.md` (44 documented endpoints), a
+mock-data sweep, and — at the user's explicit request mid-session — a
+full rename of the "Vendor" naming convention to "Node"/"Node Operator"
+throughout the codebase (files, directories, types, services, hooks,
+routes, and user-facing copy), since the backend's actual role is
+`node_operator` and "Vendor" was always just this app's internal label
+for the same thing.
+
+**Endpoint audit findings** — every literal path string in
+`core/api/endpoints.ts` checked against `docs/API.md`'s 44 documented
+routes:
+
+- **`/nodes/operator/inventory`** — undocumented, confirmed 404ing on
+  the deployed backend (already known, see 2026-08-17's entry). Its
+  only remaining call site, `vendorService.listParcels()`, backed the
+  Flag Issue screen (`FlagIssueScreen`, `use-parcel-detail.ts`,
+  `/vendor/parcels/[parcelId]/flag`) — which turned out to have **zero
+  nav entries anywhere in the app** (fully unreachable except by typing
+  the URL), and whose own submit action
+  (`flagParcel()`) threw `NOT_IMPLEMENTED` unconditionally regardless.
+  Deleted the whole feature: screen, route, both hooks, the service
+  methods (`listParcels`, `flagParcel`, `mapInventoryResponse`), the
+  endpoint constant, `ROUTES.vendorFlag`, and the now-orphaned
+  `NodeParcel`/`FlagReason`/`FlagParcelPayload`/`ParcelNodeStatus`/
+  `ShelfLocation`/`ReleaseParcelPayload` types and
+  `NodeParcelStatusBadge` component.
+- **`/corporate-ops/staff/elevate-superadmin`** — undocumented (the
+  role enum has no `super_admin` concept at all per `API.md`), already
+  flagged as "unconfirmed" in `docs/HANDOFF.md`. Removed the whole
+  elevation form from `SuperAdminScreen` (Admin → Settings), replaced
+  with an Admin-facing "isn't available yet" notice; deleted
+  `adminService.elevateSuperAdmin`, `use-elevate-super-admin.ts`,
+  `ElevateSuperAdminPayload`, and `ENDPOINTS.corporateOps`. The
+  overview stat cards (still `NOT_IMPLEMENTED`, a separate real gap)
+  are untouched.
+- **`/maps/rider/telemetry-ping`** and **`/maps/track/:code`** —
+  neither documented, and neither actually called from anywhere in the
+  app (`sendTelemetryPing()` existed on `riderService` but had no
+  caller — `setAvailability()`'s online/offline toggle never invoked
+  it, despite the file's own header comment implying it did). Deleted
+  both, plus the whole `ENDPOINTS.maps` group and the dead commented-out
+  mock block in `rider.service.ts` that referenced them.
+- **`/admin/rider-earnings`** — undocumented. `docs/API.md` instead
+  documents `GET /earnings/mine` (Rider), `GET /earnings/my-node`
+  (NodeOperator), and a whole `admin/revenue-split` group
+  (`POST`/`GET /admin/revenue-split`, `GET .../entries`,
+  `PATCH .../entries/:id/mark-paid`) that the previous session's
+  `RiderEarningsScreen` (2026-08-17) was never built against. Removed
+  `RiderEarningsScreen`/`use-rider-earnings.ts`/its route entirely, and
+  built the three real replacements (see below).
+- **`franchiseNodes.onboardOperator`, `nodes.onboard`,
+  `nodes.updateStatus`** — all three undocumented *and* dead (zero call
+  sites anywhere). Deleted as no-op cleanup.
+- **`/auth/consumer/request-otp`, `/auth/consumer/request-login-otp`**
+  — undocumented (the current `API.md` only has plain
+  `POST /auth/register`/`POST /auth/login`, no OTP step for Consumer).
+  Live, load-bearing call sites for Consumer signup/login. **Flagged to
+  the user, who explicitly asked to leave this alone** ("already
+  working") rather than rebuild the auth flow — not touched this
+  session. Still listed as an open item in
+  `docs/API_INTEGRATION_STATUS.md`'s Inconsistencies section.
+
+**New real integrations — Earnings / Revenue Split**: `docs/API.md`'s
+"Earnings (revenue split)" section (every `completed` order's fee is
+split rider/origin-Node/platform per an Admin-configured ratio) had
+zero frontend integration before this session.
+
+- New shared `core/types/earnings.types.ts` — `MyRevenueSplitEntry`
+  (the shape `GET /earnings/mine` and `GET /earnings/my-node` both
+  return), `RevenueSplitRatio`/`CreateRevenueSplitRatioPayload`,
+  `AdminRevenueSplitEntry`/`AdminRevenueSplitEntryFilters`,
+  `MarkEntryPaidResult`.
+- **Rider**: `riderService.listMyEarnings()` (`GET /earnings/mine`) is
+  new; `getEarningsSummary()` (previously `NOT_IMPLEMENTED` — no
+  endpoint existed before) now reduces the entry list client-side into
+  today/total earnings+deliveries — there's no server-side "today"
+  filter or aggregate. Powers the Home dashboard's stat cards and the
+  Profile stat row, both previously permanently stuck in a loading/
+  zero state. **Dropped the fabricated `rating` field** from
+  `RiderEarningsSummary` — no rating concept exists anywhere in the
+  real API (only a KYC `rating_screenshot` upload, unrelated) — and
+  removed the "Rider Rating" stat card from `RiderProfileScreen`
+  rather than keep showing an invented number. Also rebuilt the
+  "Earnings" nav tab (`/rider/deliveries`, previously "My Deliveries")
+  to list these entries instead of the old `getJobHistory()` job-list
+  concept, which has no real backing endpoint at all (declined/expired
+  jobs with a `payout` field — `GET /handoffs/my-orders` carries
+  neither) and stays `NOT_IMPLEMENTED`; `use-job-history.ts`/
+  `DeliveryHistoryRow.tsx`/`MyDeliveriesScreen.tsx` are renamed to
+  `use-my-earnings.ts`/`EarningsEntryRow.tsx`/`MyEarningsScreen.tsx`
+  and rewritten around the real entry shape. Also fixed a pre-existing
+  **double-₦ currency bug** in `EarningsStatCards`/`RiderProfileScreen`
+  (`formatCurrency()` already prepends `₦`; both places prepended a
+  second one).
+- **NodeOperator**: `nodeService.getMyNodeEarnings()`
+  (`GET /earnings/my-node`) is new — this Node's own revenue-split
+  entries (only present for orders where this Node was the *origin*).
+  New `NodeEarningsScreen` (`/node/earnings`), reached from Node
+  Profile — no nav-bar slot added (all four are already spoken for),
+  same pattern as "Node Setup" being a Profile row rather than a tab.
+- **Admin**: `adminService.createRevenueSplitRatio` /
+  `getRevenueSplitRatios` / `getRevenueSplitEntries` /
+  `markRevenueSplitEntryPaid` are new. New `RevenueSplitScreen`
+  (`/admin/revenue-split`) replaces the deleted `RiderEarningsScreen` in
+  both the sidebar nav (relabeled "Revenue Split") and route slot —
+  shows the current split ratio, an append-only "Set Ratio" form (same
+  inline-card pattern as `AddPricingRuleForm`), and a
+  partyType/payoutStatus-filterable entries table with a "Mark Paid"
+  action per pending row.
+
+**Mock-data audit**: `src/core/mocks/` had six files. `mock-vendor.ts`,
+`mock-deliveries.ts`, `mock-nodes.ts`, `mock-rider.ts`,
+`mock-activity.ts` were all either fully unreferenced (`mock-rider.ts`
+had zero importers, live or commented) or referenced only inside dead
+commented-out mock-service blocks and one live-but-now-removed fallback
+(`vendor.service.ts`'s `mapInventoryResponse()` used to default to
+`MOCK_NODES[1]` when the real inventory response was missing a `node`
+field — gone along with the rest of the Flag Issue feature above).
+Deleted all five. **`mock-utils.ts` kept** — `generateId()` is a real,
+still-used ID-generation utility (`node.service.ts`'s
+`mapNotificationToActivity()` fallback id), not fake data; renaming/
+moving it out of the `mocks/` folder felt like unrelated churn, flagged
+here instead. Also deleted the large dead commented-out mock-service
+blocks in `node.service.ts`/`rider.service.ts` (the mock/real API
+switch this scaffolding was for has been dead since before this
+project's AI-assisted work began — see `PROJECT_CONTEXT.md`) — these
+were literal "mock service implementations" sitting in the file per
+the standing instruction to remove them, not just unused imports.
+Also deleted `SurgeAlertBanner.tsx` (Rider Home) — a hardcoded fake
+"Downtown Zone is currently surging" card, already commented out of
+use but left in the codebase; removed the dead file, its barrel
+export, and the commented-out render call.
+
+**Vendor→Node rename** (user's explicit mid-session request — "vendor
+and node describe the same thing, use node"): every file, directory,
+type, service, hook, route, and nav label with "Vendor" in the name is
+renamed to "Node"/"Node Operator", checked against the pre-existing
+"Node" naming (Pickup Station entities — `LocoomoNode`/`PickupNode`/
+`nodesService`/`adminNodes`/`NodeMapView`) for collisions before each
+rename:
+
+- `src/modules/vendor/` → `src/modules/node/`; `src/app/(vendor)/` →
+  `src/app/(node)/`, its `vendor/` route segment → `node/`;
+  `src/app/vendor-scan/` → `src/app/node-scan/`.
+- `core/api/services/vendor.service.ts` → `node.service.ts`,
+  `vendorService` → `nodeService` (distinct from the pre-existing,
+  plural `nodesService` — the public Nodes directory service, a
+  different thing).
+- `core/types/vendor.types.ts` → `node.types.ts`; its
+  `VendorNodeProfile` type was already fully dead (only reachable
+  through the just-deleted `mapInventoryResponse()`) — deleted rather
+  than renamed.
+- `VendorHomeScreen`/`VendorProfileScreen`/`VendorNodeSetupScreen` →
+  `NodeHomeScreen`/`NodeProfileScreen`/`NodeSetupScreen`;
+  `use-vendor-auth`/`use-vendor-node`/`use-vendor-node-setup` →
+  `use-node-auth`/`use-node-profile`/`use-node-setup`; caught one
+  broken relative import (`use-node-dashboard.ts` still pointed at the
+  old `./use-vendor-node` filename) that the path-based rename pass
+  missed since it wasn't an `@/modules/...` absolute import.
+  `components/node-setup/` → `components/setup/` (was
+  `modules/node/components/node-setup/`, redundant once the module
+  itself is already "node").
+- `VENDOR_NAV_ITEMS` → `NODE_NAV_ITEMS`; every `ROUTES.vendor*` /
+  `QUERY_KEYS.vendor*` → `ROUTES.node*` / `QUERY_KEYS.node*`
+  (`/vendor/home` → `/node/home`, `/vendor/node-setup` → `/node/setup`,
+  etc. — URL paths changed too, per the user's explicit "everything"
+  scope, not just internal identifiers).
+- User-facing copy: `NodeProfileScreen`'s "Shop Owner" label →
+  "Node Operator"; Admin nav's "Rider Earnings" → "Revenue Split" (see
+  above). Left a handful of pure-comment "vendor" mentions untouched at
+  the user's direction mid-sweep (`CreateAccountScreen.tsx`,
+  `roles.ts`, `use-geolocation.ts`, `(rider)/layout.tsx` all still have
+  one stale comment each referencing the old name/path — harmless,
+  no functional effect).
+
+**Files changed**: too many to list individually (the rename alone
+touched ~85 files via directory moves + `git mv` + scoped find/replace,
+verified with a full-repo `grep -rli vendor` sweep after each pass).
+See the section above for the shape of it; `git status`/`git diff
+--stat` against this session's start has the exhaustive list.
+
+**Verification**: `npx tsc --noEmit` clean, `npx eslint src` clean,
+`npx next build` succeeds (44 routes, including the new
+`/admin/revenue-split` and `/node/earnings`) — a full production build
+was run this session, not just static checks, specifically because a
+rename this size is exactly the kind of change a type-checker alone
+can miss (e.g. Next.js's route-group folder resolution). A full-repo
+grep confirms no remaining `@/modules/vendor` or `vendor.service`/
+`vendor.types` import paths anywhere. The app was not run in a browser
+against a live backend this session — the new Revenue Split/Earnings
+screens are built strictly from `docs/API.md`'s documented contract
+and share the same "not live-verified" caveat as every other Admin/
+NodeOperator/Rider screen in this project (see
+`docs/HANDOFF.md`).

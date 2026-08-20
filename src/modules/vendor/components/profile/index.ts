@@ -1,1 +1,0 @@
-export { VendorProfileScreen } from "./VendorProfileScreen";

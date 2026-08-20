@@ -118,13 +118,13 @@ export interface ConsumerOnboardingPayload {
   phone?: string;
 }
 
-// Rider and NodeOperator (Vendor) self-registration now go through
-// the same RegisterConsumerPayload/POST /auth/register above (with
+// Rider and NodeOperator self-registration now go through the same
+// RegisterConsumerPayload/POST /auth/register above (with
 // `role: "rider"` / `role: "node_operator"`) and the same
 // LoginConsumerPayload/POST /auth/login below — see docs/API.md.
 // Post-login onboarding is handled separately: riders.onboarding
 // (core/types/rider.types.ts) and node-operators.onboarding
-// (core/types/vendor.types.ts).
+// (core/types/node.types.ts).
 
 // ── Real API-aligned Admin auth flow ─────────────────────────────
 // Admin accounts are backend-provisioned (POST /users/invite by an

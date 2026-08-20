@@ -76,7 +76,7 @@ export function useAuth() {
       const roleRedirect: Record<typeof session.user.role, string> = {
         consumer: ROUTES.dashboard,
         rider: ROUTES.riderHome,
-        node_operator: ROUTES.vendorNodeSetup,
+        node_operator: ROUTES.nodeSetup,
         admin: ROUTES.dashboard,
       };
       router.push(roleRedirect[session.user.role] ?? ROUTES.dashboard);

@@ -1,9 +1,6 @@
 
 import { httpClient } from "@/core/api/client";
 import { ENDPOINTS } from "@/core/api/endpoints";
-// import { ApiError } from "@/core/api/errors";
-// import { mockDelay } from "@/core/mocks/mock-utils";
-// import { MOCK_NODES } from "@/core/mocks/mock-nodes";
 import type { PaginatedList } from "@/core/api/types";
 import type { GeoPoint, PickupNode } from "@/core/types";
 
@@ -52,14 +49,6 @@ function mapNode(raw: RawNode): PickupNode {
 function mapNearbyNode(raw: RawNearbyNode): PickupNode {
   return { ...mapNode(raw), distanceKm: raw.distanceMeters / 1000 };
 }
-
-// const mockNodesService = {
-//   async listNearby(position: GeoPoint): Promise<PickupNode[]> {
-//     void position;
-//     await mockDelay();
-//     return MOCK_NODES;
-//   },
-// };
 
 const realNodesService = {
   /** GET /nodes/nearby — real, confirmed route per docs/API.md. Always `active`-only, any authenticated role. Defaults to the API's max radius (100km, per API.md's "0.1–100" bound) — early in the network's life, Nodes are sparse, so a tight default risks hiding real results more than a wide one risks showing irrelevant ones. */

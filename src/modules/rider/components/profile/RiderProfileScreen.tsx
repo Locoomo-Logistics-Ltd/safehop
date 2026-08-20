@@ -6,7 +6,6 @@ import { TopBar } from "@/components/layout";
 import {
   MailIcon,
   PhoneIcon,
-  StarIcon,
   ShieldCheckIcon,
   ClockIcon,
   CreditCardIcon,
@@ -64,24 +63,17 @@ export function RiderProfileScreen() {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-3 gap-2.5 mb-6">
+        <div className="grid grid-cols-2 gap-2.5 mb-6">
           <Card padding="sm" className="text-center">
             <p className="text-[10px] text-text-muted mb-1">Total Earnings</p>
             <p className="font-display font-bold text-[14px] text-status-success">
-              {earnings ? formatCurrency(earnings.totalEarnings) : "—"}
+              {earnings ? formatCurrency(earnings.totalEarnings) : "₦0.00"}
             </p>
           </Card>
           <Card padding="sm" className="text-center">
             <p className="text-[10px] text-text-muted mb-1">Deliveries</p>
             <p className="font-display font-bold text-[14px] text-text-primary">
-              {earnings?.totalDeliveries.toLocaleString() ?? "—"}
-            </p>
-          </Card>
-          <Card padding="sm" className="text-center">
-            <p className="text-[10px] text-text-muted mb-1">Rider Rating</p>
-            <p className="font-display font-bold text-[14px] text-text-primary flex items-center justify-center gap-1">
-              {earnings?.rating ?? "—"}
-              <StarIcon size={12} filled className="text-status-warning" />
+              {earnings?.totalDeliveries.toLocaleString() ?? "0"}
             </p>
           </Card>
         </div>

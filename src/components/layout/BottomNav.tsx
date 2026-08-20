@@ -12,7 +12,7 @@ interface BottomNavProps {
 /**
  * Bottom tab bar — visible only below the `md` breakpoint. On desktop
  * the Sidebar takes over navigation duties (see Sidebar.tsx).
- * Accepts `items` so each role (User, Vendor, ...) can supply its own
+ * Accepts `items` so each role (User, Node Operator, Rider, ...) can supply its own
  * nav set while sharing this exact rendering logic.
  */
 export function BottomNav({ items = USER_NAV_ITEMS }: BottomNavProps) {

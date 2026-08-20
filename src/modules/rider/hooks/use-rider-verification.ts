@@ -8,6 +8,8 @@ import type { RiderVerificationDocumentType } from "@/core/types";
 
 interface SubmitVerificationArgs {
   currentEmployer: string;
+  /** Self-reported, 1-50 chars — added to docs/API.md 2026-08-17, no document check against it. */
+  licenseNumber: string;
   documentType: RiderVerificationDocumentType;
   file: File;
 }
@@ -23,7 +25,7 @@ interface SubmitVerificationArgs {
  * `GET /riders/me` returns `404 NOT_FOUND` when verification hasn't
  * been started yet — that's an expected state, not a fetch failure,
  * so it's surfaced separately as `notStarted` rather than folded into
- * `profileError` (same pattern as `useVendorNodeSetup`).
+ * `profileError` (same pattern as `useNodeSetup`).
  */
 export function useRiderVerification() {
   const queryClient = useQueryClient();
@@ -37,7 +39,12 @@ export function useRiderVerification() {
   const notStarted = isApiError(profileQuery.error) && profileQuery.error.code === "NOT_FOUND";
 
   const submitMutation = useMutation({
-    mutationFn: async ({ currentEmployer, documentType, file }: SubmitVerificationArgs) => {
+    mutationFn: async ({
+      currentEmployer,
+      licenseNumber,
+      documentType,
+      file,
+    }: SubmitVerificationArgs) => {
       const uploadSignature = await riderService.getVerificationUploadSignature(documentType);
       const cloudinaryPublicId = await riderService.uploadVerificationDocument(
         uploadSignature,
@@ -45,6 +52,7 @@ export function useRiderVerification() {
       );
       return riderService.submitVerification({
         currentEmployer,
+        licenseNumber,
         documentType,
         cloudinaryPublicId,
       });

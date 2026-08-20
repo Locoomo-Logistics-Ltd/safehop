@@ -121,7 +121,7 @@ presumably to keep the mock/real swap point intact (see above).
 
 ### Route groups per role, each with its own `layout.tsx`
 
-**Decision**: `(user)`, `(vendor)`, `(rider)` are separate Next.js
+**Decision**: `(user)`, `(node)`, `(rider)` are separate Next.js
 route groups, each wrapping its pages in `AuthGuard` + `AppShell` with
 a role-specific `navItems` array, rather than one shared layout with
 conditional nav logic.
@@ -129,16 +129,20 @@ conditional nav logic.
 **Reason**: Not stated explicitly in any doc — inferred from the
 structure itself. This keeps each layout trivial (a few lines wiring
 `AuthGuard` + `AppShell(navItems=X)`) and keeps role-specific nav data
-(`USER_NAV_ITEMS`/`VENDOR_NAV_ITEMS`/`RIDER_NAV_ITEMS` in
+(`USER_NAV_ITEMS`/`NODE_NAV_ITEMS`/`RIDER_NAV_ITEMS` in
 `nav-config.ts`) colocated and simple to read, at the cost of three
 near-identical layout files instead of one parameterized one.
 
 **Tradeoffs**: Some duplication across the three `layout.tsx` files
 (same `AuthGuard`+`AppShell` wiring, different `navItems`/route group).
-Auth screens, camera-scanner routes, and vendor-setup are deliberately
+Auth screens, camera-scanner routes, and node-setup are deliberately
 placed **outside** any group specifically to avoid the nav chrome
 these layouts add — documented explicitly in `README.md`'s "Routing
-structure note" sections for Vendor and Rider.
+structure note" sections for the Node Operator and Rider (`(vendor)`
+route group renamed to `(node)`, `/vendor/*` routes renamed to
+`/node/*`, 2026-08-20 — `README.md` itself wasn't re-worded as part of
+that pass, treat its still-`vendor`-named routing notes as stale on
+this specific point).
 
 **Alternatives considered**: One shared authenticated layout with a
 role read off the session to pick `navItems` conditionally — not
@@ -201,10 +205,10 @@ alternative — not adopted, in favor of centralization.
 ### Shared camera QR scanner (component "promotion" pattern)
 
 **Decision**: `QrScannerView` and `OtpInputBoxes` were originally built
-inside `modules/vendor/`, then moved to shared locations
-(`components/scanner/`, `components/ui/`) once the Rider module needed
-identical functionality — with the original files kept as one-line
-re-export shims rather than deleted.
+inside `modules/vendor/` (now `modules/node/`), then moved to shared
+locations (`components/scanner/`, `components/ui/`) once the Rider
+module needed identical functionality — with the original files kept
+as one-line re-export shims rather than deleted.
 
 **Reason**: Documented in `README.md`'s "Promoted shared components"
 table and in each shim file's own comment. Avoids duplicating
@@ -216,7 +220,11 @@ pass across the vendor module at promotion time.
 indefinitely (the shim was never scheduled for removal) — new code
 should import from the shared location directly, but nothing enforces
 this, so import paths could drift back toward the deprecated one over
-time without a lint rule catching it.
+time without a lint rule catching it. **`OtpInputBoxes`'s shim is moot
+now** — the `release` flow it belonged to (`modules/vendor/components/
+release/`) was deleted whole on 2026-08-15, so only the `QrScannerView`
+shim (`modules/node/components/scanner/QrScannerView.tsx`) still
+exists.
 
 **Alternatives considered**: Immediately updating every vendor-module
 import to point at the new shared location and deleting the old file —
@@ -241,6 +249,76 @@ worse without a key (falls back to a static list), so this is a
 genuine feature degradation, not just a cosmetic one — worth surfacing
 to whoever owns deployment config that the key should be set for
 production.
+
+---
+
+### "Vendor" renamed to "Node"/"Node Operator" throughout (2026-08-20)
+
+**Decision**: Every file, directory, type, service, hook, route, and
+user-facing label that used "Vendor" — `modules/vendor/`,
+`vendor.service.ts`/`vendorService`, `(vendor)` route group and every
+`/vendor/*` URL, `VENDOR_NAV_ITEMS`, "Shop Owner" copy — is renamed to
+"Node"/"Node Operator", checked against the pre-existing "Node" naming
+(Pickup Station entities: `LocoomoNode`/`PickupNode`/`nodesService`/
+`adminNodes`) for collisions before each rename.
+
+**Reason**: Explicit, direct instruction from the project owner
+mid-session: "vendor and node describe the same thing, use node
+instead" — the real backend role is `node_operator`, and "Vendor" was
+always just this codebase's internal label for the same person.
+
+**Tradeoffs**: Large diff (~85 files) for a change with zero behavioral
+effect — pure naming. Every root-level doc this session didn't touch
+(`README.md`, `API_INTEGRATION.md`, `FRONTEND_API_INTEGRATION_MAP.md`)
+now has stale `/vendor/*`/`VendorX` references on this specific point;
+flagged in `docs/PROJECT_CONTEXT.md`/`docs/DECISIONS.md` rather than
+silently left for someone to discover. `nodeService` (singular, this
+rename) and the pre-existing `nodesService` (plural, the public Nodes
+directory for the Consumer's node picker) are now two very
+similarly-named but functionally distinct services — a real, accepted
+risk of confusion; disambiguated by file location and header comments,
+not by picking a less-similar name, since "Node Operator" is what the
+user asked for.
+
+**Alternatives considered**: `nodeOperatorService`/`modules/
+node-operator` — more explicit, avoids the `nodeService`/`nodesService`
+near-collision, but more verbose than what was asked for; not adopted.
+
+---
+
+### Rider Earnings replaced by Revenue Split, built against the documented contract (2026-08-20)
+
+**Decision**: Deleted `RiderEarningsScreen`/`adminService.getRiderEarnings`
+(wired to `GET /admin/rider-earnings`) and built `RevenueSplitScreen`
+against the three routes `docs/API.md` actually documents
+(`POST`/`GET /admin/revenue-split`, `GET .../entries`,
+`PATCH .../mark-paid`), rather than trying to preserve the old
+screen's shape or leave it wired-but-broken.
+
+**Reason**: `/admin/rider-earnings` never appeared in `docs/API.md` at
+any point — a full endpoint re-audit this session found it alongside
+several other undocumented call sites (see
+`docs/API_INTEGRATION_STATUS.md`'s Inconsistencies section). Per the
+project's standing "no undocumented API calls" rule, an endpoint not in
+`API.md` gets removed or replaced with the real one, not patched
+around. The real contract's shape also differs meaningfully — a
+configurable ratio plus per-party entries (rider/node/platform), not a
+rider-grouped payout report — so a shape-preserving rewrite wasn't
+possible anyway.
+
+**Tradeoffs**: The old screen's rider-grouped, expandable-per-rider
+table UX is gone; the new screen is a flatter filterable entries table
+(closer to `PricingScreen`'s pattern) since that's what the real data
+actually looks like. Anyone who designed against the old
+`RiderPayoutSummary`/`RiderPayoutOrder` shape (deleted) needs to design
+against `AdminRevenueSplitEntry` instead.
+
+**Alternatives considered**: Leaving `RiderEarningsScreen` wired to the
+undocumented endpoint with a "flagged, not fixed" note (the approach
+taken for the still-undocumented Consumer OTP auth flow this same
+session) — not adopted here specifically because the real, documented
+replacement endpoints already existed and were straightforward to wire,
+unlike the auth case where the user explicitly asked to leave it alone.
 
 **Alternatives considered**: None documented — the fallback-over-crash
 approach appears to have been the only path taken.
