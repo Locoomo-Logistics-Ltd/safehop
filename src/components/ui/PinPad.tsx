@@ -17,7 +17,7 @@ const DIGIT_ROWS = [
 ];
 
 /**
- * Shared numeric keypad — used by both the vendor PIN setup screen and
+ * Shared numeric keypad — used by both the Node Operator PIN setup screen and
  * the OTP "Release Parcel" screen, which need identical numpad UX.
  */
 export function PinPad({ onDigit, onBackspace, secondaryAction, disabled }: PinPadProps) {

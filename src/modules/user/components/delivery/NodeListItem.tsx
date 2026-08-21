@@ -2,18 +2,15 @@
 
 import { cn } from "@/lib/utils";
 import { MapPinIcon } from "@/components/icons";
-import type { LocoomoNode } from "@/core/types";
+import type { PickupNode } from "@/core/types";
 
 interface NodeListItemProps {
-  node: LocoomoNode;
+  node: PickupNode;
   isSelected: boolean;
   onSelect: (nodeId: string) => void;
 }
 
 export function NodeListItem({ node, isSelected, onSelect }: NodeListItemProps) {
-  const capacityPct = Math.round((node.capacity.occupied / node.capacity.total) * 100);
-  const isNearFull = capacityPct >= 90;
-
   return (
     <button
       type="button"
@@ -36,15 +33,11 @@ export function NodeListItem({ node, isSelected, onSelect }: NodeListItemProps) 
       <div className="flex-1 min-w-0">
         <p className="text-[14px] font-semibold text-text-primary truncate">{node.name}</p>
         <p className="text-[12px] text-text-muted truncate">
-          {node.distanceKm?.toFixed(1)}km away · {node.isOpenNow ? `Open ${node.openingHours}` : "Closed"}
+          {node.distanceKm !== undefined ? `${node.distanceKm.toFixed(1)}km away · ` : ""}
+          {node.city}, {node.state}
+          {node.operatingHours ? ` · ${node.operatingHours}` : ""}
         </p>
       </div>
-
-      {isNearFull && node.isOpenNow && (
-        <span className="text-[10px] font-semibold text-status-warning bg-status-warning-bg px-2 py-1 rounded-full shrink-0">
-          Filling up
-        </span>
-      )}
     </button>
   );
 }

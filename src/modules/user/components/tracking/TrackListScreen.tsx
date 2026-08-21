@@ -1,6 +1,6 @@
 "use client";
 
-import { TopBar } from "@/components/layout";
+import { RootTopBar } from "@/components/layout";
 import { EmptyState, Button } from "@/components/ui";
 import { PackageIcon } from "@/components/icons";
 import Link from "next/link";
@@ -15,10 +15,10 @@ export function TrackListScreen() {
 
   return (
     <div className="min-h-screen bg-bg-canvas">
-      <TopBar title="Track" />
+      <RootTopBar profileHref={ROUTES.profile} />
 
       <div className="px-4 md:px-6 pt-2 md:pt-8 pb-8 max-w-[640px] mx-auto">
-        <h1 className="hidden md:block font-display text-[22px] font-bold text-text-primary mb-6">
+        <h1 className="font-display text-[18px] md:text-[22px] font-bold text-text-primary mb-4 md:mb-6">
           Track Deliveries
         </h1>
 

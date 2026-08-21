@@ -2,55 +2,35 @@
 import { httpClient } from "@/core/api/client";
 import { ENDPOINTS } from "@/core/api/endpoints";
 import { ApiError } from "@/core/api/errors";
+import { STORAGE_KEYS } from "@/core/config/constants";
 
 import type {
   AuthSession,
-  ConsumerOnboardingPayload,
-  FirstLoginResetPayload,
-  LoginNodeStaffPayload,
- LoginConsumerPayload,
-  LoginRiderPayload,
+  LoginAdminPayload,
+  LoginConsumerPayload,
   RegisterConsumerPayload,
-  RegisterRiderPayload,
-  RequestOtpPayload,
-  RiderOnboardingPayload,
- 
   User,
+  PasswordResetRequestPayload,
+  PasswordResetConfirmPayload,
+  VerifyEmailPayload,
+  InviteConfirmPayload,
 } from "@/core/types";
 
 
-/**
- * Auth service — covers all three roles' real auth flows:
- *   Consumer (User): request-otp → register → (optional) onboarding
- *   Rider:           register (password, no OTP) → onboarding (KYC)
- *   Node Staff (Vendor): admin-provisioned → login → first-login-reset
- *
- * Every screen calls these functions, never the network directly. The
- * exported object switches its implementation based on env.useMockApi.
- *
- * NOTE ON RESPONSE SHAPES: the live spec at dev.locoomo.com/api/v1/docs
- * does not document response bodies (no @ApiOkResponse schema on most
- * routes). The real* functions below assume a conventional
- * `{ user, accessToken, refreshToken }` shape — confirm against an
- * actual response once you can call the live API, and adjust the
- * `mapSessionResponse()` helper below if the real shape differs. That
- * one function is the only place a mismatch needs fixing.
- */
-
-const SESSION_STORAGE_KEY = "locoomo_session";
 
 // ── Shared response mapping (real API) ──────────────────────────
 
 /** Adjust this mapping once you've confirmed the real response shape. */
 function mapSessionResponse(raw: unknown): AuthSession {
-  const response = raw as {
-    success?: boolean;
-    data?: Partial<User>;
-  };
+  // const response = raw as {
+  //   success?: boolean;
+  //   data?: Partial<User>;
+  // };
 
 
 
-  const user = response.data ?? (raw as Partial<User>);
+  // const user = response.data ?? (raw as Partial<User>);
+  const user = raw as User;
 
   if (!user?.id) {
     throw new ApiError({
@@ -60,18 +40,18 @@ function mapSessionResponse(raw: unknown): AuthSession {
   }
 
 
-  return {
-    user: {
-      id: user.id,
-      firstName: user.firstName ?? "",
-      lastName: user.lastName ?? "",
-      email: user.email ?? "",
-      phone: user.phone ?? "",
-      role: user.role ?? "user",
-      status: user.status,
-      emailVerifiedAt: user.emailVerifiedAt,
-      createdAt: user.createdAt ?? new Date().toISOString(),
-    },
+  return {user
+    // user: {
+    //   id: user.id,
+    //   firstName: user.firstName ?? "",
+    //   lastName: user.lastName ?? "",
+    //   email: user.email ?? "",
+    //   phone: user.phone ?? "",
+    //   role: user.role ?? "user",
+    //   status: user.status,
+    //   emailVerifiedAt: user.emailVerifiedAt,
+    //   createdAt: user.createdAt ?? new Date().toISOString(),
+    // },
   };
 }
 
@@ -79,14 +59,14 @@ function persistSession(session: AuthSession) {
   if (typeof window === "undefined") return;
 
   window.localStorage.setItem(
-    SESSION_STORAGE_KEY,
+    STORAGE_KEYS.session,
     JSON.stringify(session)
   );
 }
 
 function readPersistedSession(): AuthSession | null {
   if (typeof window === "undefined") return null;
-  const raw = window.localStorage.getItem(SESSION_STORAGE_KEY);
+  const raw = window.localStorage.getItem(STORAGE_KEYS.session);
   if (!raw) return null;
   try {
     return JSON.parse(raw) as AuthSession;
@@ -97,13 +77,8 @@ function readPersistedSession(): AuthSession | null {
 
 function clearPersistedSession() {
   if (typeof window === "undefined") return;
-  window.localStorage.removeItem(SESSION_STORAGE_KEY);
+  window.localStorage.removeItem(STORAGE_KEYS.session);
 }
-
-// ── Mock implementation (unchanged public shape, local-only) ────
-
-
-
 
 // ── Real implementation ──────────────────────────────────────────
 
@@ -120,24 +95,25 @@ const realAuthService = {
     throw new ApiError({ message: "Use the NextAuth Google sign-in flow.", code: "NOT_IMPLEMENTED" });
   },
 
-  async requestConsumerOtp(payload: RequestOtpPayload): Promise<{ sent: true }> {
-    await httpClient.post(ENDPOINTS.auth.consumerRequestOtp, payload, { skipAuth: true });
-    return { sent: true };
-  },
-
-  async registerConsumer(payload: RegisterConsumerPayload): Promise<User> {
-    const raw = await httpClient.post(ENDPOINTS.auth.consumerRegister, payload, { skipAuth: true });
-
-    return (raw as { data: User }).data;
-  },
-
-  async requestConsumerLoginOtp(target: string): Promise<{ sent: true }> {
-    await httpClient.post(ENDPOINTS.auth.consumerRequestLoginOtp, { target }, { skipAuth: true });
-    return { sent: true };
-  },
+  /**
+   * Self-registration for Consumer, Rider, or NodeOperator — one
+   * shared route (`POST /auth/register`), differing only in
+   * `payload.role`. Per docs/API.md, this does **not** log the user
+   * in (no session cookies are set) — callers must send the user to
+   * login next.
+   */
+  async registerConsumer(
+  payload: RegisterConsumerPayload
+): Promise<User> {
+  return httpClient.post<User>(
+    ENDPOINTS.auth.consumerRegister,
+    payload,
+    { skipAuth: true }
+  );
+},
 
  async loginConsumer(payload: LoginConsumerPayload): Promise<AuthSession> {
-  const raw = await httpClient.post(
+  const raw = await httpClient.post<User>(
     ENDPOINTS.auth.consumerLogin,
     payload,
     {
@@ -145,52 +121,106 @@ const realAuthService = {
       credentials: "include",
     }
   );
-console.log("LOGIN RAW RESPONSE:", raw);
+// console.log("LOGIN RAW RESPONSE:", raw);
   const session = mapSessionResponse(raw);
   persistSession(session);
 
   return session;
 },
 
-  async submitConsumerOnboarding(userId: string, payload: ConsumerOnboardingPayload): Promise<User> {
-    return httpClient.post<User>(ENDPOINTS.identity.consumerOnboarding(userId), payload);
-  },
+async requestPasswordReset(
+  payload: PasswordResetRequestPayload
+): Promise<void> {
+  await httpClient.post(
+    ENDPOINTS.auth.passwordResetRequest,
+    payload,
+    {
+      skipAuth: true,
+    }
+  );
+},
 
-  async registerRider(payload: RegisterRiderPayload): Promise<AuthSession> {
-    const raw = await httpClient.post(ENDPOINTS.auth.riderRegister, payload, { skipAuth: true });
-    const session = mapSessionResponse(raw);
-    persistSession(session);
-    return session;
-  },
+async confirmPasswordReset(
+  payload: PasswordResetConfirmPayload
+): Promise<void> {
+  await httpClient.post(
+    ENDPOINTS.auth.passwordResetConfirm,
+    payload,
+    {
+      skipAuth: true,
+    }
+  );
+},
 
-  async loginRider(payload: LoginRiderPayload): Promise<AuthSession> {
-    const raw = await httpClient.post(ENDPOINTS.auth.riderLogin, payload, { skipAuth: true });
-    const session = mapSessionResponse(raw);
-    persistSession(session);
-    return session;
-  },
+async verifyEmail(
+  payload: VerifyEmailPayload
+): Promise<void> {
+  await httpClient.post(
+    ENDPOINTS.auth.verifyEmail,
+    payload,
+    {
+      skipAuth: true,
+    }
+  );
+},
 
-  async submitRiderOnboarding(userId: string, payload: RiderOnboardingPayload): Promise<User> {
-    return httpClient.post<User>(ENDPOINTS.identity.riderOnboarding(userId), payload);
-  },
+async confirmInvite(
+  payload: InviteConfirmPayload
+): Promise<void> {
+  await httpClient.post(
+    ENDPOINTS.auth.inviteConfirm,
+    payload,
+    {
+      skipAuth: true,
+    }
+  );
+},
 
-  async loginNodeStaff(payload: LoginNodeStaffPayload): Promise<AuthSession> {
-    const raw = await httpClient.post(ENDPOINTS.auth.nodeStaffLogin, payload, { skipAuth: true });
-    const session = mapSessionResponse(raw);
-    persistSession(session);
-    return session;
-  },
+  // Rider and NodeOperator registration/login previously
+  // called undocumented routes (/auth/rider/register,
+  // /auth/rider/login, /auth/node-staff/login,
+  // /auth/node-staff/first-login-reset) — removed. Both roles now
+  // share `registerConsumer` (role: "rider" / "node_operator") and
+  // `loginConsumer` above, matching docs/API.md's single, role-agnostic
+  // /auth/register and /auth/login.
 
-  async firstLoginReset(payload: FirstLoginResetPayload): Promise<AuthSession> {
-    const raw = await httpClient.post(ENDPOINTS.auth.nodeStaffFirstLoginReset, payload, { skipAuth: true });
+  /**
+   * Admin has no dedicated backend login route — per docs/API.md,
+   * POST /auth/login is role-agnostic and returns whatever role the
+   * account has, so this reuses the same endpoint as `loginConsumer`.
+   * Since the admin login screen is a separate, URL-only entry point
+   * (not reachable via role-select), a non-admin account succeeding
+   * here would otherwise get real session cookies without ever
+   * landing in `useAuthStore` correctly scoped — so the role is
+   * checked client-side and the session is revoked server-side if it
+   * doesn't match, rather than silently persisting a mismatched role.
+   */
+  async loginAdmin(payload: LoginAdminPayload): Promise<AuthSession> {
+    const raw = await httpClient.post<User>(
+      ENDPOINTS.auth.consumerLogin,
+      payload,
+      { skipAuth: true, credentials: "include" }
+    );
+
+    if (raw?.role !== "admin") {
+      await httpClient
+        .post(ENDPOINTS.auth.sessionLogout, undefined, { credentials: "include" })
+        .catch(() => {});
+      throw new ApiError({
+        message: "This account doesn't have admin access.",
+        code: "INVALID_CREDENTIALS",
+      });
+    }
+
     const session = mapSessionResponse(raw);
     persistSession(session);
     return session;
   },
 
 async refreshSession(): Promise<AuthSession> {
-  const raw = await httpClient.get(
+  const raw = await httpClient.post<User>(
     ENDPOINTS.auth.sessionRefresh,
+    undefined,
     {
       credentials: "include",
     }
@@ -211,18 +241,13 @@ async refreshSession(): Promise<AuthSession> {
   },
 
  async logout(): Promise<void> {
-  try {
-    await httpClient.post(
-      ENDPOINTS.auth.sessionLogout,
-      {},
-      {
+ await httpClient.post(
+    ENDPOINTS.auth.sessionLogout,
+    undefined,
+    {
         credentials: "include",
-      }
-    );
-  } catch {
-    // ignore
-  }
-
+    }
+);
   clearPersistedSession();
 }
 };

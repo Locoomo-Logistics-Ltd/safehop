@@ -9,7 +9,16 @@ import { ROUTES } from "@/core/config/constants";
 import { useDelivery } from "@/modules/user/hooks/use-delivery";
 import { QrCodeBlock } from "./QrCodeBlock";
 
-/** "Order Placed Successfully" confirmation screen, shown right after checkout. */
+/**
+ * "Order Placed Successfully" confirmation screen — reached from
+ * `/orders/payment-callback` once a paid `PaymentIntent` resolves to a
+ * real Order (`GET /orders/:id`), not directly from Checkout anymore
+ * (rebuilt 2026-08-12 — payment now happens on Paystack's hosted page
+ * in between). The real Order has no fee breakdown (only
+ * `PaymentIntent.feeBreakdown` does) and no `collectionQrCode`/
+ * `qrNonce`, so this shows the total paid and a QR of the tracking
+ * code alone.
+ */
 export function OrderSuccessScreen() {
   const params = useParams<{ id: string }>();
   const { delivery, isLoading } = useDelivery(params.id);
@@ -52,20 +61,17 @@ export function OrderSuccessScreen() {
           <div className="h-px bg-border-default" />
 
           <div className="flex flex-col gap-2 text-[13px]">
-            <Row label="Route" value={`${delivery.route.originLabel} → ${delivery.route.destinationLabel}`} />
-            <Row label="Base Fare" value={formatCurrency(delivery.quote.baseFare)} />
-            {delivery.quote.expressSurcharge > 0 && (
-              <Row label="Express Surcharge" value={formatCurrency(delivery.quote.expressSurcharge)} />
-            )}
-            <Row label="Insurance" value={formatCurrency(delivery.quote.insurance)} />
+            <Row label="Route" value={`${delivery.originNodeName} → ${delivery.destinationNodeName}`} />
+            <Row label="Receiver" value={delivery.receiverFullName} />
+            <Row label="Parcel" value={delivery.parcelDescription} />
           </div>
 
           <div className="h-px bg-border-default" />
 
           <div className="flex items-center justify-between">
-            <span className="text-[14px] font-semibold text-text-primary">Total</span>
+            <span className="text-[14px] font-semibold text-text-primary">Total Paid</span>
             <span className="text-[18px] font-bold text-brand-blue font-display">
-              {formatCurrency(delivery.quote.total)}
+              {formatCurrency(delivery.amountKobo / 100)}
             </span>
           </div>
         </Card>
@@ -73,9 +79,9 @@ export function OrderSuccessScreen() {
         <Card padding="lg" className="w-full mt-4 flex flex-col items-center">
           <p className="text-[13px] font-semibold text-text-primary mb-1">Drop-off QR Code</p>
           <p className="text-[12px] text-text-muted text-center mb-2">
-            Scan this at {delivery.route.originLabel} to drop off your parcel
+            Show this at {delivery.originNodeName} to drop off your parcel
           </p>
-          <QrCodeBlock value={delivery.collectionQrCode ?? delivery.trackingCode} />
+          <QrCodeBlock value={delivery.trackingCode} />
         </Card>
 
         <div className="flex flex-col gap-3 w-full mt-6">

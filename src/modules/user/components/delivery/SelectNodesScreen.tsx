@@ -2,26 +2,55 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Button, Input, ProgressSteps } from "@/components/ui";
+import { Button, ProgressSteps } from "@/components/ui";
+import { ErrorAlert } from "@/components/ui/error-alert";
 import { TopBar } from "@/components/layout";
-import { SearchIcon } from "@/components/icons";
 import { useNodes } from "@/modules/user/hooks/use-nodes";
 import { useGeolocation } from "@/hooks/use-geolocation";
 import { useDeliveryDraftStore } from "@/store/delivery-draft.store";
 import { ROUTES } from "@/core/config/constants";
+import { getErrorMessage, getFriendlyError } from "@/core/api/errors";
+import { geocodingService } from "@/core/api/services/geocoding.service";
 import { distanceKm } from "@/lib/geo";
-import { GoogleMapView } from "./GoogleMapView";
-import { NodeListItem } from "./NodeListItem";
-import { DestinationAddressInput } from "./DestinationAddressInput";
+import { NodeMapView } from "./NodeMapView";
+import { NodePickerField } from "./NodePickerField";
+import { NodePickerSheet } from "./NodePickerSheet";
+import type { GeoPoint, PickupNode } from "@/core/types";
+
+type ActiveSheet = "origin" | "destination" | null;
+
+/** Per-picker address search state — origin and destination can each search a different address independently. */
+interface AddressSearchState {
+  point: GeoPoint | null;
+  label: string | null;
+  isSearching: boolean;
+  error: string | null;
+}
+
+const EMPTY_SEARCH: AddressSearchState = { point: null, label: null, isSearching: false, error: null };
 
 /**
  * Step 2 of the New Delivery flow: pick the origin Pickup Station
- * (where the sender drops the parcel off) from the live network map,
- * and enter a destination address.
+ * (where the sender drops the parcel off) and the destination Pickup
+ * Station (where the receiver collects it).
  *
- * The real API resolves/geocodes a free-text destination address
- * server-side rather than requiring a destination Node — see
- * core/types/delivery.types.ts's comment on `destinationAddress`.
+ * Rebuilt 2026-08-21 — with enough Nodes in the network, the previous
+ * design (both pickers' full lists always rendered inline, one below
+ * the other) turned this screen into an endless scroll. Both pickers
+ * are now a collapsed `NodePickerField` that opens a `NodePickerSheet`
+ * — the full list only exists while that sheet is open. Each sheet's
+ * search box also does double duty: type a station/city name for an
+ * instant local filter (unchanged from before), or type any address and
+ * tap the pin button to geocode it (`geocodingService`, already used
+ * elsewhere for Node onboarding) and re-sort every node by distance to
+ * *that* address instead of the sender's own location — picking a
+ * station near the receiver's address, not just near yourself.
+ *
+ * Previously rebuilt 2026-08-12 — `POST /payments/intents` requires a
+ * real `destinationNodeId` per docs/API.md, not a free-text address.
+ * The map stays focused on origin selection (its primary, highest-
+ * frequency use, unchanged by this session); tapping a marker still
+ * selects the origin directly, same as before.
  *
  * Requests the user's real location on mount (useGeolocation) to
  * center the map and compute live "X km away" distances — falls back
@@ -29,19 +58,29 @@ import { DestinationAddressInput } from "./DestinationAddressInput";
  */
 export function SelectNodesScreen() {
   const router = useRouter();
-  const { nodes, isLoading } = useNodes();
+  const { nodes, isLoading, isError, error } = useNodes();
   const { position: userPosition, permissionGranted } = useGeolocation();
   const setOriginNode = useDeliveryDraftStore((s) => s.setOriginNode);
-  const setDestinationAddress = useDeliveryDraftStore((s) => s.setDestinationAddress);
+  const setDestinationNode = useDeliveryDraftStore((s) => s.setDestinationNode);
   const originNodeId = useDeliveryDraftStore((s) => s.originNodeId);
-  const destinationAddress = useDeliveryDraftStore((s) => s.destinationAddress);
+  const destinationNodeId = useDeliveryDraftStore((s) => s.destinationNodeId);
 
-  const [selectedId, setSelectedId] = useState<string | null>(originNodeId);
-  const [address, setAddress] = useState(destinationAddress ?? "");
-  const [search, setSearch] = useState("");
+  const [selectedOriginId, setSelectedOriginId] = useState<string | null>(originNodeId);
+  const [selectedDestinationId, setSelectedDestinationId] = useState<string | null>(destinationNodeId);
+  const [activeSheet, setActiveSheet] = useState<ActiveSheet>(null);
+
+  const [originSearch, setOriginSearch] = useState("");
+  const [destinationSearch, setDestinationSearch] = useState("");
+  const [originAddressSearch, setOriginAddressSearch] = useState<AddressSearchState>(EMPTY_SEARCH);
+  const [destinationAddressSearch, setDestinationAddressSearch] =
+    useState<AddressSearchState>(EMPTY_SEARCH);
+
+  const addressSearchAvailable = geocodingService.isConfigured();
 
   // Recompute live distance from the user's real position, then sort
-  // nearest-first — replaces the static mock distanceKm values.
+  // nearest-first — feeds the map only. Each picker's own sheet list
+  // (below) sorts independently, since an address search there can use
+  // a different reference point entirely.
   const nodesWithLiveDistance = useMemo(() => {
     if (!userPosition) return nodes;
     return nodes
@@ -49,21 +88,56 @@ export function SelectNodesScreen() {
       .sort((a, b) => (a.distanceKm ?? 0) - (b.distanceKm ?? 0));
   }, [nodes, userPosition]);
 
-  const filteredNodes = useMemo(() => {
-    if (!search.trim()) return nodesWithLiveDistance;
-    const q = search.toLowerCase();
-    return nodesWithLiveDistance.filter(
-      (n) => n.name.toLowerCase().includes(q) || n.area.toLowerCase().includes(q)
-    );
-  }, [nodesWithLiveDistance, search]);
+  const selectedOriginNode = useMemo(
+    () => nodesWithLiveDistance.find((n) => n.id === selectedOriginId) ?? null,
+    [nodesWithLiveDistance, selectedOriginId]
+  );
+  const selectedDestinationNode = useMemo(
+    () => nodesWithLiveDistance.find((n) => n.id === selectedDestinationId) ?? null,
+    [nodesWithLiveDistance, selectedDestinationId]
+  );
 
-  const canProceed = !!selectedId && address.trim().length > 4;
+  const originNodesForSheet = useNodesForPicker({
+    nodes,
+    userPosition,
+    excludeNodeId: null,
+    search: originSearch,
+    addressSearch: originAddressSearch,
+  });
+  const destinationNodesForSheet = useNodesForPicker({
+    nodes,
+    userPosition,
+    excludeNodeId: selectedOriginId,
+    search: destinationSearch,
+    addressSearch: destinationAddressSearch,
+  });
+
+  const canProceed = !!selectedOriginId && !!selectedDestinationId && selectedOriginId !== selectedDestinationId;
+
+  const handleSelectOrigin = (nodeId: string) => {
+    setSelectedOriginId(nodeId);
+    if (selectedDestinationId === nodeId) setSelectedDestinationId(null);
+  };
 
   const handleNext = () => {
     if (!canProceed) return;
-    setOriginNode(selectedId);
-    setDestinationAddress(address.trim());
+    setOriginNode(selectedOriginId);
+    setDestinationNode(selectedDestinationId);
     router.push(ROUTES.deliveryMethod);
+  };
+
+  const searchAddress = async (
+    query: string,
+    setState: React.Dispatch<React.SetStateAction<AddressSearchState>>
+  ) => {
+    if (!query.trim()) return;
+    setState((s) => ({ ...s, isSearching: true, error: null }));
+    try {
+      const result = await geocodingService.geocodeAddress({ address: query, city: "", state: "" });
+      setState({ point: { lat: result.lat, lng: result.lng }, label: result.formatted, isSearching: false, error: null });
+    } catch (err) {
+      setState((s) => ({ ...s, isSearching: false, error: getErrorMessage(err) }));
+    }
   };
 
   return (
@@ -76,16 +150,16 @@ export function SelectNodesScreen() {
             Pickup &amp; Destination
           </h1>
           <p className="text-[14px] text-text-secondary mt-1">
-            Choose a drop-off Pickup Station and where it&apos;s headed
+            Choose a drop-off Pickup Station and a destination Pickup Station
           </p>
         </div>
 
         <ProgressSteps total={4} current={2} className="mb-5" />
 
-        <GoogleMapView
+        <NodeMapView
           nodes={nodesWithLiveDistance}
-          selectedNodeId={selectedId}
-          onSelectNode={setSelectedId}
+          selectedNodeId={selectedOriginId}
+          onSelectNode={handleSelectOrigin}
           userPosition={userPosition}
         />
 
@@ -95,39 +169,21 @@ export function SelectNodesScreen() {
           </p>
         )}
 
-        <div className="mt-5">
-          <p className="text-[13px] font-medium text-text-secondary mb-2">
-            Select Pickup Station
-          </p>
-          <Input
-            placeholder="Search nearby stations or from your history"
-            leftElement={<SearchIcon size={16} />}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+        {isError && <ErrorAlert {...getFriendlyError(error)} />}
+
+        <div className="mt-5 flex flex-col gap-3">
+          <NodePickerField
+            label="Pickup Station"
+            placeholder="Choose a pickup station"
+            node={selectedOriginNode}
+            onClick={() => setActiveSheet("origin")}
           />
-        </div>
-
-        <div className="flex flex-col gap-2.5 mt-4">
-          {isLoading ? (
-            <p className="text-[13px] text-text-muted text-center py-6">Loading nodes…</p>
-          ) : filteredNodes.length === 0 ? (
-            <p className="text-[13px] text-text-muted text-center py-6">
-              No stations match &ldquo;{search}&rdquo;
-            </p>
-          ) : (
-            filteredNodes.map((node) => (
-              <NodeListItem
-                key={node.id}
-                node={node}
-                isSelected={selectedId === node.id}
-                onSelect={setSelectedId}
-              />
-            ))
-          )}
-        </div>
-
-        <div className="mt-6">
-          <DestinationAddressInput value={address} onChange={setAddress} />
+          <NodePickerField
+            label="Destination Station"
+            placeholder="Choose a destination station"
+            node={selectedDestinationNode}
+            onClick={() => setActiveSheet("destination")}
+          />
         </div>
 
         <p className="text-[11px] text-text-muted mt-4 leading-[1.6]">
@@ -143,6 +199,83 @@ export function SelectNodesScreen() {
           </Button>
         </div>
       </div>
+
+      {activeSheet === "origin" && (
+        <NodePickerSheet
+          title="Select Pickup Station"
+          nodes={originNodesForSheet}
+          isLoading={isLoading}
+          selectedNodeId={selectedOriginId}
+          onSelect={handleSelectOrigin}
+          onClose={() => setActiveSheet(null)}
+          searchValue={originSearch}
+          onSearchChange={setOriginSearch}
+          addressSearchAvailable={addressSearchAvailable}
+          onSearchAddress={() => searchAddress(originSearch, setOriginAddressSearch)}
+          isSearchingAddress={originAddressSearch.isSearching}
+          searchAddressError={originAddressSearch.error}
+          searchedAddressLabel={originAddressSearch.label}
+          onClearAddressSearch={() => setOriginAddressSearch(EMPTY_SEARCH)}
+        />
+      )}
+
+      {activeSheet === "destination" && (
+        <NodePickerSheet
+          title="Select Destination Station"
+          nodes={destinationNodesForSheet}
+          isLoading={isLoading}
+          selectedNodeId={selectedDestinationId}
+          onSelect={setSelectedDestinationId}
+          onClose={() => setActiveSheet(null)}
+          searchValue={destinationSearch}
+          onSearchChange={setDestinationSearch}
+          addressSearchAvailable={addressSearchAvailable}
+          onSearchAddress={() => searchAddress(destinationSearch, setDestinationAddressSearch)}
+          isSearchingAddress={destinationAddressSearch.isSearching}
+          searchAddressError={destinationAddressSearch.error}
+          searchedAddressLabel={destinationAddressSearch.label}
+          onClearAddressSearch={() => setDestinationAddressSearch(EMPTY_SEARCH)}
+        />
+      )}
     </div>
   );
+}
+
+/**
+ * One picker's node list: sorted by distance to whatever reference
+ * point currently applies (a searched address takes priority over the
+ * user's own live position), then either text-filtered by name/city
+ * (normal mode) or left unfiltered (address-search mode — the whole
+ * point is showing every node near an address that won't itself match
+ * as a text query).
+ */
+function useNodesForPicker({
+  nodes,
+  userPosition,
+  excludeNodeId,
+  search,
+  addressSearch,
+}: {
+  nodes: PickupNode[];
+  userPosition: GeoPoint | null;
+  excludeNodeId: string | null;
+  search: string;
+  addressSearch: AddressSearchState;
+}): PickupNode[] {
+  return useMemo(() => {
+    const candidates = excludeNodeId ? nodes.filter((n) => n.id !== excludeNodeId) : nodes;
+    const referencePoint = addressSearch.point ?? userPosition;
+
+    const sorted = referencePoint
+      ? candidates
+          .map((node) => ({ ...node, distanceKm: distanceKm(referencePoint, node.location) }))
+          .sort((a, b) => (a.distanceKm ?? 0) - (b.distanceKm ?? 0))
+      : candidates;
+
+    if (addressSearch.point) return sorted; // address-search mode — show every node near it, no text filter
+    if (!search.trim()) return sorted;
+
+    const q = search.toLowerCase();
+    return sorted.filter((n) => n.name.toLowerCase().includes(q) || n.city.toLowerCase().includes(q));
+  }, [nodes, userPosition, excludeNodeId, search, addressSearch.point]);
 }

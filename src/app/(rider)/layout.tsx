@@ -5,17 +5,18 @@ import { RIDER_NAV_ITEMS } from "@/components/layout/nav-config";
 
 /**
  * Layout for the (rider) route group — home, jobs, deliveries,
- * profile. Wraps every screen in this group with the auth gate and
- * the responsive AppShell using the Rider nav set
+ * profile, verification. Wraps every screen in this group with the
+ * auth gate (restricted to the "rider" role — a mismatched or missing
+ * session redirects to /login, same pattern as (admin)/layout.tsx)
+ * and the responsive AppShell using the Rider nav set
  * (Home / Jobs / Earnings / Profile).
  *
- * rider-login and rider-scan intentionally live outside this group —
- * no shell/nav during login, and the scanner is a full-screen camera
- * overlay — same pattern as the User and Vendor modules.
+ * rider-scan intentionally lives outside this group — full-screen
+ * camera overlay, same pattern as the Vendor module's scan screen.
  */
 export default function RiderLayout({ children }: { children: React.ReactNode }) {
   return (
-    <AuthGuard>
+    <AuthGuard allowedRoles={["rider"]}>
       <AppShell navItems={RIDER_NAV_ITEMS}>{children}</AppShell>
     </AuthGuard>
   );

@@ -14,6 +14,14 @@
   --brand-blue-light: #3D93E0;
   --brand-navy: #000E2E;
 
+  /* Admin accent — the Admin module's design uses a distinct orange
+     accent (sidebar active state, CTAs) instead of brand-blue, kept
+     scoped to `admin-*` tokens so it never bleeds into the
+     User/Vendor/Rider surfaces that already rely on brand-blue. */
+  --admin-accent: #F0740A;
+  --admin-accent-dark: #C75F08;
+  --admin-accent-bg: #FFF1E6;
+
   /* Status colors */
   --status-success: #16A34A;
   --status-success-bg: #ECFDF3;
@@ -60,6 +68,10 @@
   --color-brand-blue-dark: var(--brand-blue-dark);
   --color-brand-blue-light: var(--brand-blue-light);
   --color-brand-navy: var(--brand-navy);
+
+  --color-admin-accent: var(--admin-accent);
+  --color-admin-accent-dark: var(--admin-accent-dark);
+  --color-admin-accent-bg: var(--admin-accent-bg);
 
   --color-status-success: var(--status-success);
   --color-status-success-bg: var(--status-success-bg);
@@ -131,4 +143,38 @@ h1, h2, h3, h4, h5, h6 {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* SplashScreen (components/splash/SplashScreen.tsx) — the reduced-motion
+   override above already neutralizes both of these for anyone who's
+   asked for it, so no separate media query is needed here. */
+@keyframes splash-logo-in {
+  from {
+    opacity: 0;
+    transform: scale(0.82) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes splash-wordmark-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-splash-logo {
+  animation: splash-logo-in 550ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.animate-splash-wordmark {
+  animation: splash-wordmark-in 450ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: 220ms;
 }

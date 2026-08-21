@@ -45,7 +45,7 @@ export function OnlineToggle() {
         </button>
       </div>
       <p className="text-[12px] text-text-muted text-center">
-        {isOnline ? "You are Online — accepting deliveries" : "You are Offline — not accepting jobs"}
+        {isOnline ? "You are Online, accepting deliveries" : "You are Offline, not accepting jobs"}
       </p>
     </div>
   );

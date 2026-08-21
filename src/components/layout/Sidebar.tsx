@@ -16,7 +16,7 @@ interface SidebarProps {
 /**
  * Fixed left sidebar — visible only at `md` breakpoint and above.
  * Accepts `items` and an optional `primaryAction` so each role (User,
- * Vendor, ...) can supply its own nav set and CTA while sharing this
+ * Node Operator, Rider, ...) can supply its own nav set and CTA while sharing this
  * exact shell, keeping desktop and mobile navigation in sync.
  */
 export function Sidebar({ items = USER_NAV_ITEMS, primaryAction }: SidebarProps) {

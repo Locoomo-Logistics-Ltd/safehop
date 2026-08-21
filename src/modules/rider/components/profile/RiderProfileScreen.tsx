@@ -1,12 +1,13 @@
 "use client";
 
+import Link from "next/link";
 import { Card, Button } from "@/components/ui";
 import { TopBar } from "@/components/layout";
 import {
   MailIcon,
   PhoneIcon,
-  StarIcon,
   ShieldCheckIcon,
+  ClockIcon,
   CreditCardIcon,
   BellRingIcon,
   LockIcon,
@@ -15,9 +16,10 @@ import {
   LogOutIcon,
 } from "@/components/icons";
 import { useCurrentUser } from "@/store/auth.store";
+import { ROUTES } from "@/core/config/constants";
 import { useRiderAuth } from "@/modules/rider/hooks/use-rider-auth";
 import { useRiderEarnings } from "@/modules/rider/hooks/use-rider-earnings";
-import { useRiderProfile } from "@/modules/rider/hooks/use-rider-profile";
+import { useRiderVerification } from "@/modules/rider/hooks/use-rider-verification";
 import { formatCurrency } from "@/lib/format";
 
 const SETTINGS_ITEMS = [
@@ -32,7 +34,7 @@ export function RiderProfileScreen() {
   const user = useCurrentUser();
   const { logout, isLoggingOut } = useRiderAuth();
   const { earnings } = useRiderEarnings();
-  const { details } = useRiderProfile();
+  const { profile: verification, isLoadingProfile: isLoadingVerification } = useRiderVerification();
 
   if (!user) return null;
 
@@ -59,24 +61,17 @@ export function RiderProfileScreen() {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-3 gap-2.5 mb-6">
+        <div className="grid grid-cols-2 gap-2.5 mb-6">
           <Card padding="sm" className="text-center">
             <p className="text-[10px] text-text-muted mb-1">Total Earnings</p>
             <p className="font-display font-bold text-[14px] text-status-success">
-              {earnings ? formatCurrency(earnings.totalEarnings) : "—"}
+              {earnings ? formatCurrency(earnings.totalEarnings) : "₦0.00"}
             </p>
           </Card>
           <Card padding="sm" className="text-center">
             <p className="text-[10px] text-text-muted mb-1">Deliveries</p>
             <p className="font-display font-bold text-[14px] text-text-primary">
-              {earnings?.totalDeliveries.toLocaleString() ?? "—"}
-            </p>
-          </Card>
-          <Card padding="sm" className="text-center">
-            <p className="text-[10px] text-text-muted mb-1">Rider Rating</p>
-            <p className="font-display font-bold text-[14px] text-text-primary flex items-center justify-center gap-1">
-              {earnings?.rating ?? "—"}
-              <StarIcon size={12} filled className="text-status-warning" />
+              {earnings?.totalDeliveries.toLocaleString() ?? "0"}
             </p>
           </Card>
         </div>
@@ -93,25 +88,31 @@ export function RiderProfileScreen() {
           <Row icon={<MailIcon size={15} />} label="Email Address" value={user.email} />
         </Card>
 
-        {/* Vehicle details */}
+        {/* Vehicle details — the real API has no vehicle type/plate
+            endpoint at all, only the self-reported license number
+            captured once at KYC onboarding (GET /riders/me), already
+            fetched below for the Verification card. */}
         <p className="text-[11px] font-semibold uppercase tracking-wide text-text-muted mb-2">
           Vehicle Details
         </p>
         <Card
           padding="md"
-          className="flex items-center gap-3 mb-6 border-l-[3px] border-l-status-success"
+          className={
+            "flex items-center gap-3 mb-6 border-l-[3px] " +
+            (verification?.status === "active" ? "border-l-status-success" : "border-l-border-default")
+          }
         >
           <span className="w-9 h-9 rounded-[10px] bg-bg-subtle text-text-secondary flex items-center justify-center shrink-0 text-[16px]">
             🛵
           </span>
           <div className="flex-1 min-w-0">
-            <p className="text-[13px] font-semibold text-text-primary">
-              {details?.vehicle.type ?? "—"}
-            </p>
+            <p className="text-[10px] text-text-muted">License Number</p>
             <div className="flex items-center gap-2 mt-0.5">
-              <span className="text-[12px] text-text-muted">{details?.vehicle.plateNumber}</span>
-              {details?.vehicle.isVerified && (
-                <span className="flex items-center gap-1 text-[10px] font-semibold text-status-success bg-status-success-bg px-1.5 py-0.5 rounded-full">
+              <p className="text-[13px] font-semibold text-text-primary truncate">
+                {isLoadingVerification ? "Checking…" : (verification?.licenseNumber ?? "Not on file")}
+              </p>
+              {verification?.status === "active" && (
+                <span className="flex items-center gap-1 text-[10px] font-semibold text-status-success bg-status-success-bg px-1.5 py-0.5 rounded-full shrink-0">
                   <ShieldCheckIcon size={10} />
                   Verified
                 </span>
@@ -119,6 +120,55 @@ export function RiderProfileScreen() {
             </div>
           </div>
         </Card>
+
+        {/* KYC verification status */}
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-text-muted mb-2">
+          Verification
+        </p>
+        <Link href={ROUTES.riderVerification} className="block mb-6">
+          <Card
+            padding="md"
+            interactive
+            className={
+              "flex items-center gap-3 border-l-[3px] " +
+              (verification?.status === "active"
+                ? "border-l-status-success"
+                : "border-l-status-warning")
+            }
+          >
+            <span
+              className={
+                "w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0 " +
+                (verification?.status === "active"
+                  ? "bg-status-success-bg text-status-success"
+                  : "bg-status-warning-bg text-status-warning")
+              }
+            >
+              {verification?.status === "active" ? (
+                <ShieldCheckIcon size={16} />
+              ) : (
+                <ClockIcon size={16} />
+              )}
+            </span>
+            <div className="flex-1 min-w-0">
+              <p className="text-[13px] font-semibold text-text-primary">
+                {isLoadingVerification
+                  ? "Checking status…"
+                  : verification?.status === "active"
+                    ? "Verified"
+                    : verification?.status === "pending"
+                      ? "Under review"
+                      : "Complete your verification"}
+              </p>
+              <p className="text-[12px] text-text-muted truncate">
+                {verification?.status === "active"
+                  ? "You're eligible for job offers."
+                  : "Required before you can accept delivery jobs."}
+              </p>
+            </div>
+            <ChevronRightIcon size={16} className="text-text-muted shrink-0" />
+          </Card>
+        </Link>
 
         {/* Account settings */}
         <p className="text-[11px] font-semibold uppercase tracking-wide text-text-muted mb-2">

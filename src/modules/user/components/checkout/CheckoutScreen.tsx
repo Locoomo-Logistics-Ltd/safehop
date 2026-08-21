@@ -1,40 +1,45 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Button, ProgressSteps } from "@/components/ui";
 import { TopBar } from "@/components/layout";
 import { useDeliveryDraftStore } from "@/store/delivery-draft.store";
 import { useNodes } from "@/modules/user/hooks/use-nodes";
-import { useCreateDelivery } from "@/modules/user/hooks/use-create-delivery";
-import { useFareQuote } from "@/modules/user/hooks/use-fare-quote";
+import { useCheckout } from "@/modules/user/hooks/use-checkout";
 import { getErrorMessage } from "@/core/api/errors";
+import { formatCurrency } from "@/lib/format";
 import { ROUTES } from "@/core/config/constants";
-import type { PaymentMethod } from "@/core/types";
+import { toOrderParcelSize } from "@/core/types";
 import { OrderSummaryCard } from "./OrderSummaryCard";
-import { PaymentMethodSelector } from "./PaymentMethodSelector";
 
-const METHOD_LABELS: Record<string, string> = {
-  drop_and_pick: "Drop & Pick",
-  express: "Express Delivery",
+const PARCEL_SIZE_LABELS: Record<string, string> = {
+  small: "Small",
+  medium: "Medium",
+  large: "Large",
+  xl: "XL",
 };
 
 /**
- * Step 4 of the New Delivery flow: review a real, server-calculated
- * fare, choose a payment method, then create + pay for the delivery.
- * On success, routes to the order success screen.
+ * Step 4 of the New Delivery flow: create the real payment intent
+ * (`POST /payments/intents` — fee calc + capacity reservation +
+ * Paystack checkout URL, all in one call, per docs/API.md), review the
+ * fee it returns, then redirect to Paystack to actually pay.
+ *
+ * Rebuilt 2026-08-12 — the previous version called an undocumented
+ * calculate-then-book flow and never collected real payment
+ * (`deliveryService.pay()` was a no-op). There is no in-app payment
+ * method picker anymore — Paystack's own hosted checkout page presents
+ * card/bank/USSD/transfer, the real API has no such field to send.
  */
 export function CheckoutScreen() {
   const router = useRouter();
   const draft = useDeliveryDraftStore();
   const { nodes } = useNodes();
-  const { createDelivery, isCreating, pay, isPaying, payError } = useCreateDelivery();
-
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("alat_pay");
-  const [pendingDeliveryId, setPendingDeliveryId] = useState<string | null>(null);
+  const { createIntent, intent, isCreating, isIdle, createError, redirectToPaystack } = useCheckout();
 
   const isDraftComplete =
-    !!draft.receiver && !!draft.parcel && !!draft.destinationAddress && !!draft.originNodeId && !!draft.method;
+    !!draft.receiver && !!draft.parcel && !!draft.destinationNodeId && !!draft.originNodeId && !!draft.method;
 
   // Redirect back if the draft is incomplete (e.g. direct navigation or refresh).
   useEffect(() => {
@@ -43,37 +48,31 @@ export function CheckoutScreen() {
     }
   }, [isDraftComplete, router]);
 
-  const { quote, isLoading: isQuoteLoading, isError: isQuoteError } = useFareQuote({
-    originNodeId: draft.originNodeId,
-    destinationAddress: draft.destinationAddress,
-    parcel: draft.parcel,
-    method: draft.method,
-  });
+  // Create the payment intent exactly once per Checkout visit — it
+  // reserves the origin Node's capacity for ~15 minutes the instant it
+  // succeeds, so this must not fire more than once. Guarded by the
+  // mutation's own `isIdle` (not a separate ref) so "have we already
+  // fired" can never disagree with the mutation's actual state.
+  useEffect(() => {
+    if (!isDraftComplete || !isIdle) return;
+    createIntent({
+      originNodeId: draft.originNodeId!,
+      destinationNodeId: draft.destinationNodeId!,
+      receiverFullName: draft.receiver!.fullName,
+      receiverEmail: draft.receiver!.email,
+      receiverPhone: draft.receiver!.phone,
+      parcelDescription: draft.parcel!.description,
+      parcelSize: toOrderParcelSize(draft.parcel!.size),
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDraftComplete, isIdle]);
 
   if (!isDraftComplete) {
     return null;
   }
 
   const originNode = nodes.find((n) => n.id === draft.originNodeId);
-
-  const handleConfirmAndPay = async () => {
-    if (!quote) return;
-    let deliveryId = pendingDeliveryId;
-
-    if (!deliveryId) {
-      const created = await createDelivery({
-        receiver: draft.receiver!,
-        parcel: draft.parcel!,
-        destinationAddress: draft.destinationAddress!,
-        originNodeId: draft.originNodeId!,
-        method: draft.method!,
-      });
-      deliveryId = created.id;
-      setPendingDeliveryId(created.id);
-    }
-
-    pay({ id: deliveryId, method: paymentMethod });
-  };
+  const destinationNode = nodes.find((n) => n.id === draft.destinationNodeId);
 
   return (
     <div className="min-h-screen bg-bg-canvas">
@@ -90,36 +89,46 @@ export function CheckoutScreen() {
         <ProgressSteps total={4} current={4} className="mb-6" />
 
         <div className="flex flex-col gap-5">
-          {isQuoteLoading ? (
+          {isCreating || (!intent && !createError) ? (
             <div className="rounded-[16px] border border-border-default bg-bg-card p-6 text-center">
               <p className="text-[13px] text-text-muted">Calculating your delivery fee…</p>
             </div>
-          ) : isQuoteError || !quote ? (
-            <div className="rounded-[16px] border border-status-danger bg-status-danger-bg p-4 text-center">
-              <p className="text-[13px] font-medium text-status-danger">
-                Couldn&apos;t calculate the delivery fee. Please go back and try again.
-              </p>
+          ) : createError || !intent ? (
+            <div className="rounded-[16px] border border-status-danger bg-status-danger-bg p-4 text-center flex flex-col items-center gap-3">
+              <p className="text-[13px] font-medium text-status-danger">{getErrorMessage(createError)}</p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  createIntent({
+                    originNodeId: draft.originNodeId!,
+                    destinationNodeId: draft.destinationNodeId!,
+                    receiverFullName: draft.receiver!.fullName,
+                    receiverEmail: draft.receiver!.email,
+                    receiverPhone: draft.receiver!.phone,
+                    parcelDescription: draft.parcel!.description,
+                    parcelSize: toOrderParcelSize(draft.parcel!.size),
+                  })
+                }
+              >
+                Retry
+              </Button>
             </div>
           ) : (
             <OrderSummaryCard
               originLabel={originNode?.name ?? "Pickup Station"}
-              destinationLabel={draft.destinationAddress!}
+              destinationLabel={destinationNode?.name ?? "Destination Station"}
               itemDescription={draft.parcel!.description}
-              deliveryTypeLabel={METHOD_LABELS[draft.method!] ?? draft.method!}
-              quote={quote}
+              parcelSizeLabel={PARCEL_SIZE_LABELS[draft.parcel!.size] ?? draft.parcel!.size}
+              feeBreakdown={intent.feeBreakdown}
+              amountKobo={intent.amountKobo}
             />
           )}
 
-          <div>
-            <p className="font-semibold text-[15px] text-text-primary mb-3">
-              Choose payment method
-            </p>
-            <PaymentMethodSelector value={paymentMethod} onChange={setPaymentMethod} />
-          </div>
-
-          {payError && (
-            <p className="text-[13px] text-status-danger" role="alert">
-              {getErrorMessage(payError)}
+          {intent && (
+            <p className="text-[12px] text-text-muted text-center leading-[1.6]">
+              You&apos;ll choose how to pay (card, bank transfer, or USSD) on the next screen, hosted securely by
+              Paystack.
             </p>
           )}
         </div>
@@ -128,21 +137,11 @@ export function CheckoutScreen() {
       {/* Sticky bottom CTA */}
       <div className="fixed bottom-[var(--bottom-nav-height)] md:bottom-0 left-0 right-0 md:left-[260px] p-4 bg-bg-canvas border-t border-border-default">
         <div className="max-w-[520px] mx-auto">
-          <Button
-            fullWidth
-            size="lg"
-            disabled={!quote || isQuoteLoading}
-            isLoading={isCreating || isPaying}
-            onClick={handleConfirmAndPay}
-          >
-            {quote ? `Confirm & Pay ${formatTotal(quote.total)}` : "Confirm & Pay"}
+          <Button fullWidth size="lg" disabled={!intent} onClick={redirectToPaystack}>
+            {intent ? `Confirm & Pay ${formatCurrency(intent.amountKobo / 100)}` : "Confirm & Pay"}
           </Button>
         </div>
       </div>
     </div>
   );
-}
-
-function formatTotal(total: number): string {
-  return `₦${total.toLocaleString("en-NG")}`;
 }

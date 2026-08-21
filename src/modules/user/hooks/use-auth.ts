@@ -1,81 +1,46 @@
 "use client";
 
-import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { authService } from "@/core/api/services";
+import { authService, nodeService } from "@/core/api/services";
 import { QUERY_KEYS, ROUTES } from "@/core/config/constants";
 import { useAuthStore } from "@/store/auth.store";
-import type { AuthSession, LoginConsumerPayload, OtpChannel, RegisterConsumerPayload} from "@/core/types";
+import type { InviteConfirmPayload, LoginConsumerPayload, PasswordResetConfirmPayload, PasswordResetRequestPayload, RegisterConsumerPayload, User, VerifyEmailPayload} from "@/core/types";
 import { useNotificationStore } from "@/store/notification.store";
 import { getErrorMessage } from "@/core/api/errors";
 
 
-/**
- * Auth flow for the User (Consumer) module — matches the real API's
- * multi-step shape: request-otp → register (verify code + name,
- * password optional) → dashboard. Login mirrors it: request-login-otp
- * → login (password or code).
- *
- * Replaces the old single-shot signup form — the real backend can't
- * create an account without OTP verification first.
- */
+
 export function useAuth() {
+ 
   const router = useRouter();
   const queryClient = useQueryClient();
   const setSession = useAuthStore((s) => s.setSession);
-  const [target, setTarget] = useState("");
   const showNotification = useNotificationStore(
   (state) => state.showNotification
 );
 
   // ── Sign up ──────────────────────────────────────────────────
-  const requestSignUpOtpMutation = useMutation({
-    mutationFn: ({ target: t, channel }: { target: string; channel: OtpChannel }) => {
-      setTarget(t);
-      return authService.requestConsumerOtp({ target: t, channel });
-    },
-  });
-
-  // const registerMutation = useMutation({
-  //   mutationFn: (payload: { fullName: string; code: string; password?: string }) =>
-  //     authService.registerConsumer({ target, ...payload }),
-  //   onSuccess: (session) => {
-  //     setSession(session);
-  //     queryClient.setQueryData(QUERY_KEYS.session, session);
-  //     router.push(ROUTES.dashboard);
-  //   },
-  // });
-  const registerMutation = useMutation<AuthSession, Error, RegisterConsumerPayload>({
-    mutationFn: async (payload: RegisterConsumerPayload) => {
-      const user = await authService.registerConsumer({ ...payload });
-      return { user } as AuthSession;
-    },
-    onSuccess: (session) => {
-      setSession(session);
-      queryClient.setQueryData(QUERY_KEYS.session, session);
-      
-  showNotification({
-    type: "success",
-    title: "Account created 🎉",
-    message: "Your Locoomo account is ready. Please log in.",
-  });
+  // Per docs/API.md, registration does NOT log the user in — no
+  // session cookies are set. Don't call setSession here; send the
+  // user to login next.
+  const registerMutation = useMutation<User, Error, RegisterConsumerPayload>({
+    mutationFn: (payload: RegisterConsumerPayload) => authService.registerConsumer(payload),
+    onSuccess: () => {
+      showNotification({
+        type: "success",
+        title: "Account created 🎉",
+        message: "Your Locoomo account is ready. Please log in.",
+      });
       router.push(ROUTES.login);
     },
   });
 
   // ── Log in ───────────────────────────────────────────────────
-  const requestLoginOtpMutation = useMutation({
-    mutationFn: (t: string) => {
-      setTarget(t);
-      return authService.requestConsumerLoginOtp(t);
-    },
-  });
-
   const loginMutation = useMutation({
     mutationFn: (payload: LoginConsumerPayload) =>
       authService.loginConsumer({ ...payload }),
-    onSuccess: (session) => {
+    onSuccess: async (session) => {
       setSession(session);
       queryClient.setQueryData(QUERY_KEYS.session, session);
       showNotification({
@@ -84,10 +49,39 @@ export function useAuth() {
   message:
     "You are successfully logged in. Let's get your delivery moving.",
 });
-      router.push(
- ROUTES.dashboard
-);
+      // POST /auth/login is role-agnostic (docs/API.md) — route each
+      // role to its own post-login destination. Rider lands on Home
+      // (not forced into verification) — RiderHomeScreen nudges an
+      // unverified Rider with a dismissible reminder instead, and
+      // AvailableJobsScreen blocks the one feature that actually
+      // requires approval.
+      //
+      // NodeOperator is the one role whose destination depends on a
+      // second fetch: an approved (`status: "active"`) Node lands
+      // straight on its real dashboard (`nodeHome`) instead of being
+      // routed through Setup every time, per explicit product
+      // direction 2026-08-21 — a Node that's already up and running
+      // shouldn't see its onboarding screen first on every login. Not
+      // yet approved (`pending`) or not onboarded at all (`GET
+      // /node-operators/me` 404s) still lands on `nodeSetup`, which
+      // already renders the correct state (onboarding form or
+      // "waiting for approval") either way.
+      if (session.user.role === "node_operator") {
+        try {
+          const { node } = await nodeService.getMyNodeOperatorProfile();
+          router.push(node.status === "active" ? ROUTES.nodeHome : ROUTES.nodeSetup);
+        } catch {
+          router.push(ROUTES.nodeSetup);
+        }
+        return;
+      }
 
+      const roleRedirect: Record<typeof session.user.role, string> = {
+        consumer: ROUTES.dashboard,
+        rider: ROUTES.riderHome,
+        admin: ROUTES.dashboard,
+      };
+      router.push(roleRedirect[session.user.role] ?? ROUTES.dashboard);
     },
     onError: (error) => {
     showNotification({
@@ -108,22 +102,30 @@ export function useAuth() {
     },
   });
 
+const requestPasswordResetMutation = useMutation({
+  mutationFn: (payload: PasswordResetRequestPayload) =>
+    authService.requestPasswordReset(payload),
+});
+
+const confirmPasswordResetMutation = useMutation({
+  mutationFn: (payload: PasswordResetConfirmPayload 
+  ) => authService.confirmPasswordReset(payload),
+});
+
+const verifyEmailMutation = useMutation({
+  mutationFn: (payload: VerifyEmailPayload) =>
+    authService.verifyEmail(payload),
+});
+
+const confirmInviteMutation = useMutation({
+  mutationFn: (payload: InviteConfirmPayload) =>
+    authService.confirmInvite(payload),
+});
+
   return {
-    target,
-
-    requestSignUpOtp: requestSignUpOtpMutation.mutate,
-    isRequestingSignUpOtp: requestSignUpOtpMutation.isPending,
-    requestSignUpOtpError: requestSignUpOtpMutation.error,
-    signUpOtpSent: requestSignUpOtpMutation.isSuccess,
-
     register: registerMutation.mutate,
     isRegistering: registerMutation.isPending,
     registerError: registerMutation.error,
-
-    requestLoginOtp: requestLoginOtpMutation.mutate,
-    isRequestingLoginOtp: requestLoginOtpMutation.isPending,
-    requestLoginOtpError: requestLoginOtpMutation.error,
-    loginOtpSent: requestLoginOtpMutation.isSuccess,
 
     login: loginMutation.mutate,
     isLoggingIn: loginMutation.isPending,
@@ -131,5 +133,23 @@ export function useAuth() {
 
     logout: logoutMutation.mutate,
     isLoggingOut: logoutMutation.isPending,
+
+    requestPasswordReset:requestPasswordResetMutation.mutate,
+    isRequestingReset:requestPasswordResetMutation.isPending,
+    requestResetError:requestPasswordResetMutation.error,isResetRequestSuccessful:requestPasswordResetMutation.isSuccess,
+
+    confirmPasswordReset:confirmPasswordResetMutation.mutate,
+    isConfirmingReset:confirmPasswordResetMutation.isPending,
+    confirmResetError:confirmPasswordResetMutation.error,
+    isResetSuccessful:confirmPasswordResetMutation.isSuccess,
+    
+    verifyEmail:verifyEmailMutation.mutate,
+    isVerifyingEmail:verifyEmailMutation.isPending,
+
+    confirmInvite: confirmInviteMutation.mutate,
+    isConfirmingInvite: confirmInviteMutation.isPending,
+    confirmInviteError: confirmInviteMutation.error,
+    isInviteConfirmed: confirmInviteMutation.isSuccess,
+
   };
 }

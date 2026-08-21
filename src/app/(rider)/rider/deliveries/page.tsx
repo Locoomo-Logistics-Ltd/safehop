@@ -1,5 +1,5 @@
-import { MyDeliveriesScreen } from "@/modules/rider/components/history";
+import { MyEarningsScreen } from "@/modules/rider/components/history";
 
-export default function RiderDeliveriesPage() {
-  return <MyDeliveriesScreen />;
+export default function RiderEarningsPage() {
+  return <MyEarningsScreen />;
 }

@@ -32,11 +32,39 @@ export const env = {
   googleClientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
 
   /**
-   * Google Maps JavaScript API key — used by the live map on the
-   * "Select Nodes" screen. Get one at console.cloud.google.com
-   * (enable "Maps JavaScript API" + "Places API", set up billing).
-   * The map renders a clear "Map unavailable" fallback state if this
-   * is left empty, so the app still runs fine before you add a key.
+   * Which provider backs maps + geocoding. `"geoapify"` today (free
+   * tier, no billing account required); flip to `"google"` when there's
+   * budget for it — see `core/api/services/geocoding.service.ts` and
+   * `components/maps/MapView.tsx`, the only two files that branch on
+   * this.
+   */
+  mapsProvider: (process.env.NEXT_PUBLIC_MAPS_PROVIDER ?? "geoapify") as "geoapify" | "google",
+
+  /**
+   * Geoapify API key — powers both the map tiles and address→coordinate
+   * geocoding. Get one free at myprojects.geoapify.com (no card
+   * required; 3,000 requests/day on the free tier).
+   *
+   * This key ships to the browser, same as any maps key. Geoapify's
+   * project settings let you restrict it by HTTP referrer — do that
+   * before going live, or anyone can spend your quota.
+   *
+   * Left empty, maps render a clear "Map unavailable" fallback and the
+   * geocode buttons explain what's missing, so the app still runs.
+   */
+  geoapifyApiKey: process.env.NEXT_PUBLIC_GEOAPIFY_API_KEY ?? "",
+
+  /**
+   * Geoapify raster tile style. `osm-bright` is the general-purpose
+   * light basemap; `positron` / `osm-bright-grey` are quieter options
+   * that let coloured markers stand out more.
+   */
+  geoapifyMapStyle: process.env.NEXT_PUBLIC_GEOAPIFY_MAP_STYLE ?? "osm-bright",
+
+  /**
+   * Google Maps JavaScript API key — only read when `mapsProvider` is
+   * `"google"`. Requires a billing account even on the free tier, which
+   * is why Geoapify is the default.
    */
   googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "",
   googleMapsMapId: process.env.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID ?? "",

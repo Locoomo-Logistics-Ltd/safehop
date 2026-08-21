@@ -2,7 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { ChevronLeftIcon, MenuIcon } from "@/components/icons";
+import { ChevronLeftIcon } from "@/components/icons";
+import { ChevronRightIcon } from "lucide-react";
 
 interface TopBarProps {
   title?: string;
@@ -33,7 +34,7 @@ export function TopBar({
     <header
       className={cn(
         "sticky top-0 z-30 flex items-center gap-3 px-4 bg-bg-canvas/95 backdrop-blur-sm",
-        "h-[var(--top-bar-height)]",
+        "h-(--top-bar-height)",
         hideOnDesktop && "md:hidden",
         className
       )}
@@ -48,10 +49,10 @@ export function TopBar({
         </button>
       ) : (
         <button
-          aria-label="Open menu"
+          aria-label="Go front"
           className="flex items-center justify-center w-9 h-9 rounded-full bg-bg-card border border-border-default text-text-primary -ml-1.5"
         >
-          <MenuIcon size={20} />
+          <ChevronRightIcon size={20} />
         </button>
       )}
 

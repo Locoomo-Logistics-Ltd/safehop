@@ -6,7 +6,7 @@ import { authService } from "@/core/api/services";
 import { QUERY_KEYS, ROUTES } from "@/core/config/constants";
 import { useAuthStore } from "@/store/auth.store";
 
-/** Logout for the Rider module — mirrors useVendorAuth's pattern. */
+/** Logout for the Rider module — mirrors useNodeAuth's pattern. */
 export function useRiderAuth() {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -17,7 +17,7 @@ export function useRiderAuth() {
     onSuccess: () => {
       setSession(null);
       queryClient.setQueryData(QUERY_KEYS.session, null);
-      router.push(ROUTES.riderLogin);
+      router.push(ROUTES.roleSelect);
     },
   });
 

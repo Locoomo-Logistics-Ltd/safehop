@@ -4,6 +4,7 @@ export { Card } from "./Card";
 export { StatusBadge } from "./StatusBadge";
 export { ProgressSteps } from "./ProgressSteps";
 export { RouteRail } from "./RouteRail";
+export { HandoffStatusPill, getHandoffStatusLabel } from "./HandoffStatusPill";
 export { EmptyState } from "./EmptyState";
 export { PinPad } from "./PinPad";
 export { PinDots } from "./PinDots";
