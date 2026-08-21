@@ -5,8 +5,17 @@ import { LogoMark } from "@/components/icons";
 
 /** Logo finishes animating in, wordmark follows shortly after (see globals.css's animation-delay). */
 const ENTRANCE_MS = 650;
-/** How long the fully-settled logo+wordmark hold on screen before fading out. */
-const HOLD_MS = 650;
+/**
+ * How long the fully-settled logo+wordmark hold before fading out.
+ * Deliberately short (2026-08-22, trimmed from 650ms): on an installed
+ * Android PWA, this component only ever mounts *after* the OS's own
+ * native splash (generated from manifest.webmanifest's icon/
+ * background_color) has already shown and dismissed — that's already
+ * the "branded pause" moment. A long hold here stacks a second one on
+ * top and reads as two splash screens back to back instead of one
+ * continuous launch.
+ */
+const HOLD_MS = 250;
 /** Must match the fade's transition-duration below. */
 const EXIT_MS = 400;
 

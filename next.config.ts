@@ -17,7 +17,7 @@ const nextConfig: NextConfig = {
 
   
  async rewrites() {
-  const upstream = process.env.API_PROXY_TARGET ?? "https://locoomo-api.up.railway.app";
+  const upstream = process.env.API_PROXY_TARGET ?? "https://api.locoomo.com";
 
   if (!upstream) {
     return [];

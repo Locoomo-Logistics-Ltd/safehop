@@ -147,10 +147,10 @@ export function SelectNodesScreen() {
       <div className="px-4 md:px-6 pt-2 md:pt-6 pb-28 max-w-[560px] mx-auto">
         <div className="hidden md:block mb-6">
           <h1 className="font-display text-[22px] font-bold text-text-primary">
-            Pickup &amp; Destination
+            Select Pickup Station
           </h1>
           <p className="text-[14px] text-text-secondary mt-1">
-            Choose a drop-off Pickup Station and a destination Pickup Station
+            Choose a drop-off Station and a destination Station
           </p>
         </div>
 
@@ -165,7 +165,7 @@ export function SelectNodesScreen() {
 
         {permissionGranted === false && (
           <p className="text-[11px] text-text-muted mt-2">
-            📍 Location access denied — showing Lagos by default. Distances may be approximate.
+            📍 Location access denied; showing Lagos by default. Distances may be approximate.
           </p>
         )}
 
@@ -173,8 +173,8 @@ export function SelectNodesScreen() {
 
         <div className="mt-5 flex flex-col gap-3">
           <NodePickerField
-            label="Pickup Station"
-            placeholder="Choose a pickup station"
+            label="Dropoff Station"
+            placeholder="Choose a dropoff station"
             node={selectedOriginNode}
             onClick={() => setActiveSheet("origin")}
           />

@@ -22,7 +22,8 @@ export const ROLE_OPTIONS: RoleOption[] = [
   },
   {
     role: "node_operator",
-    title: "Node Operator",
+    // title: "Node Operator",
+    title: "Pickup Station",
     description: "Manage a Node/site, facilitate transfers, and build business.",
     emoji: "🏬",
   },

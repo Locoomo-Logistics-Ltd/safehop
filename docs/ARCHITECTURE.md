@@ -287,6 +287,13 @@ Protected route render
 
 Login (role-specific, e.g. useAuth().login for Consumer)
   → authService.loginConsumer(payload) → httpClient.post(..., skipAuth:true, credentials:"include")
+  → role === "admin"? (2026-08-22) POST /auth/logout to revoke the
+    cookies just issued, then throw ApiError(INVALID_CREDENTIALS) — the
+    same generic message every other wrong-login reason produces, since
+    Admin has its own separate /admin-login → loginAdmin entry point
+    and POST /auth/login is role-agnostic (an Admin's real credentials
+    would otherwise succeed here too, then get silently bounced back to
+    /login by (user)/layout.tsx's AuthGuard, allowedRoles:["consumer"])
   → mapSessionResponse(raw) builds AuthSession = { user }
   → persistSession(session) → localStorage["locoomo_session"]
   → hook's onSuccess: useAuthStore.setSession(session), queryClient.setQueryData(QUERY_KEYS.session, session),

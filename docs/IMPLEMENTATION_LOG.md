@@ -4096,3 +4096,102 @@ than that gap. A future fix, if wanted, should carry its own expiry
 (e.g. auto-drop the record after a fixed window, or re-check status
 against a max age) rather than reviving this exact implementation
 unchanged.
+
+---
+
+## 2026-08-22 (later still — Admin login via the shared /login screen now rejects instead of silently bouncing)
+
+**Bug reported**: "when I login in as admin here /login to say
+successfull but did not redirect." Confirmed by reading the actual
+request path, not just guessing: `POST /auth/login` is documented as
+role-agnostic (`docs/API.md`), so an Admin's real credentials succeed
+identically to any other role on the shared `/login` screen —
+`authService.loginConsumer()` had no role check at all, unlike
+`loginAdmin()` (the `/admin-login` screen's service call), which
+already checks the reverse direction. The session cookie gets issued,
+`use-auth.ts`'s `loginMutation.onSuccess` fires the success toast and
+pushes to `ROUTES.dashboard` (its redirect map's `admin` entry) — but
+`src/app/(user)/layout.tsx`'s `AuthGuard` is `allowedRoles:
+["consumer"]`, so it immediately redirects that mismatched session
+straight back to `/login`. Net effect from the outside: a success
+message, then silence — exactly what was reported.
+
+**Fix**: `authService.loginConsumer()` (`core/api/services/auth.service.ts`)
+now mirrors `loginAdmin()`'s existing reverse check. Right after `POST
+/auth/login` resolves, if `raw.role === "admin"`: fire-and-forget `POST
+/auth/logout` to revoke the cookies that call just issued, then throw
+`ApiError({code: "INVALID_CREDENTIALS", message: "The email or password
+doesn't match our records."})` — the exact same message/code every
+other wrong-login reason on this screen already produces. Deliberately
+*not* a distinct "this is an admin account, use /admin-login" message —
+per `docs/API.md`'s own stated reasoning for `INVALID_CREDENTIALS`
+("deliberately identical... so a login attempt can't be used to
+enumerate registered emails"), telling a stranger which email belongs
+to an admin account would itself be a leak. `mapSessionResponse`/
+`persistSession` are skipped entirely in this branch — no session ever
+touches `useAuthStore` or `localStorage` for a rejected admin attempt.
+
+**No screen changes needed.** `LoginScreen.tsx` already renders
+`getFriendlyError(loginError)` generically; `INVALID_CREDENTIALS`
+already maps to "We couldn't sign you in 🔐 / The email or password
+doesn't match our records." (`core/api/errors.ts`), so this Just
+Works™ once the service throws the right code — nothing about the UI
+needed to know an Admin was involved.
+
+**Related cleanup**: `use-auth.ts`'s post-login `roleRedirect` map had
+`admin: ROUTES.dashboard` — dead code now, since `loginConsumer()` can
+no longer resolve successfully with that role at all (the throw above
+happens before `onSuccess` ever runs). Changed the map's type from
+`Record<typeof session.user.role, string>` to
+`Partial<Record<typeof session.user.role, string>>` and dropped the
+`admin` entry, rather than leave a redirect target that's provably
+unreachable — same standard applied in the 2026-08-22 dead-endpoint
+cleanup session just before this one.
+
+**Verification performed**: `npx tsc --noEmit` (clean), `npx eslint
+src` (clean), a cleared-`.next` `npx next build` (clean after one
+transient webpack-worker cache miss unrelated to this change — 45
+routes, unchanged count). Dev-server smoke test: `/login` and
+`/admin-login` both return `200`, dev log clean. **Not performed**: no
+live Admin credential pair was available to actually submit on `/login`
+and watch the rejection fire end to end — implemented per the same
+pattern `loginAdmin()`'s own already-live reverse check uses, but not
+exercised against a real account this session.
+
+---
+
+## 2026-08-22 (later — clarified "default splash screen" on Android; trimmed custom splash hold time)
+
+**Question asked**: "There is a default splash screen, how do i remove
+it so it just my custom splash screen that shows." Clarified with the
+user which platform first — confirmed Android, installed PWA.
+
+**Finding, not a bug**: the "default splash" is Chrome's own native
+splash for any installed `display: "standalone"` PWA, generated from
+`manifest.webmanifest`'s icon + `background_color` before any JS runs.
+It cannot be disabled via manifest, meta tag, or app code — it's
+equivalent to a native Android app's system-level launch screen.
+Searched the repo for anything else that could be a second custom
+splash (`loading.tsx`, a static splash image in `public/`,
+`apple-touch-startup-image` tags) — found nothing; the
+`SplashScreen.tsx` component from 2026-08-21 is the only one.
+
+**Files changed**:
+- `src/components/splash/SplashScreen.tsx` — `HOLD_MS` 650ms → 250ms.
+  Reasoning: on an installed Android PWA this component only ever
+  mounts after the native splash has already shown and dismissed, so a
+  long deliberate hold here was stacking a second "branded pause" on
+  top of one the OS already provided — reading as two splash screens
+  rather than one continuous launch. The background-color match to
+  `manifest.webmanifest` (already in place since the component was
+  built) is what keeps the native → custom handoff from flashing a
+  different color; that part needed no change.
+
+**Verification performed**: `npx tsc --noEmit` (clean), `npx eslint`
+on the changed file (clean), a cleared-`.next` `npx next build`
+(clean — 45 routes, unchanged). Icon files in `public/icons/`
+sanity-checked by file size only (not opened/viewed) — all consistent
+with real generated assets, no placeholder-sized files found.
+**Not performed**: no Android device or installed PWA was available to
+see the actual before/after handoff, so whether 250ms is the right
+amount of settle-time hasn't been observed on real hardware.

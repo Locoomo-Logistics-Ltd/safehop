@@ -6,7 +6,82 @@
 
 ## Current objective
 
-**Latest session (2026-08-22 — the "Payment Processing" Dashboard
+**Latest session (2026-08-22 — clarified the "default splash screen"
+question on Android and trimmed the custom splash's hold time):** the
+"default splash" the user saw on an installed Android PWA is **not**
+rendered by this app — it's Chrome's own OS-level splash for any
+`display: "standalone"` PWA, synthesized natively from
+`manifest.webmanifest`'s icon + `background_color`, shown before any JS
+runs at all. There's no manifest flag, meta tag, or code path that
+suppresses it — every installed PWA on Android gets one, the same way
+a native Android app can't skip its own launch screen. Confirmed no
+other splash-like artifact exists in this repo (no `loading.tsx`, no
+static splash image, no `apple-touch-startup-image` tags) — the
+component built 2026-08-21 (`components/splash/SplashScreen.tsx`) really
+is the only custom one.
+
+**One real code change**: `SplashScreen.tsx`'s `HOLD_MS` trimmed
+650ms → 250ms. Now that it's confirmed this component always mounts
+*after* Android's native splash has already shown and dismissed on an
+installed PWA, a long deliberate hold on top of that reads as two
+splash screens back to back rather than one continuous launch — the
+native splash already covers the "branded pause" job. The background-
+color match to `manifest.webmanifest` (already done 2026-08-21) is what
+keeps the handoff between the two from flashing a different color.
+
+**Verified**: `npx tsc --noEmit` clean, `npx eslint` clean on the
+changed file, a cleared-`.next` `npx next build` succeeds (45 routes,
+unchanged). Icon files in `public/icons/` sanity-checked by size (not
+visually) — all look like real generated assets, not placeholders,
+so no separate icon-quality issue to flag. **Not verified**: no Android
+device/installed PWA was available to actually see the before/after —
+whether 250ms reads as the right amount of settle-time (vs. too abrupt)
+hasn't been observed on a real device.
+
+**Previous session (2026-08-22 — an Admin account logging in via the
+shared `/login` screen now gets a clean "invalid credentials" instead
+of a confusing successful-then-bounced-back loop):** reported bug: "when
+I login in as admin here /login to say successful but did not
+redirect." Root cause: `POST /auth/login` is role-agnostic per
+`docs/API.md`, so an Admin's real credentials succeeded on the plain
+Consumer/Rider/NodeOperator `/login` screen just like anyone else's —
+session cookies got issued, the "Welcome back" toast fired, and
+`loginConsumer()`'s redirect map sent them to `/dashboard`. But
+`(user)/layout.tsx`'s `AuthGuard` is scoped to `allowedRoles:
+["consumer"]`, so it immediately bounced that Admin session straight
+back to `/login` — from the outside, "said successful, then nothing
+happened."
+
+**Fix, mirroring the reverse check `loginAdmin()` already has**:
+`authService.loginConsumer()` now checks the resolved role right after
+`POST /auth/login` succeeds — if it's `"admin"`, the just-issued session
+is revoked server-side (`POST /auth/logout`) and the call throws the
+same generic `INVALID_CREDENTIALS` every other wrong-login reason
+already produces, rather than a distinct message that would leak
+"this email belongs to an admin account" (the same enumeration-
+avoidance reasoning `docs/API.md` itself uses for this error code).
+`LoginScreen.tsx` needed zero changes — it already renders
+`getFriendlyError(loginError)` generically, so this shows as "We
+couldn't sign you in 🔐 / The email or password doesn't match our
+records," exactly matching the ask ("it will tell you that user
+doesn't exist"). Admin still logs in normally via the separate
+`/admin-login` → `loginAdmin`, unaffected.
+
+**Related cleanup**: `use-auth.ts`'s post-login redirect map had an
+`admin: ROUTES.dashboard` entry that's now genuinely unreachable —
+`loginConsumer()` can no longer resolve with that role at all. Changed
+the map's type from `Record<...>` to `Partial<Record<...>>` and
+dropped the entry, rather than leaving a redirect that can never fire.
+
+**Verified**: `npx tsc --noEmit` clean, `npx eslint src` clean, a
+cleared-`.next` `npx next build` succeeds (45 routes, unchanged). Dev
+server: `/login` and `/admin-login` both return `200`. **Not
+verified**: no live Admin account was available to actually attempt
+this login and watch the rejection fire — the fix is implemented per
+the same pattern `loginAdmin()`'s own (already-live) reverse check
+uses, but hasn't been exercised against a real Admin credential pair.
+
+**Previous session (2026-08-22 — the "Payment Processing" Dashboard
 section, added 2026-08-21, has been fully removed):** explicit call:
 "since user will not logout, it will give displaying pending and that
 is not good." The concern — the localStorage record this feature kept

@@ -112,6 +112,21 @@ const realAuthService = {
   );
 },
 
+ /**
+  * Shared login for Consumer/Rider/NodeOperator via the one public
+  * `/login` screen. Admin has its own separate, URL-only entry point
+  * (`/admin-login` → `loginAdmin` below) — since `POST /auth/login` is
+  * role-agnostic per docs/API.md, an Admin account's real credentials
+  * would otherwise succeed here too, land a session cookie, and then
+  * get silently bounced by `(user)/layout.tsx`'s `AuthGuard`
+  * (`allowedRoles={["consumer"]}`) straight back to `/login` — a
+  * confusing "it said successful but nothing happened" loop. Mirrors
+  * `loginAdmin`'s own reverse check: wrong role → revoke the
+  * cookies this call just issued and throw the same generic
+  * `INVALID_CREDENTIALS` every other wrong-login reason already uses,
+  * rather than a distinct message that would leak "this email belongs
+  * to an admin account."
+  */
  async loginConsumer(payload: LoginConsumerPayload): Promise<AuthSession> {
   const raw = await httpClient.post<User>(
     ENDPOINTS.auth.consumerLogin,
@@ -121,7 +136,17 @@ const realAuthService = {
       credentials: "include",
     }
   );
-// console.log("LOGIN RAW RESPONSE:", raw);
+
+  if (raw?.role === "admin") {
+    await httpClient
+      .post(ENDPOINTS.auth.sessionLogout, undefined, { credentials: "include" })
+      .catch(() => {});
+    throw new ApiError({
+      message: "The email or password doesn't match our records.",
+      code: "INVALID_CREDENTIALS",
+    });
+  }
+
   const session = mapSessionResponse(raw);
   persistSession(session);
 

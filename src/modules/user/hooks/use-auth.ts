@@ -76,10 +76,16 @@ export function useAuth() {
         return;
       }
 
-      const roleRedirect: Record<typeof session.user.role, string> = {
+      // `admin` isn't a real key here — authService.loginConsumer()
+      // now rejects an Admin account's credentials outright (see its
+      // own header comment) rather than ever resolving with that role,
+      // so `UserRole` still includes it structurally but this branch
+      // can't actually be reached. `Partial` (not `Record`) reflects
+      // that honestly instead of listing a redirect that would never
+      // fire.
+      const roleRedirect: Partial<Record<typeof session.user.role, string>> = {
         consumer: ROUTES.dashboard,
         rider: ROUTES.riderHome,
-        admin: ROUTES.dashboard,
       };
       router.push(roleRedirect[session.user.role] ?? ROUTES.dashboard);
     },
