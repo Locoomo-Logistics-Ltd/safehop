@@ -2,6 +2,7 @@ export { AppShell } from "./AppShell";
 export { Sidebar } from "./Sidebar";
 export { BottomNav } from "./BottomNav";
 export { TopBar } from "./TopBar";
+export { RootTopBar } from "./RootTopBar";
 export { AuthGuard } from "./AuthGuard";
 export { AdminShell } from "./AdminShell";
 export { AdminSidebar } from "./AdminSidebar";

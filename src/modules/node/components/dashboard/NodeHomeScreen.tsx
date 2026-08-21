@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { TopBar } from "@/components/layout";
+import { RootTopBar } from "@/components/layout";
 import { Button, EmptyState } from "@/components/ui";
 import { ErrorAlert } from "@/components/ui/error-alert";
 import { QrCodeIcon, PackageIcon, ClockIcon, MapPinIcon } from "@/components/icons";
@@ -61,7 +61,7 @@ export function NodeHomeScreen() {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-bg-canvas">
-        <TopBar title="Locoomo Node" />
+        <RootTopBar profileHref={ROUTES.nodeProfile} />
         <p className="text-[13px] text-text-muted text-center py-10">Loading your Node…</p>
       </div>
     );
@@ -70,7 +70,7 @@ export function NodeHomeScreen() {
   if (notOnboarded) {
     return (
       <div className="min-h-screen bg-bg-canvas">
-        <TopBar title="Locoomo Node" />
+        <RootTopBar profileHref={ROUTES.nodeProfile} />
         <EmptyState
           icon={<MapPinIcon size={24} />}
           title="Set up your Node"
@@ -89,7 +89,7 @@ export function NodeHomeScreen() {
     const friendly = getFriendlyError(nodeError);
     return (
       <div className="min-h-screen bg-bg-canvas">
-        <TopBar title="Locoomo Node" />
+        <RootTopBar profileHref={ROUTES.nodeProfile} />
         <div className="px-4 md:px-6 pt-4 max-w-[640px] mx-auto">
           <ErrorAlert title={friendly.title} message={friendly.message} action={friendly.action} />
         </div>
@@ -100,7 +100,7 @@ export function NodeHomeScreen() {
   if (!isNodeActive) {
     return (
       <div className="min-h-screen bg-bg-canvas">
-        <TopBar title={node?.name ?? "Locoomo Node"} />
+        <RootTopBar profileHref={ROUTES.nodeProfile} />
         <EmptyState
           icon={<ClockIcon size={24} />}
           title="Waiting for approval"
@@ -121,12 +121,12 @@ export function NodeHomeScreen() {
 
   return (
     <div className="min-h-screen bg-bg-canvas relative">
-      <TopBar title={node?.name ?? "Locoomo Node"} />
+      <RootTopBar profileHref={ROUTES.nodeProfile} />
 
       <div className="px-4 md:px-6 pt-2 md:pt-8 pb-28 max-w-[640px] mx-auto">
-        <div className="hidden md:flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="font-display text-[22px] font-bold text-text-primary">
+            <h1 className="font-display text-[18px] md:text-[22px] font-bold text-text-primary">
               {node?.name ?? "Locoomo Node"}
             </h1>
             <p className="text-[13px] text-text-muted mt-0.5">{node?.address}</p>

@@ -1,6 +1,7 @@
 "use client";
 
-import { TopBar } from "@/components/layout";
+import { RootTopBar } from "@/components/layout";
+import { ROUTES } from "@/core/config/constants";
 import { PackageIcon, TruckIcon, CheckCircleIcon, AlertTriangleIcon } from "@/components/icons";
 import { useAdminDashboard } from "@/modules/admin/hooks/use-admin-dashboard";
 import { StatCard } from "@/modules/admin/components/shared/StatCard";
@@ -20,7 +21,7 @@ export function AdminDashboardScreen() {
 
   return (
     <div className="min-h-screen">
-      <TopBar title="Dashboard" rightSlot={undefined} />
+      <RootTopBar profileHref={ROUTES.adminProfile} hideOnDesktop />
 
       <div className="px-4 md:px-6 pt-2 md:pt-8 pb-10">
         <div className="hidden md:block mb-6">

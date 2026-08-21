@@ -1,8 +1,9 @@
 "use client";
 
-import { TopBar } from "@/components/layout";
+import { RootTopBar } from "@/components/layout";
 import { EmptyState } from "@/components/ui";
 import { WalletIcon } from "@/components/icons";
+import { ROUTES } from "@/core/config/constants";
 import { useMyEarnings } from "@/modules/rider/hooks/use-my-earnings";
 import { EarningsFilterTabs } from "./EarningsFilterTabs";
 import { EarningsEntryRow } from "./EarningsEntryRow";
@@ -13,10 +14,10 @@ export function MyEarningsScreen() {
 
   return (
     <div className="min-h-screen bg-bg-canvas">
-      <TopBar title="Earnings" />
+      <RootTopBar profileHref={ROUTES.riderProfile} />
 
       <div className="px-4 md:px-6 pt-2 md:pt-8 pb-8 max-w-140 mx-auto">
-        <h1 className="hidden md:block font-display text-[22px] font-bold text-text-primary mb-6">
+        <h1 className="font-display text-[18px] md:text-[22px] font-bold text-text-primary mb-4 md:mb-6">
           Earnings
         </h1>
 

@@ -6,11 +6,9 @@ import { STORAGE_KEYS } from "@/core/config/constants";
 
 import type {
   AuthSession,
-  ConsumerOnboardingPayload,
   LoginAdminPayload,
   LoginConsumerPayload,
   RegisterConsumerPayload,
-  RequestOtpPayload,
   User,
   PasswordResetRequestPayload,
   PasswordResetConfirmPayload,
@@ -97,12 +95,6 @@ const realAuthService = {
     throw new ApiError({ message: "Use the NextAuth Google sign-in flow.", code: "NOT_IMPLEMENTED" });
   },
 
-  async requestConsumerOtp(payload: RequestOtpPayload): Promise<{ sent: true }> {
-    await httpClient.post(ENDPOINTS.auth.consumerRequestOtp, payload, { skipAuth: true });
-    return { sent: true };
-  },
-
-
   /**
    * Self-registration for Consumer, Rider, or NodeOperator — one
    * shared route (`POST /auth/register`), differing only in
@@ -119,13 +111,6 @@ const realAuthService = {
     { skipAuth: true }
   );
 },
-
-  async requestConsumerLoginOtp(target: string): Promise<{ sent: true }> {
-    await httpClient.post(ENDPOINTS.auth.consumerRequestLoginOtp, { target }, { skipAuth: true });
-    return { sent: true };
-  },
-
-
 
  async loginConsumer(payload: LoginConsumerPayload): Promise<AuthSession> {
   const raw = await httpClient.post<User>(
@@ -190,10 +175,6 @@ async confirmInvite(
     }
   );
 },
-
-  async submitConsumerOnboarding(userId: string, payload: ConsumerOnboardingPayload): Promise<User> {
-    return httpClient.post<User>(ENDPOINTS.identity.consumerOnboarding(userId), payload);
-  },
 
   // Rider and NodeOperator registration/login previously
   // called undocumented routes (/auth/rider/register,

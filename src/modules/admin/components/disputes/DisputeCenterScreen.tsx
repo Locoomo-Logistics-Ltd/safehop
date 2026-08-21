@@ -1,6 +1,7 @@
 "use client";
 
-import { TopBar } from "@/components/layout";
+import { RootTopBar } from "@/components/layout";
+import { ROUTES } from "@/core/config/constants";
 import { ClockIcon, CheckCircleIcon, WalletIcon } from "@/components/icons";
 import { formatCurrency } from "@/lib/format";
 import { useAdminDisputes } from "@/modules/admin/hooks/use-admin-disputes";
@@ -17,7 +18,7 @@ export function DisputeCenterScreen() {
 
   return (
     <div className="min-h-screen">
-      <TopBar title="Disputes" />
+      <RootTopBar profileHref={ROUTES.adminProfile} hideOnDesktop />
 
       <div className="px-4 md:px-6 pt-2 md:pt-8 pb-10">
         <div className="flex items-center gap-3 mb-6">

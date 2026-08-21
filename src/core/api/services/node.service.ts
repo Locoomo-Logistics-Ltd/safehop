@@ -2,11 +2,8 @@
 import { httpClient } from "@/core/api/client";
 import { ENDPOINTS } from "@/core/api/endpoints";
 import { ApiError } from "@/core/api/errors";
-import { generateId } from "@/core/mocks/mock-utils";
-import { useAuthStore } from "@/store/auth.store";
 import type { PaginatedList } from "@/core/api/types";
 import type {
-  ActivityLogEntry,
   CollectParcelPayload,
   CollectionCodeResendResult,
   ConfirmHandoffPayload,
@@ -24,17 +21,15 @@ import type {
  * previously labeled "Vendor" in this codebase; renamed throughout to match the
  * real backend role, `node_operator`).
  *
- * REAL API GAP — a dedicated Activity Log has no endpoint of its own.
- * `listActivity()` maps `GET /notifications/user/{userId}` to the
- * closest real equivalent (adjust the mapping in
- * `mapNotificationToActivity()` below once you've seen a real
- * notification payload). **Unused as of 2026-08-17 (later still)** —
- * `ActivityScreen` now sources the Activity Log from `getMyNodeOrders()`
- * instead (real order data beats a mapped notification), leaving
- * `listActivity()` with no caller. Left in place rather than deleted —
- * it's a real, working integration, not dead code from a broken
- * endpoint — pending a product decision on whether to wire it to
- * something else or remove it.
+ * A dedicated Activity Log has no endpoint of its own, and doesn't
+ * need one: `ActivityScreen` sources it from `getMyNodeOrders()`
+ * (`GET /handoffs/my-node/orders`) — real order data, mapped into the
+ * `ActivityLogEntry` shape its list items render. An older
+ * `listActivity()` that read the undocumented
+ * `GET /notifications/user/{userId}` lost its last caller 2026-08-17
+ * and was **deleted 2026-08-21** in the pre-production cleanup, along
+ * with the whole `notifications.*` endpoint group — none of it appears
+ * in docs/API.md.
  *
  * The whole parcel custody chain runs through the `handoffs` methods at
  * the bottom of this file — consumer drop-off, rider pickup/arrival,
@@ -51,36 +46,7 @@ import type {
  * entirely; it isn't in docs/API.md and 404s on the deployed backend.)
  */
 
-// ── Real API response mapping helpers ───────────────────────────
-
-/** Adjust once you've confirmed the real notification payload shape. */
-function mapNotificationToActivity(raw: unknown): ActivityLogEntry {
-  const n = raw as { id?: string; title?: string; message?: string; body?: string; createdAt?: string; isException?: boolean; type?: string };
-  return {
-    id: n.id ?? generateId("notif"),
-    type: "parcel_checked_in",
-    title: n.title ?? "Notification",
-    description: n.message ?? n.body ?? "",
-    timestamp: n.createdAt ?? new Date().toISOString(),
-    isException: n.isException ?? false,
-  };
-}
-
-function currentUserId(): string {
-  const userId = useAuthStore.getState().session?.user.id;
-  if (!userId) {
-    throw new ApiError({ message: "Not signed in.", status: 401, code: "UNAUTHENTICATED" });
-  }
-  return userId;
-}
-
 const realNodeService = {
-  async listActivity(): Promise<ActivityLogEntry[]> {
-    const userId = currentUserId();
-    const raw = await httpClient.get<unknown[]>(ENDPOINTS.notifications.listForUser(userId));
-    return raw.map(mapNotificationToActivity);
-  },
-
   async setPin(): Promise<{ success: true }> {
     // No PIN concept in the real API — NodeOperator auth is the same
     // POST /auth/register (role: "node_operator") + POST /auth/login

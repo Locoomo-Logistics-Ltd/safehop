@@ -19,7 +19,6 @@ import { useCurrentUser } from "@/store/auth.store";
 import { ROUTES } from "@/core/config/constants";
 import { useRiderAuth } from "@/modules/rider/hooks/use-rider-auth";
 import { useRiderEarnings } from "@/modules/rider/hooks/use-rider-earnings";
-import { useRiderProfile } from "@/modules/rider/hooks/use-rider-profile";
 import { useRiderVerification } from "@/modules/rider/hooks/use-rider-verification";
 import { formatCurrency } from "@/lib/format";
 
@@ -35,7 +34,6 @@ export function RiderProfileScreen() {
   const user = useCurrentUser();
   const { logout, isLoggingOut } = useRiderAuth();
   const { earnings } = useRiderEarnings();
-  const { details } = useRiderProfile();
   const { profile: verification, isLoadingProfile: isLoadingVerification } = useRiderVerification();
 
   if (!user) return null;
@@ -90,25 +88,31 @@ export function RiderProfileScreen() {
           <Row icon={<MailIcon size={15} />} label="Email Address" value={user.email} />
         </Card>
 
-        {/* Vehicle details */}
+        {/* Vehicle details — the real API has no vehicle type/plate
+            endpoint at all, only the self-reported license number
+            captured once at KYC onboarding (GET /riders/me), already
+            fetched below for the Verification card. */}
         <p className="text-[11px] font-semibold uppercase tracking-wide text-text-muted mb-2">
           Vehicle Details
         </p>
         <Card
           padding="md"
-          className="flex items-center gap-3 mb-6 border-l-[3px] border-l-status-success"
+          className={
+            "flex items-center gap-3 mb-6 border-l-[3px] " +
+            (verification?.status === "active" ? "border-l-status-success" : "border-l-border-default")
+          }
         >
           <span className="w-9 h-9 rounded-[10px] bg-bg-subtle text-text-secondary flex items-center justify-center shrink-0 text-[16px]">
             🛵
           </span>
           <div className="flex-1 min-w-0">
-            <p className="text-[13px] font-semibold text-text-primary">
-              {details?.vehicle.type ?? "—"}
-            </p>
+            <p className="text-[10px] text-text-muted">License Number</p>
             <div className="flex items-center gap-2 mt-0.5">
-              <span className="text-[12px] text-text-muted">{details?.vehicle.plateNumber}</span>
-              {details?.vehicle.isVerified && (
-                <span className="flex items-center gap-1 text-[10px] font-semibold text-status-success bg-status-success-bg px-1.5 py-0.5 rounded-full">
+              <p className="text-[13px] font-semibold text-text-primary truncate">
+                {isLoadingVerification ? "Checking…" : (verification?.licenseNumber ?? "Not on file")}
+              </p>
+              {verification?.status === "active" && (
+                <span className="flex items-center gap-1 text-[10px] font-semibold text-status-success bg-status-success-bg px-1.5 py-0.5 rounded-full shrink-0">
                   <ShieldCheckIcon size={10} />
                   Verified
                 </span>

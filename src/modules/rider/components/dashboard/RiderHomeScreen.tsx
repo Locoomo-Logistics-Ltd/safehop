@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { TopBar } from "@/components/layout";
+import { RootTopBar } from "@/components/layout";
 import { Card } from "@/components/ui";
 import { BriefcaseIcon } from "@/components/icons";
 import { ROUTES } from "@/core/config/constants";
@@ -12,6 +12,7 @@ import { useRiderVerification } from "@/modules/rider/hooks/use-rider-verificati
 import { VerificationReminderSheet } from "@/modules/rider/components/verification";
 import { OnlineToggle } from "./OnlineToggle";
 import { EarningsStatCards } from "./EarningsStatCards";
+import { AvailableJobsPreview } from "./AvailableJobsPreview";
 
 /** Sticks for the browser tab's session so "Maybe Later" doesn't nag on every visit to Home, but reappears on a fresh session. */
 const VERIFICATION_REMINDER_DISMISSED_KEY = "locoomo_rider_verification_reminder_dismissed";
@@ -54,7 +55,7 @@ export function RiderHomeScreen() {
   return (
     <div className="min-h-screen bg-bg-canvas">
       {showReminder && <VerificationReminderSheet onDismiss={dismissReminder} />}
-      <TopBar hideOnDesktop={false} />
+      <RootTopBar profileHref={ROUTES.riderProfile} />
 
       <div className="px-4 md:px-6 pt-2 md:pt-6 pb-8 max-w-[480px] mx-auto flex flex-col gap-5">
         {/* Greeting */}
@@ -84,21 +85,27 @@ export function RiderHomeScreen() {
           </Card>
         )}
 
-        {/* Quick link to the Jobs tab */}
+        {/* Jobs section — a taste of the board here, but viewing the
+            full list or accepting a job always happens on the Jobs
+            screen (ROUTES.riderAvailableJobs). */}
         {availability === "online" && (
-          <Link
-            href={ROUTES.riderAvailableJobs}
-            className="flex items-center justify-between gap-3 bg-brand-blue text-white rounded-[14px] px-5 py-4 transition-all hover:-translate-y-0.5"
-          >
-            <div className="flex items-center gap-3">
-              <BriefcaseIcon size={20} />
-              <div>
-                <p className="font-semibold text-[14px]">View Job Offers</p>
-                <p className="text-[12px] text-white/70">Check for available deliveries</p>
+          verification?.status === "active" ? (
+            <AvailableJobsPreview />
+          ) : (
+            <Link
+              href={ROUTES.riderAvailableJobs}
+              className="flex items-center justify-between gap-3 bg-brand-blue text-white rounded-[14px] px-5 py-4 transition-all hover:-translate-y-0.5"
+            >
+              <div className="flex items-center gap-3">
+                <BriefcaseIcon size={20} />
+                <div>
+                  <p className="font-semibold text-[14px]">View Job Offers</p>
+                  <p className="text-[12px] text-white/70">Check for available deliveries</p>
+                </div>
               </div>
-            </div>
-            <span className="text-white/60 text-[20px]">→</span>
-          </Link>
+              <span className="text-white/60 text-[20px]">→</span>
+            </Link>
+          )
         )}
       </div>
     </div>

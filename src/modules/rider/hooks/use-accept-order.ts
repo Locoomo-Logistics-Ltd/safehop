@@ -25,7 +25,9 @@ export function useAcceptOrder() {
   const queryClient = useQueryClient();
 
   const mutation = useMutation({
-    mutationFn: (order: AvailableOrder) => riderService.acceptAvailableOrder(order.id),
+    mutationFn: (order: AvailableOrder) => {
+      return riderService.acceptAvailableOrder(order.id);
+    },
 
     onSuccess: (summary, order) => {
       const accepted: MyOrderSummary = {
@@ -53,6 +55,8 @@ export function useAcceptOrder() {
     },
 
     onError: (error) => {
+      
+
       // A lost accept race (`409 ILLEGAL_ORDER_TRANSITION`) means our
       // copy of the board is describing an order that's already gone.
       // Refetching is the fix docs/API.md prescribes; retrying the

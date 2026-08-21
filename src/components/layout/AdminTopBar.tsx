@@ -1,7 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useIsFetching, useQueryClient } from "@tanstack/react-query";
 import { SearchIcon, RefreshCcwIcon } from "@/components/icons";
+import { ROUTES } from "@/core/config/constants";
 import { useCurrentUser } from "@/store/auth.store";
 
 function timeOfDayGreeting(): string {
@@ -13,10 +15,12 @@ function timeOfDayGreeting(): string {
 
 /**
  * Persistent desktop top bar for every Admin screen — search field,
- * time-of-day greeting, refresh action, avatar. Matches the bar shown
+ * time-of-day greeting, refresh action, and (2026-08-21) an avatar that
+ * now links to `/admin/profile`, the only place Profile lives now that
+ * it's off both `AdminSidebar` and `BottomNav`. Matches the bar shown
  * across every frame in `admin_UI.png`. Desktop-only (`md:flex`); on
- * mobile each screen renders its own `<TopBar title=.../>`, same
- * pattern as the other roles.
+ * mobile each root screen renders its own `<RootTopBar />` instead
+ * (logo + the same Profile link), same pattern as the other roles.
  */
 export function AdminTopBar() {
   const user = useCurrentUser();
@@ -50,10 +54,14 @@ export function AdminTopBar() {
         <RefreshCcwIcon size={16} className={isRefreshing ? "animate-spin" : undefined} />
       </button>
 
-      <div className="w-9 h-9 rounded-full bg-admin-accent-bg text-admin-accent flex items-center justify-center font-semibold text-[13px] shrink-0">
+      <Link
+        href={ROUTES.adminProfile}
+        aria-label="Profile"
+        className="w-9 h-9 rounded-full bg-admin-accent-bg text-admin-accent flex items-center justify-center font-semibold text-[13px] shrink-0"
+      >
         {user?.firstName?.[0]}
         {user?.lastName?.[0]}
-      </div>
+      </Link>
     </header>
   );
 }

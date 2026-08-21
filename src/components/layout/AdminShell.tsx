@@ -1,7 +1,7 @@
 import { AdminSidebar } from "./AdminSidebar";
 import { AdminTopBar } from "./AdminTopBar";
 import { BottomNav } from "./BottomNav";
-import { ADMIN_NAV_ITEMS } from "./nav-config";
+import { ADMIN_NAV_ITEMS, ADMIN_SETTINGS_NAV_ITEM } from "./nav-config";
 
 interface AdminShellProps {
   children: React.ReactNode;
@@ -16,6 +16,12 @@ interface AdminShellProps {
  * parity with the rest of the app. `AdminTopBar`'s refresh button
  * invalidates every `["admin", ...]`-keyed query itself, so no
  * per-screen wiring is needed here.
+ *
+ * `ADMIN_NAV_ITEMS` has nine entries — too many for a mobile tab bar —
+ * so `BottomNav` shows the first three plus a "More" tab covering the
+ * rest; `ADMIN_SETTINGS_NAV_ITEM` rides along in that same sheet since
+ * it otherwise has no mobile nav entry at all (it's pinned separately
+ * in `AdminSidebar`, desktop-only).
  */
 export function AdminShell({ children }: AdminShellProps) {
   return (
@@ -25,7 +31,7 @@ export function AdminShell({ children }: AdminShellProps) {
         <AdminTopBar />
         <div className="mx-auto w-full max-w-(--app-max-width)">{children}</div>
       </div>
-      <BottomNav items={ADMIN_NAV_ITEMS} />
+      <BottomNav items={ADMIN_NAV_ITEMS} moreItems={[ADMIN_SETTINGS_NAV_ITEM]} />
     </div>
   );
 }

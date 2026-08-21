@@ -20,6 +20,7 @@ export const ROUTES = {
   orderSuccess: (id: string) => `/delivery/${id}/success`,
   track: (id: string) => `/delivery/${id}/track`,
   trackList: "/track",
+  profile: "/profile",
 
   // Node Operator (manages one Node — a Pickup Station)
   nodeHome: "/node/home",
@@ -62,6 +63,7 @@ export const ROUTES = {
   /** Split-ratio config + payout-readiness entries — `POST/GET /admin/revenue-split`, `GET .../entries`, `PATCH .../mark-paid`. Replaces the old `/admin/rider-earnings` screen (undocumented endpoint, removed) next to "Analytics" (its closest thematic neighbour). */
   adminRevenueSplit: "/admin/revenue-split",
   adminSettings: "/admin/settings",
+  adminProfile: "/admin/profile",
 } as const;
 
 export const QUERY_KEYS = {

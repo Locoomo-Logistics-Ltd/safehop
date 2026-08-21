@@ -18,6 +18,8 @@ async function rawRequest<T>(path: string, options: RequestOptions = {}): Promis
 
   const url = `${env.apiBaseUrl}${path}`;
 
+ 
+
   let response: Response;
   try {
     response = await fetch(url, {
@@ -61,6 +63,7 @@ async function rawRequest<T>(path: string, options: RequestOptions = {}): Promis
   }
 
 if (!apiResponse.success) {
+ 
   throw new ApiError({
     message: apiResponse.error.message,
     code: apiResponse.error.code,
@@ -69,6 +72,8 @@ if (!apiResponse.success) {
     details: apiResponse.error.details,
   });
 }
+
+
 
 return apiResponse.data;
 }

@@ -20,16 +20,6 @@ export interface RiderEarningsSummary {
 
 export type EarningsFilterRange = "this_week" | "this_month" | "all_time";
 
-export interface VehicleDetails {
-  type: string; // e.g. "Honda CG125"
-  plateNumber: string;
-  isVerified: boolean;
-}
-
-export interface RiderProfileDetails {
-  vehicle: VehicleDetails;
-}
-
 // ── Rider verification / KYC onboarding ─────────────────────────
 // Matches: GET /riders/verification/upload-signature → (direct
 // Cloudinary upload) → POST /riders/onboarding → GET /riders/me.

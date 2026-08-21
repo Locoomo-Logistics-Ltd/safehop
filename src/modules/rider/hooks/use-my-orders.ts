@@ -49,6 +49,24 @@ export function isActiveDelivery(order: Pick<MyOrderSummary, "status">): boolean
   );
 }
 
+/**
+ * Out of the rider's hands, but not settled yet — handed off to the
+ * destination Node (`arrived_at_destination`) and, once that Node
+ * checks it in, waiting on the receiver (`ready_for_collection`). Used
+ * by the rider's Activity screen's "Awaiting Collection" tab.
+ */
+export function isAwaitingCollection(order: Pick<MyOrderSummary, "status">): boolean {
+  return (
+    order.status === HANDOFF_STATUS.arrivedAtDestination ||
+    order.status === HANDOFF_STATUS.readyForCollection
+  );
+}
+
+/** Fully settled — the receiver has collected it. */
+export function isCompletedDelivery(order: Pick<MyOrderSummary, "status">): boolean {
+  return order.status === HANDOFF_STATUS.completed;
+}
+
 /** Which handoff the rider is heading into next: pickup until the origin operator confirms `rider_pickup`, arrival after that. */
 export function nextHandoffType(
   order: Pick<MyOrderSummary, "status">

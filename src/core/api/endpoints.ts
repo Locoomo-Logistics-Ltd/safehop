@@ -2,13 +2,10 @@
 export const ENDPOINTS = {
   // ── Authentication Module ─────────────────────────────────────
   auth: {
-    // Consumer (User)
-    consumerRequestOtp: "/auth/consumer/request-otp",
     // Shared self-registration for Consumer, Rider, and NodeOperator —
     // POST /auth/register, differing only in the `role` field. Real,
     // confirmed route per docs/API.md.
     consumerRegister: "/auth/register",
-    consumerRequestLoginOtp: "/auth/consumer/request-login-otp",
     // Shared login for every role (Consumer, Rider, NodeOperator,
     // Admin) — POST /auth/login is role-agnostic per docs/API.md.
     consumerLogin: "/auth/login",
@@ -22,25 +19,11 @@ export const ENDPOINTS = {
     inviteConfirm: "/auth/invite/confirm",
   },
 
-  // ── Identity Module (KYC / profile completion, step 3 of signup) ──
-  // riderOnboarding removed — undocumented; real Rider onboarding is
-  // `riders.onboarding` below (POST /riders/onboarding, per API.md).
-  identity: {
-    consumerOnboarding: (userId: string) => `/identity/consumer/${userId}/onboarding`,
-  },
-
   // ── Users Module ───────────────────────────────────────────────
   users: {
     // Real, confirmed route per docs/API.md — Admin-only, invites a
     // node_operator/rider/admin account (never `consumer`).
     invite: "/users/invite",
-  },
-
-  // ── Notifications Engine ──────────────────────────────────────
-  notifications: {
-    listForUser: (userId: string) => `/notifications/user/${userId}`,
-    markRead: (id: string) => `/notifications/${id}/read`,
-    markAllRead: (userId: string) => `/notifications/user/${userId}/read-all`,
   },
 
   // ── Nodes Infrastructure Module ───────────────────────────────
@@ -67,18 +50,13 @@ export const ENDPOINTS = {
     detail: (id: string) => `/nodes/${id}`,
   },
   // ── Orders Engine ──────────────────────────────────────────────
-  // `calculateFare`/`book` don't appear anywhere in docs/API.md and are
-  // no longer called by delivery.service.ts as of 2026-08-12 — real
-  // order placement is `payments.intents` below. Kept only in case a
-  // real backend equivalent is ever confirmed; don't wire new code to
-  // them. `list`/`detail` ARE documented (`GET /orders`(/:id)) and are
-  // the real routes delivery.service.ts calls.
-  // `scanHandoff`/`scanCollection` were removed 2026-08-15 —
-  // undocumented, superseded by the `handoffs` group below (`drop-off`
-  // and `collect` respectively), and no longer called by any code.
+  // Both real, documented routes (`GET /orders`, `GET /orders/:id`),
+  // consumer-scoped to the caller's own orders. Real order *placement*
+  // is `payments.intents` below, not an orders route.
+  // (`calculateFare`/`book` were removed 2026-08-21 and
+  // `scanHandoff`/`scanCollection` 2026-08-15 — all four undocumented
+  // and callerless; the handoffs group below supersedes the latter two.)
   orders: {
-    calculateFare: "/orders/calculate-fare",
-    book: "/orders/book",
     list: "/orders",
     detail: (id: string) => `/orders/${id}`,
   },
@@ -137,14 +115,12 @@ export const ENDPOINTS = {
   },
 
   // ── Payments ─────────────────────────────────────────────────────
-  // `webhook` (singular, provider-parameterized) is the pre-existing,
-  // unconfirmed entry — kept for now, but note it does NOT match
-  // docs/API.md's actual `POST /payments/webhooks/paystack` (plural,
-  // Paystack-fixed, server-to-server only, never called by this app).
-  // `intents`/`intentDetail` below are the real, confirmed,
-  // frontend-facing routes.
+  // Both real, confirmed, frontend-facing routes per docs/API.md.
+  // (`POST /payments/webhooks/paystack` is deliberately absent — it's
+  // server-to-server only, Paystack calls it directly, this app never
+  // does. A `webhook(provider)` constant that didn't match it was
+  // removed 2026-08-21; it was never called.)
   payments: {
-    webhook: (provider: string) => `/payments/webhook/${provider}`,
     intents: "/payments/intents",
     intentDetail: (id: string) => `/payments/intents/${id}`,
   },

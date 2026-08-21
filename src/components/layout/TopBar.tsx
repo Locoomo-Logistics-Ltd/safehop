@@ -34,7 +34,7 @@ export function TopBar({
     <header
       className={cn(
         "sticky top-0 z-30 flex items-center gap-3 px-4 bg-bg-canvas/95 backdrop-blur-sm",
-        "h-[var(--top-bar-height)]",
+        "h-(--top-bar-height)",
         hideOnDesktop && "md:hidden",
         className
       )}

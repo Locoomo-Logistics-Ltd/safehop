@@ -46,43 +46,6 @@ export interface InviteConfirmPayload {
     consentAccepted: boolean;
 }
 
-/** @deprecated single-shot signup — real API is multi-step, see RequestOtpPayload/RegisterConsumerPayload below. Kept for the mock service. */
-export interface SignUpPayload {
-  firstName: string;
-  lastName: string;
-  email: string;
-  phone: string;
-  password: string;
-  role: UserRole;
-}
-
-/** @deprecated real API's LoginConsumerDto uses `target` (phone or email), see LoginConsumerPayload below. Kept for the mock service. */
-export interface LoginPayload {
-  email: string;
-  password: string;
-}
-
-
-// ── Real API-aligned consumer (User) auth flow ──────────────────
-// Matches: POST /auth/consumer/request-otp → register → (optional) onboarding
-
-export type OtpChannel = "SMS" | "EMAIL" | "WHATSAPP";
-
-export interface RequestOtpPayload {
-  /** E.164 phone or email address. */
-  target: string;
-  channel: OtpChannel;
-}
-
-// export interface RegisterConsumerPayload {
-//   target: string;
-//   fullName: string;
-//   /** 6-digit code from the OTP just requested. */
-//   code: string;
-//   /** Optional — only if the person chooses to also set a password. */
-//   password?: string;
-// }
-
 /**
  * Shared self-registration payload for `POST /auth/register` — one
  * endpoint for Consumer, Rider, and NodeOperator per docs/API.md,
@@ -99,23 +62,9 @@ export interface RegisterConsumerPayload {
   role?: Extract<UserRole, "consumer" | "node_operator" | "rider">;
 }
 
-// export interface LoginConsumerPayload {
-//   target: string;
-//   /** Provide password OR code, matching whichever login method was used. */
-//   password?: string;
-//   code?: string;
-// }
 export interface LoginConsumerPayload {
  email: string;
   password: string;
-}
-
-export interface ConsumerOnboardingPayload {
-  firstName: string;
-  lastName: string;
-  preferredZone?: string;
-  email?: string;
-  phone?: string;
 }
 
 // Rider and NodeOperator self-registration now go through the same

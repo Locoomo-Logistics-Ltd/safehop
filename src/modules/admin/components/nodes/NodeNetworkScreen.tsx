@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { TopBar } from "@/components/layout";
+import { RootTopBar } from "@/components/layout";
+import { ROUTES } from "@/core/config/constants";
 import { Card, Button, EmptyState, Input } from "@/components/ui";
 import { PlusIcon, SearchIcon, MapPinIcon } from "@/components/icons";
 import { cn } from "@/lib/utils";
@@ -20,7 +21,7 @@ export function NodeNetworkScreen() {
 
   return (
     <div className="min-h-screen">
-      <TopBar title="Node Network" />
+      <RootTopBar profileHref={ROUTES.adminProfile} hideOnDesktop />
 
       <div className="px-4 md:px-6 pt-2 md:pt-8 pb-10">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">

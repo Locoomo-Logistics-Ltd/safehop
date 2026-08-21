@@ -58,14 +58,30 @@ Screens outside any route group render with no shell at all — see
 
 ## Application / user flow
 
+**Profile, for all four roles (2026-08-21):** no longer a `Sidebar`/
+`BottomNav` tab — reached only via the Profile button on `RootTopBar`
+(root screens) / `AdminTopBar` (Admin desktop). Not re-stated under
+every role's flow below; see "Shared component architecture"'s
+`RootTopBar` entry for the mechanics.
+
 ### User (Consumer)
 ```
 role-select → create-account (?role=user) → login
   → dashboard
   → delivery/new (parcel + receiver details)
-  → delivery/select-nodes (pick origin Node on live map + type destination address)
+  → delivery/select-nodes (pick origin Node on live map, or via either
+                 picker below it — origin and destination are each a
+                 `NodePickerField` trigger opening a `NodePickerSheet`
+                 pull-up list, 2026-08-21, replacing two always-rendered
+                 inline lists that turned into endless scrolling once
+                 the Node network grew. Each sheet's search box either
+                 text-filters by name/city, or geocodes a typed address
+                 via `geocodingService` and re-sorts by distance to it —
+                 independently per picker, so a destination search near
+                 the receiver's address doesn't affect the origin list.)
   → delivery/method (standard/express)
-  → checkout (server-calculated fare via useFareQuote → pay)
+  → checkout (server-calculated fare via useFareQuote → pay; redirects to
+                 Paystack, which redirects back to orders/payment-callback)
   → delivery/[id]/success → delivery/[id]/track  (or /track for the list view)
 ```
 
@@ -81,6 +97,10 @@ cleanup).
 
 ```
 role-select → create-account (?role=node_operator) → login
+  (post-login redirect, 2026-08-21: fetches GET /node-operators/me
+   before deciding — status "active" → node/home directly; pending, or
+   a 404 meaning onboarding was never completed, → node/setup, same as
+   before. Previously always node/setup regardless of approval status.)
   → node/setup (self-service Node onboarding + approval status)
   → node/home (Node Dashboard — the operator's one summary screen.
                  Node identity/capacity: GET /node-operators/me.
@@ -129,12 +149,13 @@ role-select → create-account (?role=node_operator) → login
                       (`listActivity()`/`useActivityLog`) is no longer
                       called from here — left in place, unused, not
                       deleted, pending a product decision on it.)
-  → node/profile
-      → node/earnings (this Node's revenue-split entries — GET
+  → node/earnings (this Node's revenue-split entries — GET
                       /earnings/my-node, only present for orders where
                       this Node was the origin. New 2026-08-20, reached
-                      from a Profile row, no nav-bar slot — all four
-                      are already spoken for.)
+                      from a Profile row at first, no nav-bar slot —
+                      all four were already spoken for; promoted to its
+                      own NODE_NAV_ITEMS tab 2026-08-21, same route.)
+  → node/profile
 ```
 
 **The old `vendor/parcels/[parcelId]/flag` (issue reporting) route is
@@ -164,9 +185,18 @@ Rewritten 2026-08-15, same reason.
 ```
 role-select → create-account (?role=rider) → login   (no separate rider-login route)
   → rider/verification (self-service KYC; jobs are hard-blocked until `active`)
-  → rider/home (Online/Offline toggle)
+  → rider/home (Online/Offline toggle; when online + verified `active`, a
+                 read-only `AvailableJobsPreview` — top 3 rows of the same
+                 GET /handoffs/available-orders query below, capped at
+                 page 1/limit 3, no Accept action. Every row and "View
+                 all" link to rider/available-jobs, which stays the only
+                 place a job is inspected in full or claimed. 2026-08-21.)
   → rider/available-jobs (GET /handoffs/available-orders, nearest-first)
-  → accept → rider/active-deliveries (GET /handoffs/my-orders, filtered to active legs)
+  → accept → rider/active-deliveries ("Activity" in nav since 2026-08-21 —
+              GET /handoffs/my-orders, unfiltered, behind 4 tabs: All /
+              In Transit (rider_assigned+in_transit, default tab, the
+              only actionable one) / Awaiting Collection
+              (arrived_at_destination+ready_for_collection) / Completed)
       → rider/active-deliveries/[orderId]/handoff
         (tapped at the counter: requests the 6-digit code, 5-minute countdown;
          used at both ends of the trip — pickup, then arrival)
@@ -331,7 +361,22 @@ Operator section above.)
   StatusBadge, ProgressSteps, RouteRail, EmptyState, ErrorAlert,
   Notification).
 - **`components/layout/`** — the responsive app shell
-  (AppShell/Sidebar/BottomNav/TopBar) + AuthGuard.
+  (AppShell/Sidebar/BottomNav/TopBar) + AuthGuard. **`RootTopBar`**
+  (2026-08-21) is the bar for every role's root/tab screens specifically
+  — logo left (mobile only; `Sidebar` already carries it on desktop),
+  a Profile button right, linking to that role's Profile screen. Added
+  when "Profile" was pulled off every role's `Sidebar`/`BottomNav`
+  nav-items list (`nav-config.ts`) and given exactly one entry point
+  instead: this button. Sub-screens (detail pages, forms, Profile
+  itself) are untouched — they keep the original `TopBar`
+  (title + back button). Admin's desktop bar is `AdminTopBar` (already
+  existed, unrelated component) — its avatar is now the same Profile
+  link; Admin's root screens render `RootTopBar` with
+  `hideOnDesktop` so the two bars never stack. `BottomNav` also gained
+  an overflow mode this same session: past 4 tabs, the remainder (plus
+  any `moreItems` passed in, e.g. Admin's pinned Settings) collapse into
+  a "More" pull-up sheet — only Admin's nine-item `ADMIN_NAV_ITEMS`
+  triggers this today.
 - **`components/scanner/`** — `QrScannerView`, the real camera QR
   scanner shared by the Node Operator and Rider.
 - **Promotion pattern**: `QrScannerView` was originally built inside
@@ -346,7 +391,11 @@ Operator section above.)
   (`modules/vendor/components/release/OtpInputBoxes.tsx`, the other
   half of this pattern, is gone — the whole `release` flow it belonged
   to was deleted 2026-08-15, superseded by the documented `handoffs`
-  collect endpoint.)
+  collect endpoint.) `HandoffStatusPill`/`getHandoffStatusLabel`
+  followed the identical path 2026-08-21, once the Rider module's
+  Activity screen needed the same status pill Node's screens already
+  had: `modules/node/components/handoff/HandoffStatusPill.tsx` →
+  re-exports `components/ui/HandoffStatusPill`.
 
 ## API service architecture
 

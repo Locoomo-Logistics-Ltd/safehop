@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { QueryProvider } from "./providers/query-provider";
 import { AuthProvider } from "./providers/auth-provider";
 import { ServiceWorkerRegistration } from "./providers/service-worker-registration";
+import { SplashScreen } from "@/components/splash/SplashScreen";
 
 // Self-hosted font weights — bundled via @fontsource, no runtime
 // network dependency (required for offline PWA + this sandbox's
@@ -51,6 +52,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={`h-full ${jakarta.variable}`} suppressHydrationWarning>
       <body className="min-h-full antialiased">
+        <SplashScreen />
         <QueryProvider>
           <AuthProvider>{children}</AuthProvider>
             <Notification />

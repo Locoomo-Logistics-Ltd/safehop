@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { TopBar } from "@/components/layout";
 import { Card, Button } from "@/components/ui";
-import { PhoneIcon, MailIcon, MapPinIcon, WalletIcon, ChevronRightIcon } from "@/components/icons";
+import { PhoneIcon, MailIcon, MapPinIcon, ChevronRightIcon } from "@/components/icons";
 import { ROUTES } from "@/core/config/constants";
 import { useCurrentUser } from "@/store/auth.store";
 import { useNodeAuth } from "@/modules/node/hooks/use-node-auth";
@@ -55,12 +55,6 @@ export function NodeProfileScreen() {
         <Link href={ROUTES.nodeSetup} className="block mt-4">
           <Card padding="none" className="overflow-hidden" interactive>
             <Row icon={<MapPinIcon size={17} />} label="Business" value="Node Setup & Approval Status" />
-          </Card>
-        </Link>
-
-        <Link href={ROUTES.nodeEarnings} className="block mt-4">
-          <Card padding="none" className="overflow-hidden" interactive>
-            <Row icon={<WalletIcon size={17} />} label="Earnings" value="This Node's Revenue Split" />
           </Card>
         </Link>
 

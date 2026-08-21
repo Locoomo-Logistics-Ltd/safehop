@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Button, Card, EmptyState } from "@/components/ui";
 import { ErrorAlert } from "@/components/ui/error-alert";
-import { TopBar } from "@/components/layout";
+import { RootTopBar } from "@/components/layout";
 import {
   BriefcaseIcon,
   ShieldCheckIcon,
@@ -102,7 +102,7 @@ export function AvailableJobsScreen() {
 
   return (
     <div className="min-h-screen bg-bg-canvas">
-      <TopBar title="Available Jobs" hideOnDesktop={false} />
+      <RootTopBar profileHref={ROUTES.riderProfile} />
 
       <div className="px-4 md:px-6 pt-2 md:pt-6 pb-8 max-w-[480px] mx-auto flex flex-col gap-4">
         <div className="flex items-center justify-between gap-3">

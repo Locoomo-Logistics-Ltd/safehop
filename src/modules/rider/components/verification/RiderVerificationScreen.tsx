@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { TopBar } from "@/components/layout";
-import { Button, Card, Input, EmptyState } from "@/components/ui";
+import { Button, Card, Input } from "@/components/ui";
 import { ErrorAlert } from "@/components/ui/error-alert";
 import { CheckCircleIcon, ClockIcon, ShieldCheckIcon, CameraIcon } from "@/components/icons";
 import { getFriendlyError } from "@/core/api/errors";
@@ -160,79 +160,116 @@ function VerificationForm({
   );
 }
 
+/**
+ * Shared by both the "active" and "pending" states — same fields
+ * either way (employer, license number, uploaded document), just a
+ * different banner on top. Shows everything the rider actually
+ * submitted, per the task's explicit ask: license, company name if
+ * present, the uploaded image itself (not just a link to it), and a
+ * small "Verified" tag once approved.
+ */
 function VerificationStatusView({ profile }: { profile: RiderVerificationProfile }) {
-  if (profile.status === "active") {
-    return (
-      <div className="min-h-screen bg-bg-canvas">
-        <TopBar title="Rider Verification" showBack />
-        <EmptyState
-          icon={<CheckCircleIcon size={24} />}
-          title="You're verified"
-          description="Your rider account is fully approved. You're eligible for job offers."
-          action={
-            <Link href={ROUTES.riderHome}>
-              <Button size="md">Go to Dashboard</Button>
-            </Link>
-          }
-        />
-      </div>
-    );
-  }
+  const isActive = profile.status === "active";
 
   return (
     <div className="min-h-screen bg-bg-canvas">
       <TopBar title="Rider Verification" showBack />
-      <EmptyState
-        icon={<ClockIcon size={24} />}
-        title="Verification under review"
-        description="We've received your details and document. An admin will review them shortly — you'll be able to accept jobs as soon as you're approved."
-      />
-      <div className="px-4 md:px-6 max-w-[480px] mx-auto flex flex-col gap-3">
-        <Card padding="md" className="flex items-center gap-3">
-          <span className="w-9 h-9 rounded-[10px] bg-bg-subtle text-text-muted flex items-center justify-center shrink-0">
-            <ShieldCheckIcon size={16} />
+
+      <div className="px-4 md:px-6 pt-6 pb-10 max-w-[480px] mx-auto flex flex-col gap-5">
+        <div className="flex flex-col items-center text-center gap-3">
+          <span
+            className={
+              "w-14 h-14 rounded-full flex items-center justify-center " +
+              (isActive
+                ? "bg-status-success-bg text-status-success"
+                : "bg-status-warning-bg text-status-warning")
+            }
+          >
+            {isActive ? <CheckCircleIcon size={26} /> : <ClockIcon size={26} />}
           </span>
-          <div className="min-w-0">
-            <p className="text-[10px] text-text-muted">Current Employer</p>
-            <p className="text-[13px] font-medium text-text-primary truncate">
-              {profile.currentEmployer}
+
+          <div>
+            <div className="flex items-center justify-center gap-2">
+              <h1 className="font-display text-[18px] font-bold text-text-primary">
+                {isActive ? "You're verified" : "Verification under review"}
+              </h1>
+              {isActive && (
+                <span className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-status-success bg-status-success-bg px-2 py-0.5 rounded-full shrink-0">
+                  <ShieldCheckIcon size={10} />
+                  Verified
+                </span>
+              )}
+            </div>
+            <p className="text-[13px] text-text-secondary mt-1">
+              {isActive
+                ? "Your rider account is fully approved. You're eligible for job offers."
+                : "We've received your details and document. An admin will review them shortly — you'll be able to accept jobs as soon as you're approved."}
             </p>
           </div>
-        </Card>
-        {profile.licenseNumber && (
-          <Card padding="md" className="flex items-center gap-3">
-            <span className="w-9 h-9 rounded-[10px] bg-bg-subtle text-text-muted flex items-center justify-center shrink-0">
-              <ShieldCheckIcon size={16} />
-            </span>
-            <div className="min-w-0">
-              <p className="text-[10px] text-text-muted">License Number</p>
-              <p className="text-[13px] font-medium text-text-primary truncate">
-                {profile.licenseNumber}
-              </p>
-            </div>
+        </div>
+
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-text-muted mb-2">
+            Verification Details
+          </p>
+          <Card padding="none" className="overflow-hidden">
+            <Row icon={<ShieldCheckIcon size={16} />} label="Current Employer" value={profile.currentEmployer} />
+            {profile.licenseNumber && (
+              <>
+                <div className="h-px bg-border-default" />
+                <Row icon={<ShieldCheckIcon size={16} />} label="License Number" value={profile.licenseNumber} />
+              </>
+            )}
           </Card>
+        </div>
+
+        {profile.documents.length > 0 && (
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-text-muted mb-2">
+              Uploaded Document
+            </p>
+            <div className="flex flex-col gap-3">
+              {profile.documents.map((doc) => (
+                <a key={doc.documentType} href={doc.viewUrl} target="_blank" rel="noreferrer" className="block">
+                  <Card padding="sm" interactive className="overflow-hidden">
+                    <div className="flex items-center gap-2 px-1 pb-2">
+                      <CameraIcon size={14} className="text-text-muted" />
+                      <p className="text-[12px] font-medium text-text-secondary">Rating Screenshot</p>
+                    </div>
+                    {/* eslint-disable-next-line @next/next/no-img-element -- signed, short-lived Cloudinary URL; next/image needs a configured remote domain this project doesn't have */}
+                    <img
+                      src={doc.viewUrl}
+                      alt="Uploaded rider verification document"
+                      className="w-full max-h-[320px] object-cover rounded-[10px] bg-bg-subtle"
+                    />
+                  </Card>
+                </a>
+              ))}
+            </div>
+          </div>
         )}
-        {profile.documents.map((doc) => (
-          <a
-            key={doc.documentType}
-            href={doc.viewUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="block"
-          >
-            <Card padding="md" interactive className="flex items-center gap-3">
-              <span className="w-9 h-9 rounded-[10px] bg-bg-subtle text-text-muted flex items-center justify-center shrink-0">
-                <CameraIcon size={16} />
-              </span>
-              <div className="min-w-0">
-                <p className="text-[10px] text-text-muted">Rating Screenshot</p>
-                <p className="text-[13px] font-medium text-brand-blue truncate">
-                  View uploaded document
-                </p>
-              </div>
-            </Card>
-          </a>
-        ))}
+
+        {isActive && (
+          <Link href={ROUTES.riderHome} className="block">
+            <Button fullWidth size="lg">
+              Go to Dashboard
+            </Button>
+          </Link>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Row({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+  return (
+    <div className="flex items-center gap-3 p-4">
+      <span className="w-9 h-9 rounded-[10px] bg-bg-subtle text-text-muted flex items-center justify-center shrink-0">
+        {icon}
+      </span>
+      <div className="flex-1 min-w-0">
+        <p className="text-[10px] text-text-muted">{label}</p>
+        <p className="text-[13px] font-medium text-text-primary truncate">{value}</p>
       </div>
     </div>
   );

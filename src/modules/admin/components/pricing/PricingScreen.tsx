@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { TopBar } from "@/components/layout";
+import { RootTopBar } from "@/components/layout";
+import { ROUTES } from "@/core/config/constants";
 import { Card, Button, EmptyState } from "@/components/ui";
 import { CreditCardIcon, PlusIcon } from "@/components/icons";
 import { formatCurrency } from "@/lib/format";
@@ -19,7 +20,7 @@ export function PricingScreen() {
 
   return (
     <div className="min-h-screen">
-      <TopBar title="Pricing" />
+      <RootTopBar profileHref={ROUTES.adminProfile} hideOnDesktop />
 
       <div className="px-4 md:px-6 pt-2 md:pt-8 pb-10">
         <div className="flex flex-wrap items-start justify-between gap-3 mb-6">

@@ -3079,3 +3079,1020 @@ screens are built strictly from `docs/API.md`'s documented contract
 and share the same "not live-verified" caveat as every other Admin/
 NodeOperator/Rider screen in this project (see
 `docs/HANDOFF.md`).
+
+---
+
+## 2026-08-21 (Rider Home — Available Jobs preview section)
+
+**Feature**: Rider Home (`/rider/home`) gains a read-only preview of the
+job board. The explicit product framing: Home should show *some* jobs
+so a rider gets a sense of what's out there at a glance, but *viewing*
+the full list or *accepting* a job stays a Jobs-screen-only action —
+Home never gets its own Accept control. Read `docs/ARCHITECTURE.md`,
+`docs/HANDOFF.md`, `docs/IMPLEMENTATION_LOG.md`,
+`docs/API_INTEGRATION_STATUS.md`, `docs/API.md`, and the existing Rider
+module (`RiderHomeScreen`, `AvailableJobsScreen`, `AvailableJobCard`,
+`use-available-orders.ts`) before writing any code, per the task's
+explicit instruction.
+
+**No backend/API change** — `GET /handoffs/available-orders` was
+already ✅ fully integrated (see `docs/API_INTEGRATION_STATUS.md`'s
+Handoffs section) via `riderService.listAvailableOrders` /
+`useAvailableOrders`. This session adds a second call site at a smaller
+page size, not a new endpoint.
+
+**Files created**:
+- `src/modules/rider/components/dashboard/AvailableJobsPreview.tsx` —
+  new. Calls `useAvailableOrders(3)` (the same hook `AvailableJobsScreen`
+  uses, just `limit=3` instead of the default 20) and renders:
+  - A "Jobs near you" header with a "View all" link → `ROUTES.riderAvailableJobs`.
+  - Up to 3 compact `Card` rows (origin → destination, parcel size,
+    distance when `isSortTrustworthy` — same trustworthy-distance
+    caveat `AvailableJobsScreen` already observes, reusing
+    `formatDistanceMeters`/`parcelSizeLabel` from
+    `modules/rider/lib/handoff-format.ts` rather than re-deriving them).
+  - A "+N more waiting — view all to accept" line when `total` exceeds
+    the 3 shown.
+  - A 2-row skeleton while loading, and a quiet "No jobs available right
+    now" `EmptyState`-style card on a genuine empty list.
+  - Returns `null` on a real fetch error (e.g. a `403 RIDER_NOT_ACTIVE`
+    that slipped through the mount gate below) instead of rendering a
+    second copy of `AvailableJobsScreen`'s `ErrorAlert` — Home is a
+    summary surface, not a duplicate error UI.
+  - Every row is wrapped in its own `Link` to `/rider/available-jobs`,
+    not a per-order route — there is no detail route for an unclaimed
+    order to deep-link into (the accept action itself needs the fuller
+    `AvailableJobCard` context: full addresses, waiting-since, the
+    at-capacity/remaining-capacity messaging), so a tap always lands on
+    the real Jobs screen rather than attempting a shortcut accept from
+    an under-informed summary card.
+- `src/modules/rider/components/dashboard/index.ts` — barrel-exported
+  `AvailableJobsPreview`.
+
+**Files changed**:
+- `src/modules/rider/components/dashboard/RiderHomeScreen.tsx` — the
+  previous unconditional "View Job Offers" banner (shown whenever
+  `availability === "online"`) is now conditional on the rider also
+  being verification-`active`:
+  - `online` + `active` → renders `AvailableJobsPreview`.
+  - `online` + not yet `active` → unchanged old banner, which still
+    routes to `/rider/available-jobs`'s own "Verification required"
+    gate. This preserves the exact previous behavior for an
+    unverified-but-online rider rather than fetching a list request
+    that's guaranteed to `403 RIDER_NOT_ACTIVE`.
+  - `offline` → unchanged "You're offline" card.
+
+**Design decisions**:
+- Gated the preview's mount (not just its rendering) on
+  `verification?.status === "active"`, mirroring the exact gate
+  `AvailableJobsScreen` itself enforces before calling the same
+  endpoint — this avoids firing a doomed request from Home for any
+  rider who hasn't cleared KYC yet, rather than relying solely on the
+  component's own `error → null` fallback to hide the failure.
+- Deliberately did not reuse `AvailableJobCard` as-is for the preview
+  rows — that component's whole reason for existing is the Accept
+  button and its accompanying capacity/loading state wiring, none of
+  which belongs on a passive Home summary. Built a smaller row instead
+  rather than threading a `hideAcceptButton`-style prop through the
+  real screen's card.
+- Capped at 3 rows with no pagination controls on Home — a preview
+  that grows its own "next page" UI stops being a preview. Pagination
+  stays exclusively on `AvailableJobsScreen`.
+
+**Verification performed**: `npx tsc --noEmit` (clean), `npx eslint`
+on every changed/new file (clean), a cleared-`.next` `npx next build`
+(clean — 44 routes, `/rider/home` grew from 157 B to 3.99 kB reflecting
+the new component; every other route's size is unaffected, in
+particular `/rider/available-jobs` itself). Dev-server smoke test:
+`curl`'d both `/rider/home` and `/rider/available-jobs`, both return
+`200` with the expected `AuthGuard` loading-spinner markup (no session
+in this environment). **Not performed**: browser verification against
+a live backend with a real, verified, online Rider account and actual
+unclaimed orders near a Node — the populated-preview, "+N more", empty,
+and skeleton states are implemented per the same documented contract
+`AvailableJobsScreen` already uses, but haven't been seen rendered
+against real data. Same standing caveat as most Rider-module sessions
+in this log.
+
+**Remaining/related work, unchanged by this session**: everything
+`docs/API_INTEGRATION_STATUS.md`'s Handoffs section already flags for
+`GET /handoffs/available-orders` (no rider-facing payout figure on this
+endpoint, `useGeolocation`'s Lagos-centre fallback) applies identically
+to this new preview call site, since it's the same query.
+
+---
+
+## 2026-08-21 (later — Profile off every Sidebar/BottomNav, onto a new RootTopBar; Admin gets a Profile screen + a "More" nav sheet)
+
+**Feature**: explicit ask — every role's navbar should show the logo on
+the left and a Profile button on the right (tapping it opens that
+role's Profile screen), with "Profile" removed as a tab from both
+`Sidebar` (desktop) and `BottomNav` (mobile), for all four roles: User,
+Node Operator, Rider, Admin. Clarified scope with the user before
+touching anything, since `TopBar` is shared across dozens of detail
+screens, not just the tab-bar destinations: (1) the new bar applies
+only to each role's root/tab screens, not every screen; (2) Admin
+should get a real, new Profile screen (it had none — only "Settings", a
+different destination) rather than pointing "Profile" at Settings; (3)
+the logo shows mobile-only — desktop keeps just the Profile button,
+since `Sidebar` already carries the logo there. A fourth point came out
+of the same clarification round: Admin's `ADMIN_NAV_ITEMS` has nine
+entries, too many for a mobile tab bar, so `BottomNav` should show 4
+and fold the rest into a "More" pull-up sheet.
+
+**Files created**:
+- `src/components/layout/RootTopBar.tsx` — new shared component. Props:
+  `profileHref` (required) and `hideOnDesktop` (optional, default
+  `false`). Renders a sticky header: logo + "LOCOOMO" wordmark, `md:hidden`
+  (Sidebar already shows the brand mark on desktop); a Profile button
+  (`ml-auto` so it's right-aligned regardless of whether the logo half
+  is rendered) — an initials-avatar `Link` styled like every existing
+  Profile screen's own avatar (`bg-status-info-bg text-brand-blue`),
+  falling back to a generic `UserIcon` if `useCurrentUser()` returns
+  `null`. `hideOnDesktop` wraps the whole header in `md:hidden` — Admin
+  passes this since `AdminTopBar` (already existed, desktop-only,
+  mounted once in `AdminShell`) is that role's desktop bar; without the
+  prop the two would stack.
+- `src/modules/admin/components/profile/AdminProfileScreen.tsx` +
+  `index.ts` — new. Admin's first-ever Profile screen: avatar (initials,
+  `admin-accent` colors to match `AdminTopBar`/`AdminSidebar`), name,
+  `"{role} account"` line, email/phone rows, a "Log Out" button. Built
+  as its own inline `useMutation(() => authService.logout())` +
+  `useAuthStore` (same shape `AdminSidebar`'s existing logout button
+  already uses) rather than a shared hook — no `useAdminAuth().logout`
+  existed to reuse, and building one just for this would have been a
+  detour from the actual ask. Modeled directly on the other three
+  roles' `ProfileScreen`/`RiderProfileScreen`/`NodeProfileScreen` (same
+  avatar/Row pattern) for consistency.
+- `src/app/(admin)/admin/profile/page.tsx` — new route, inside the
+  `(admin)` group (covered by the existing `AuthGuard(allowedRoles=["admin"])`).
+
+**Files changed**:
+- `src/core/config/constants.ts` — added `ROUTES.profile` ("/profile" —
+  formalizes what `nav-config.ts` used to hardcode as a literal string)
+  and `ROUTES.adminProfile` ("/admin/profile", new route).
+- `src/components/layout/nav-config.ts` — removed the `Profile` entry
+  from `USER_NAV_ITEMS`, `NODE_NAV_ITEMS`, `RIDER_NAV_ITEMS` (down to 2,
+  3, and 4 items respectively — `ADMIN_NAV_ITEMS` never had one, Admin's
+  account destination was always the separate "Settings" item). Removed
+  the now-unused `UserIcon` import. `Sidebar`/`BottomNav` both just
+  render whatever `items` array they're given, so deleting these three
+  entries was the entire fix for "remove Profile from Sidebar/BottomNav"
+  — neither component needed a code change for that half of the ask.
+- `src/components/layout/index.ts` — barrel-exported `RootTopBar`.
+- `src/components/layout/BottomNav.tsx` — rewritten to support overflow.
+  New `moreItems` prop (destinations with no tab slot of their own —
+  Admin's pinned Settings) and a `MAX_VISIBLE_TABS = 4` constant. When
+  `items.length > 4`, the first 3 render as normal tabs and a 4th "More"
+  button (existing `DotsIcon`) appears, active-highlighted whenever the
+  current route matches anything in the overflow; tapping it opens a
+  new `MoreNavSheet` (same file) — a pull-up sheet, same overlay +
+  drag-handle pattern as `VerificationReminderSheet`, listing every
+  overflow item (plus `moreItems`) as a tappable row that closes the
+  sheet on navigation. When `items.length <= 4` (User, Node, Rider, all
+  post-Profile-removal), the component renders byte-for-byte the same
+  as before — no "More" tab appears, no behavior change.
+- `src/components/layout/AdminShell.tsx` — passes
+  `moreItems={[ADMIN_SETTINGS_NAV_ITEM]}` to `BottomNav`, so Settings —
+  previously pinned only in the desktop-only `AdminSidebar`, with zero
+  mobile entry point — is reachable on mobile too, folded into the same
+  "More" sheet as the six `ADMIN_NAV_ITEMS` that don't fit in the
+  visible four.
+- `src/components/layout/AdminTopBar.tsx` — the previously-decorative
+  avatar (`div`) is now a `Link` to `ROUTES.adminProfile` (`aria-label="Profile"`).
+  This is the desktop half of "Profile on the right" for Admin, since
+  Admin's own root screens render `RootTopBar` with `hideOnDesktop` (no
+  duplicate bar).
+- Thirteen root screens across all four roles now render `RootTopBar`
+  in place of the old per-screen `TopBar`:
+  - **User**: `DashboardScreen.tsx` (had no top bar at all before —
+    `RootTopBar` is new there, not a swap), `TrackListScreen.tsx`.
+  - **Node**: `NodeHomeScreen.tsx` (all five render branches — loading,
+    not-onboarded, error, waiting-for-approval, and the active happy
+    path), `ActivityScreen.tsx`.
+  - **Rider**: `RiderHomeScreen.tsx`, `AvailableJobsScreen.tsx`,
+    `ActiveDeliveriesScreen.tsx`, `MyEarningsScreen.tsx`.
+  - **Admin** (`RootTopBar ... hideOnDesktop`, since `AdminTopBar`
+    already covers desktop): `AdminDashboardScreen.tsx`,
+    `OrderListScreen.tsx`, `NodeNetworkScreen.tsx`,
+    `TeamManagementScreen.tsx`, `ApprovalsScreen.tsx`,
+    `PricingScreen.tsx`, `DisputeCenterScreen.tsx`,
+    `AnalyticsScreen.tsx`, `RevenueSplitScreen.tsx`.
+  Four of these (`TrackListScreen`, `ActivityScreen`, `MyEarningsScreen`,
+  and `NodeHomeScreen`'s active-happy-path node-name heading) had an
+  in-page `<h1>` duplicating the old `TopBar`'s `title`, but marked
+  `hidden md:block` — the mobile view relied entirely on the bar for
+  that text. Dropped the `hidden` (and bumped the heading down to a
+  `text-[18px]` mobile size, `md:text-[22px]` unchanged) so the title
+  isn't silently lost on mobile now that the bar carries no text. Every
+  other converted screen already had an always-visible in-page `<h1>` (a
+  pattern already consistent across the Admin module in particular), so
+  nothing else needed this fix.
+
+**Verification performed**: `npx tsc --noEmit` (clean), `npx eslint src`
+(clean, whole repo, run twice — once before a final small class-syntax
+tweak, once after), a cleared-`.next` `npx next build` (clean — 45
+routes, up from 44, `/admin/profile` new). Dev-server smoke test:
+`curl`'d `/dashboard`, `/track`, `/profile`, `/node/home`,
+`/node/activity`, `/node/profile`, `/rider/home`,
+`/rider/available-jobs`, `/rider/active-deliveries`,
+`/rider/deliveries`, `/rider/profile`, `/admin/dashboard`,
+`/admin/profile`, `/admin-login` — all `200`. **Not performed**: no
+live session (any role) or a browser was available this session, so
+the bar's actual visual layout (logo/profile alignment at both
+breakpoints), the initials avatar, and the "More" sheet's open/tap/close
+interaction haven't been seen rendered — only compiled, built, and
+route-probed. Whoever picks this up next with Claude in Chrome access
+should click through at least one of each role before calling this
+production-ready.
+
+**Deliberately unchanged**: `Sidebar`'s own account footer (avatar +
+name + email at the bottom of the desktop rail) and `AdminSidebar`'s
+matching footer + inline logout button — neither was asked to change,
+and both still work exactly as before; the new Profile button is an
+addition, not a replacement for whatever `Sidebar`'s footer already
+did. `TopBar.tsx` itself (the back-button component) is untouched —
+every sub-screen (detail pages, forms, the Profile screens themselves)
+still uses it exactly as before.
+
+---
+
+## 2026-08-21 (later still — Rider Profile's Vehicle Details shows a real license number; Verification screen shows full details + uploaded image + a "Verified" tag)
+
+**Feature**: two related fixes to the Rider module, both scoped to
+data already fetched elsewhere on these same screens — no new
+endpoint. (1) `RiderProfileScreen`'s "Vehicle Details" card was backed
+by `useRiderProfile()` → `riderService.getProfileDetails()`, a
+permanent `NOT_IMPLEMENTED` stub (no vehicle type/plate/verified
+endpoint exists anywhere in `docs/API.md`) — so that card had rendered
+`"—"`/`undefined` in production the entire time this screen has
+existed. Replaced with the one real, license-shaped field that *does*
+exist: `licenseNumber` off `GET /riders/me`
+(`useRiderVerification`, already called on this same screen for the
+Verification card below it — no new fetch). (2)
+`RiderVerificationScreen`'s "You're verified" (`status: "active"`)
+branch showed a bare `EmptyState` with zero details — the *pending*
+branch right next to it already showed employer/license/a document
+link, so an approved rider saw strictly less about their own
+submission than a still-pending one. Asked to show "all your
+verification details, license, company names if available, the image
+you uploaded and a small tag saying verified" — implemented for both
+states via one shared view.
+
+**Files changed**:
+- `src/core/types/rider.types.ts` — deleted `VehicleDetails` and
+  `RiderProfileDetails` (fabricated shapes with no backing route —
+  `type`/`plateNumber`/`isVerified` never existed anywhere in
+  `docs/API.md`, self-admitted in `rider.service.ts`'s own header
+  before this session).
+- `src/core/api/services/rider.service.ts` — deleted `getProfileDetails()`
+  (the `NOT_IMPLEMENTED` stub those types backed) and the now-unused
+  `RiderProfileDetails` import. Rewrote the file's header comment: the
+  "REAL API GAPS" list drops the vehicle-details bullet (only the
+  availability-toggle gap remains) and gained a dated note pointing at
+  `licenseNumber`/`GET /riders/me` as what replaced it.
+- `src/modules/rider/hooks/use-rider-profile.ts` — **deleted**, not
+  deprecated. Its one caller no longer exists (see below), and grepping
+  confirmed nothing else in the repo imported it — same
+  delete-not-preserve convention this log has used for every other
+  fully-superseded hook/store (`rider-jobs.store.ts`, `node-parcels.store.ts`,
+  etc.).
+- `src/modules/rider/components/profile/RiderProfileScreen.tsx` — the
+  "Vehicle Details" card now reads `verification?.licenseNumber` (from
+  the `useRiderVerification()` call already on this screen) instead of
+  `details?.vehicle.*` (from the deleted `useRiderProfile()`).
+  `isLoadingVerification` covers the loading state ("Checking…"); a
+  `null`/missing license (self-reported, not backfilled for riders who
+  onboarded before the field existed, per `docs/API.md`) shows "Not on
+  file" rather than blank. The green "Verified" pill and left-border
+  accent now key off `verification?.status === "active"` (a real,
+  already-fetched value) instead of the deleted `vehicle.isVerified`
+  (which was never real to begin with). Card heading ("Vehicle
+  Details") kept as-is per how the task named it, even though its
+  content is now a license number, not vehicle specs — there's no
+  vehicle-specific data anywhere in the real API to show instead.
+- `src/modules/rider/components/verification/RiderVerificationScreen.tsx`
+  — `VerificationStatusView` rewritten: one shared layout for both
+  `active` and `pending`, differing only in the top banner (icon,
+  heading copy, and — active only — a small
+  `<ShieldCheckIcon/>` "Verified" pill next to the heading, plus the
+  "Go to Dashboard" CTA at the bottom, both previously exclusive to the
+  old `active`-only `EmptyState` branch). Below the banner: a
+  "Verification Details" card (current employer always; license number
+  when present — same two fields the old `pending` branch already had,
+  now shared by both states) and an "Uploaded Document" section that
+  renders the actual image inline (`<img src={doc.viewUrl}>`, wrapped in
+  the same `<a target="_blank">` so tapping still opens the full-size
+  original) instead of the old pending-only "View uploaded document"
+  text link — closing the "the image you uploaded" part of the ask.
+  Extracted a local `Row` helper (icon + label + value) matching the
+  one every other Profile screen in this codebase already uses, instead
+  of the old branch's ad hoc inline markup repeated per field.
+  `EmptyState` import removed (no longer used anywhere in this file);
+  `next/image` deliberately not used for the document thumbnail — this
+  project has no `images.remotePatterns`/`domains` configured in
+  `next.config.ts` for Cloudinary's host, and the URL is already
+  signed/short-lived per `docs/API.md`, so a plain `<img>` (with an
+  inline eslint-disable for `@next/next/no-img-element`, same as this
+  repo's existing pattern for genuinely external, already-hosted
+  images) was the direct fix rather than a config change out of scope
+  for this task.
+
+**Verification performed**: `npx tsc --noEmit` (clean), `npx eslint src`
+(clean, whole repo — confirms the `no-img-element` disable comment is
+sufficient and no stray reference to the deleted
+`VehicleDetails`/`RiderProfileDetails`/`getProfileDetails`/
+`use-rider-profile` remains anywhere), a cleared-`.next` `npx next
+build` (clean after one transient webpack-worker cache miss unrelated
+to this change — `rm -rf .next` + rebuild succeeded; 45 routes, sizes
+for `/rider/profile` and `/rider/verification` both shifted slightly
+reflecting the rewritten markup, no other route affected). Dev-server
+smoke test: `/rider/profile` and `/rider/verification` both return
+`200`. **Not performed**: no live, verified Rider session was available,
+so the populated license number, the "Verified" pill, and the inline
+document image have not been seen rendered against real data — same
+standing caveat as most Rider-module work in this log. Worth an actual
+click-through once a verified test Rider account exists, specifically
+to confirm the signed Cloudinary `viewUrl` renders as an `<img>` without
+a CORS/hotlink surprise — untested assumption this session, since no
+real document URL was available to try.
+
+---
+
+## 2026-08-21 (latest — RouteRail's compact variant: a real progress bar instead of the dashed route line)
+
+**Feature**: design feedback — the Consumer app's delivery/order-summary
+cards "aren't cool," specifically the route indicator, which read as a
+dashed decorative line rather than an actual progress bar.
+
+**Root cause**: `src/components/ui/RouteRail.tsx` always rendered a
+`repeating-linear-gradient` dashed-texture `<div>` on top of the
+progress fill, on both of its variants — `compact` (cards) and `full`
+(the tracking screen, Admin's Order Details). The component's own
+header comment called this "the signature visual motif of the Locoomo
+app," so it's an intentional design choice for the dedicated tracking
+view — but at card size, on a track only 2px tall, it reads as
+static dashes rather than something moving/filling.
+
+**Scope decision**: fix `compact` only. The task named "the cards"
+specifically, and `full`'s dotted line wasn't flagged — removing it
+there too would be redesigning something not asked about, and it's the
+one variant where the "route" framing (vs. plain progress) genuinely
+fits the screen (a full tracking view, not a summary card).
+
+**Files changed**:
+- `src/components/ui/RouteRail.tsx` — the dashed-texture overlay
+  `<div>` now only renders `variant === "full"` (was unconditional).
+  `compact`'s track is now `h-1.5` (was a shared `h-[2px]` for both
+  variants) so the solid fill actually reads as a progress bar rather
+  than a hairline; `full` keeps the original `h-[2px]` alongside its
+  dashed texture, unchanged. Added `role="progressbar"` +
+  `aria-valuenow`/`aria-valuemin`/`aria-valuemax` to the track element
+  itself (previously only `full` announced progress, via a separate
+  `sr-only` span) — a small correctness fix alongside the requested
+  visual one, since "a proper progress bar" reasonably includes being
+  one semantically, not just visually. Updated the component's header
+  comment to describe the two variants' now-different treatment instead
+  of a single blanket "signature visual motif" claim.
+- No caller changed. `DeliveryCard.tsx` (`ActiveDeliveriesSection`/
+  `PastDeliveriesSection` on `/dashboard`, `TrackListScreen` on
+  `/track`) and `OrderSummaryCard.tsx` (`/checkout`) both already call
+  `RouteRail` with no `variant` prop, i.e. the default `compact` — so
+  this is a one-file fix, not a per-screen one. `OrderDetailsScreen.tsx`
+  (Admin) and `TrackPackageScreen.tsx` both pass `variant="full"`
+  explicitly and are visually unchanged.
+
+**Verification performed**: `npx tsc --noEmit` (clean), `npx eslint
+src/components/ui/RouteRail.tsx` (clean), a cleared-`.next` `npx next
+build` (clean — 45 routes, no route added/removed/resized beyond
+normal build noise). Dev-server smoke test: `/dashboard`, `/track`,
+`/checkout` (the three screens rendering the affected `compact`
+variant) all return `200`. **Not performed**: no browser session was
+available, so the actual visual result — whether the thicker solid bar
+reads as "cool"/"proper" to the person who filed this feedback — hasn't
+been seen rendered. Worth a quick look in a browser before considering
+this fully resolved, since this was subjective visual feedback, not a
+functional bug.
+
+---
+
+## 2026-08-21 (newest — Rider's "Active" screen becomes "Activity": every order, tabbed)
+
+**Feature**: follow-up to a live debugging session earlier the same day
+(user + backend jointly root-causing a `RIDER_CAPACITY_UNAVAILABLE`
+409). Temporary console logging (added mid-session, largely stripped
+back out afterward by the user directly on disk — not this entry's
+concern) traced it to a real backend bug: a rider with 2 `completed`
+orders and only 1 `in_transit` was still rejected trying to accept a
+4th, meaning the backend's capacity count doesn't exclude `completed`
+orders from "active." Once that was confirmed as backend-side, not
+frontend, the explicit next ask: give the rider their own visibility
+into this — "pull all orders for the rider, completed, collect, in
+transit all... use the active page... tab or bar that can be clicked
+or slide."
+
+**No new endpoint.** `GET /handoffs/my-orders` was already ✅ real and
+already the data source for `ActiveDeliveriesScreen` — it was just
+being filtered down to `isActiveDelivery`
+(`rider_assigned`/`in_transit`) before the screen ever saw the rest.
+Every other status in that same response (`arrived_at_destination`,
+`ready_for_collection`, `completed`) was being fetched and silently
+discarded. This session stops discarding it.
+
+**Scope decision — reused the existing screen/route, per explicit
+instruction**: "use the active page for this." No new route, no new
+file for the screen itself.
+`ActiveDeliveriesScreen.tsx` (`/rider/active-deliveries`) is rewritten
+in place rather than superseded by a new one; the only naming change is
+`RIDER_NAV_ITEMS`'s label, "Active" → "Activity" (`nav-config.ts`),
+since the screen's scope genuinely widened from "what's currently on my
+plate" to "everything I've ever taken."
+
+**Files created**:
+- `src/modules/rider/components/active-delivery/ActivityFilterTabs.tsx`
+  — new. Four-tab pill row (`All`/`In Transit`/`Awaiting Collection`/
+  `Completed`), each showing a live count, styled identically to the
+  already-existing `EarningsFilterTabs` (same pill shape/active-state
+  treatment) rather than inventing a second tab visual language.
+  Exports `ACTIVITY_FILTER_ORDER` so the screen's swipe handler and the
+  tab row agree on tab order without duplicating it.
+- `src/components/ui/HandoffStatusPill.tsx` — new; the real
+  implementation, **promoted** from
+  `modules/node/components/handoff/HandoffStatusPill.tsx` — same
+  promotion pattern `docs/ARCHITECTURE.md` already documents for
+  `QrScannerView` (a second role needing a component that used to live
+  inside a different role's module). Added two status configs it never
+  had before: `ready_for_collection` ("Awaiting Collection", info-blue)
+  and `completed` ("Completed", success-green) — Node's own screens
+  always branch away before rendering a pill for either of those two
+  statuses, but the Rider Activity screen's whole point is showing
+  every status, including the two the lifecycle ends on.
+
+**Files changed**:
+- `src/modules/node/components/handoff/HandoffStatusPill.tsx` —
+  replaced with a two-line re-export from the new shared location
+  (`export { HandoffStatusPill, getHandoffStatusLabel } from
+  "@/components/ui/HandoffStatusPill"`) — verbatim the same pattern
+  `components/scanner/QrScannerView.tsx`'s promotion used. All six
+  existing Node-module importers (`HandoffDetailScreen`,
+  `CollectParcelScreen`, `DropOffPreviewScreen`, `ActivityScreen`,
+  `NodeOrderRow`, `CollectionSummaryList`, plus the module's own
+  `handoff/index.ts` barrel) needed zero changes — their import paths
+  still resolve.
+- `src/components/ui/index.ts` — barrel-exported
+  `HandoffStatusPill`/`getHandoffStatusLabel`.
+- `src/modules/rider/hooks/use-my-orders.ts` — added
+  `isAwaitingCollection()` (`arrived_at_destination` |
+  `ready_for_collection`) and `isCompletedDelivery()` (`completed`),
+  siblings to the existing `isActiveDelivery()` — same one-predicate-
+  per-bucket shape, all three pure functions over a single `status`
+  field so the screen's tab-count logic is just three `.filter()` calls
+  over one already-fetched list.
+- `src/modules/rider/components/active-delivery/ActiveDeliveriesScreen.tsx`
+  — rewritten. `useMyOrders()` (the full, unfiltered list) replaces the
+  old `useActiveDeliveries()` (already `isActiveDelivery`-filtered) as
+  the screen's data source; `isActiveDelivery` is still applied, just
+  client-side per-tab now instead of upstream. New `filter` state
+  (`ActivityFilter`, default `"in_transit"` — preserves the exact
+  previous default view/behavior) picks which of the four `.filter()`
+  results renders. `OrderActivityRow` replaces the old
+  `ActiveDeliveryRow`: same actionable UI (tracking code, next-node
+  info, "Get handoff code" + navigate buttons) when
+  `isActiveDelivery(order)` is true, but now shows a real
+  `HandoffStatusPill` instead of the old ad hoc colored badge span, and
+  falls back to a plain read-only card (route summary + parcel info,
+  status pill, no action buttons) for every other status — the
+  screen's first time rendering `arrived_at_destination`/
+  `ready_for_collection`/`completed` orders at all. Swipe support: a
+  plain `onTouchStart`/`onTouchEnd` delta-x handler on the tab content
+  wrapper (50px threshold), stepping `ACTIVITY_FILTER_ORDER` left/right
+  — no gesture library added, since none exists elsewhere in this
+  codebase and a 15-line handler covers "swipe to switch tabs" fully.
+  Four sets of empty-state copy (`EMPTY_COPY`), one per tab, instead of
+  a single generic "no deliveries" message that wouldn't fit "no
+  completed deliveries yet" or "nothing awaiting collection."
+- `src/components/layout/nav-config.ts` — `RIDER_NAV_ITEMS`'s "Active"
+  label → "Activity" (same `href`/`icon`, same position); updated the
+  block's header comment to explain the widened scope.
+
+**Verification performed**: `npx tsc --noEmit` (clean), `npx eslint
+src` (clean, whole repo — confirms the re-export shim resolves and no
+stale import of the old `HandoffStatusPill` path broke), a
+cleared-`.next` `npx next build` (clean — 45 routes, same count as
+before this session). Dev-server smoke test: `/rider/active-deliveries`,
+`/rider/home`, `/rider/available-jobs` (Rider screens touched or
+adjacent this session) and `/node/home`, `/node/activity` (Node screens
+exercising the re-exported status pill, to confirm the promotion didn't
+break that module) all return `200`; grepped the dev server log for
+`error`/`TypeError` with none found. **Not performed**: no live Rider
+session with a real mix of `rider_assigned`/`in_transit`/
+`arrived_at_destination`/`ready_for_collection`/`completed` orders was
+available, so the four tabs' populated states, their counts, and the
+touch-swipe gesture haven't been exercised against real data or a real
+touchscreen — only compiled, built, and route-probed.
+
+**Related, unchanged by this session**: the `RIDER_CAPACITY_UNAVAILABLE`
+backend bug this follows up on (capacity count not excluding
+`completed` orders) is still open on the backend side — nothing here
+fixes it, this session only gives the rider visibility into the same
+data that debugging session used to prove the bug existed.
+
+---
+
+## 2026-08-21 (very latest — Node's Earnings tab, and login skips Setup for an already-approved Node)
+
+**Feature**: two explicit Node-module asks. (1) "Remove the earnings
+from the profile and place it on the sidebar and bottombar" — Earnings
+was a row inside Node Profile; move it to a first-class nav tab, same
+as every other role's Earnings destination already is. (2) "When you
+open the node app it goes to the setup directly, change that so it
+goes to the dashboard when a node is approved" — the post-login
+redirect for `node_operator` was unconditional to `/node/setup`
+regardless of the Node's real approval status.
+
+**Files changed**:
+- `src/components/layout/nav-config.ts` — `NODE_NAV_ITEMS` gained
+  `{ label: "Earnings", href: ROUTES.nodeEarnings, icon: WalletIcon }`
+  (fourth tab, after Activity — `WalletIcon` was already imported here
+  for the Rider/Admin Earnings-shaped tabs, no new import needed).
+  Updated the block's header comment.
+- `src/modules/node/components/profile/NodeProfileScreen.tsx` — removed
+  the `<Link href={ROUTES.nodeEarnings}>` Card row entirely (the
+  "Business"/Node Setup row directly above it is untouched — only
+  Earnings was asked to move). Removed the now-unused `WalletIcon`
+  import.
+- `src/modules/node/components/earnings/NodeEarningsScreen.tsx` —
+  `TopBar title="Earnings" showBack` → `RootTopBar
+  profileHref={ROUTES.nodeProfile}`, with a new in-page `<h1>Earnings</h1>`
+  heading (`RootTopBar` carries no title slot) — matches the root/tab-
+  screen convention every other promoted-to-a-tab screen already
+  follows (e.g. the Rider module's own `MyEarningsScreen` made the
+  identical switch when its tab was added). No data/logic changes.
+- `src/modules/user/hooks/use-auth.ts` — the shared `loginMutation`
+  (role-agnostic `POST /auth/login`, every role's login) used to
+  redirect `node_operator` straight to `ROUTES.nodeSetup` unconditionally.
+  `onSuccess` is now `async`: for `node_operator`, it calls
+  `nodeService.getMyNodeOperatorProfile()` (real, already-confirmed
+  `GET /node-operators/me`, the same call `useNodeSetup`/`useNodeProfile`
+  already make elsewhere) and redirects to `ROUTES.nodeHome` when
+  `node.status === "active"`, else still `ROUTES.nodeSetup` (covers
+  `pending`, and the call's `404 NOT_FOUND`/any other error when
+  onboarding was never completed at all — caught and treated the same
+  as `pending`, since `NodeSetupScreen` already renders the correct
+  view for both). Returns early in that branch, which also meant
+  dropping the now-dead `node_operator: ROUTES.nodeSetup` entry from
+  the fallback `roleRedirect` map further down (TypeScript's own control-
+  flow narrowing correctly flagged it as unreachable once the early
+  return existed — not a stylistic choice, the compiler required it).
+
+**Investigation before changing anything**: confirmed
+`(node)/layout.tsx` and `AuthGuard` do no redirecting of their own
+(pure auth-gate + shell wrapper, no navigation logic) and that
+`useNodeAuth` (Node's own hook) only implements logout, not login — so
+`use-auth.ts`'s shared `loginMutation` is the single place this
+decision is made, for every role including Node. No middleware or root-
+page redirect does anything role-specific either (`app/page.tsx` just
+sends everyone to `/role-select`). This is worth knowing if "opens on
+Setup" ever recurs: there is exactly one code path to check.
+
+**Verification performed**: `npx tsc --noEmit` (clean — surfaced one
+real error mid-change: the fallback `roleRedirect` map's type no longer
+allowed the `node_operator` key once the early return above narrowed
+`session.user.role`, fixed by removing that now-unreachable entry),
+`npx eslint src` (clean, whole repo), a cleared-`.next` `npx next
+build` (clean — 45 routes, same count). Dev-server smoke test:
+`/node/home`, `/node/profile`, `/node/earnings`, `/node/activity`,
+`/login` all return `200`; dev log grepped clean of
+`error`/`TypeError`. **Not performed**: no live NodeOperator session
+(one `active`, one `pending`) was available to actually log in and
+watch the redirect branch either way — the `getMyNodeOperatorProfile()`
+call, the `status === "active"` check, and the catch-block fallback are
+implemented per the same documented contract every other Node-module
+screen already uses, but haven't been exercised against a real login.
+
+---
+
+## 2026-08-21 (absolute latest — Select Nodes: pull-up sheets replace endless inline lists, plus address-proximity search)
+
+**Feature**: `/delivery/select-nodes` rendered both the origin and
+destination Node pickers as a search box plus the *entire* matching
+list, always expanded, one section stacked under the other. With more
+than a handful of Nodes in the network this makes the Consumer keep
+scrolling just to compare options. Ask: put each list behind something
+opened on demand ("a drop down... click to see all node and select"),
+and let the search find Nodes near a typed *address*, not just Nodes
+whose own name/city text happens to match.
+
+**No new endpoint** — `GET /nodes/nearby` (`useNodes`, unchanged) is
+still the sole data source, fetched once at the API's already-max
+radius (100km, per `nodesService.listNearby`'s existing default) and
+kept in memory; an address search re-sorts that in-memory list rather
+than issuing a second network call. `geocodingService.geocodeAddress()`
+(Geoapify, already real/wired for `AddressGeocodeButton` on the
+Admin/Node onboarding forms) is the reused address→coordinates call —
+called here with only the `address` field populated (`city`/`state`
+left empty), which its own `buildQueryText()` already handles (filters
+falsy parts, joins what's left) — no service change needed.
+
+**Files created**:
+- `src/modules/user/components/delivery/NodePickerField.tsx` — the
+  collapsed trigger: icon, label, the selected Node's name + live
+  distance (or a placeholder when nothing's picked yet), chevron.
+  Presentational only — owns no state, just an `onClick`.
+- `src/modules/user/components/delivery/NodePickerSheet.tsx` — the
+  actual list, in a pull-up sheet (`fixed inset-0` backdrop +
+  `rounded-t-[24px]` panel + drag-handle bar — the exact pattern
+  `VerificationReminderSheet` and `BottomNav`'s "More" sheet already
+  use, not a new visual language). One `Input` does two jobs: as-typed
+  text instantly filters the passed-in `nodes` prop by name/city
+  (client-side, unchanged behavior from the old inline lists, just
+  relocated here); a pin-icon button in the input's `rightElement`
+  (only rendered when `addressSearchAvailable` — i.e.
+  `geocodingService.isConfigured()`, hidden entirely otherwise, same
+  graceful-degradation convention `AddressGeocodeButton` already uses
+  for a missing API key) triggers `onSearchAddress`, also wired to the
+  `Input`'s `Enter` key. Once an address search resolves, a
+  `bg-status-info-bg` banner reads "Showing stations near {address} ·
+  Clear"; the list stops being text-filtered while that's active
+  (showing every Node, sorted by distance to the searched point) since
+  a real address generally won't substring-match any Node's name.
+
+**Files changed**:
+- `src/modules/user/components/delivery/SelectNodesScreen.tsx` —
+  rewritten. `NodeMapView` (origin-only, click-a-marker-to-select) is
+  untouched — still fed `nodesWithLiveDistance` (sorted from the user's
+  own live position, exactly as before); this session's changes are
+  additive to what's below the map, not a map change. The two
+  always-rendered `Input` + full-list sections are replaced with two
+  `NodePickerField`s (`activeSheet: "origin" | "destination" | null`
+  state picks which `NodePickerSheet` — if either — is mounted; only
+  one exists in the DOM at a time). Origin and destination each carry
+  fully independent address-search state
+  (`{point, label, isSearching, error}` — new local `AddressSearchState`
+  shape, one instance per picker) so searching near, say, the
+  *receiver's* address for the destination picker has zero effect on
+  the origin picker's list, and vice versa — these are genuinely
+  different reference points a Consumer might want (their own location
+  for pickup, someone else's for drop-off). A new local hook,
+  `useNodesForPicker()`, centralizes the shared sort/filter logic
+  (reference point = the picker's own searched address point, falling
+  back to the user's live position; text-filtered in normal mode,
+  left unfiltered — just re-sorted — once an address search is active)
+  so origin and destination don't each duplicate it; the destination
+  instance also excludes whichever Node is currently selected as
+  origin, same as the pre-existing behavior.
+
+**Verification performed**: `npx tsc --noEmit` (clean), `npx eslint
+src` (clean, whole repo), a cleared-`.next` `npx next build` (clean —
+45 routes, same count; `/delivery/select-nodes`'s First Load JS grew
+slightly reflecting the two new components, no other route affected).
+Dev-server smoke test: `/delivery/select-nodes` returns `200`, dev log
+grepped clean of `error`/`TypeError`. **Not performed**: no browser
+session was available, and this environment has no
+`NEXT_PUBLIC_GEOAPIFY_API_KEY` configured, so neither sheet has been
+opened/searched/selected in an actual browser, and the address-geocode-
+and-resort path has only been read/traced against `geocodingService`'s
+existing (already-live-tested-elsewhere-per-`docs/HANDOFF.md`) contract
+— not exercised end to end here. Worth a click-through (both pickers,
+plain text search and an address search on each, and the map's
+marker-tap path to confirm it still sets origin correctly) before
+calling this production-ready.
+
+---
+
+## 2026-08-21 (most recent — Consumer Dashboard shows a "Payment Processing" card while a payment is stuck between Paystack and a real Order)
+
+**Feature**: the ask — when a Consumer's payment is pending, log it,
+show it to them as pending with a "come back later" message, and show
+the real thing once it succeeds — "this will help customer not panic
+when payment is made and they have not see the order neither did they
+see any card showing it." The panic case, concretely: `POST
+/payments/intents` succeeds, the Consumer is redirected to Paystack and
+pays, but then either closes the app before `/orders/payment-callback`
+(`PaymentCallbackScreen`) finishes polling `GET /payments/intents/:id`,
+or that poll's ~90s window times out while they're still on it. Either
+way, they land back on `/dashboard` to... nothing. `GET /orders` only
+ever returns Orders that already exist server-side (i.e., already
+`paid`), so a payment stuck between "charged" and "recorded" was
+completely invisible — indistinguishable from "the payment never
+happened," which is exactly the panic this closes.
+
+**No new endpoint.** `GET /payments/intents/:id` (already real, already
+the one `PaymentCallbackScreen` polls) is the only network call
+involved. The gap was purely that nothing outside that one screen ever
+remembered a payment intent existed — `PaymentCallbackScreen`'s only
+memory of "which intent am I confirming" was `sessionStorage`, which is
+tab-scoped and gone the moment the tab closes.
+
+**Files created**:
+- `src/modules/user/lib/pending-payments.ts` — new. A small,
+  synchronous localStorage read/write module (`STORAGE_KEYS.pendingPayments`,
+  new key) holding `PendingPaymentRecord[]` — `{intentId, amountKobo,
+  originNodeName, destinationNodeName, parcelDescription, createdAt}`.
+  Deliberately `localStorage`, not `sessionStorage` — "come back later"
+  in the ask implies surviving a closed tab/browser restart, which
+  `sessionStorage` doesn't. `addPendingPayment()` is the literal "log
+  it" step (also fires a `console.log` trace — a genuine, permanent
+  trace of "we told the Consumer this was pending," not a temp debug
+  statement); `removePendingPayment()` is called the instant a record's
+  real status stops being `"pending"`, from whichever of two places
+  notices first.
+- `src/modules/user/hooks/use-pending-payments.ts` — new. Reads the
+  on-file records once (`useState` lazy initializer), then — only if
+  there's at least one — fans out `GET /payments/intents/:id` for each
+  via one `useQuery` (there's no "list my intents" endpoint, so this is
+  a `Promise.all` over whatever ids are on file, not a single list
+  call). Whichever records are still genuinely `"pending"` are returned
+  as-is; anything else gets `removePendingPayment()`'d and logged
+  inside the query function itself (not a follow-up effect — see the
+  fix below), and a resolution to `"paid"` additionally invalidates
+  `QUERY_KEYS.deliveries` so `ActiveDeliveriesSection` picks up the new
+  real Order immediately rather than waiting out its own `staleTime`.
+  `refetchOnWindowFocus: true` is the whole "polling" story — a check
+  when the Consumer actually comes back, not a background loop, per the
+  "come back later to check" framing rather than nagging the API.
+- `src/modules/user/components/dashboard/PendingPaymentsSection.tsx` —
+  new. Renders nothing when `usePendingPayments()` returns an empty
+  list (the overwhelming majority of visits); otherwise one card per
+  pending record — amount, the two Node names, and copy that explicitly
+  says "no need to try again" (the thing a panicking Consumer is most
+  likely to do wrong) plus "check back in a few minutes."
+
+**Files changed**:
+- `src/core/config/constants.ts` — added `STORAGE_KEYS.pendingPayments`.
+- `src/modules/user/hooks/use-checkout.ts` — `redirectToPaystack()` now
+  takes `{originNodeName, destinationNodeName}` (the intent itself only
+  carries node *ids*, and `CheckoutScreen` already has the resolved Node
+  objects on hand from `useNodes()`) and calls `addPendingPayment()`
+  right before the existing `sessionStorage` stash and the
+  `window.location.href` redirect — same moment, just one more thing
+  recorded.
+- `src/modules/user/components/checkout/CheckoutScreen.tsx` — the
+  "Confirm & Pay" button's `onClick` now passes those two names through
+  from its own already-resolved `originNode`/`destinationNode`.
+- `src/modules/user/components/tracking/PaymentCallbackScreen.tsx` —
+  two small additions to existing effects, no new branches: the
+  `matchedOrder` effect (the `"paid"` happy path) now also calls
+  `removePendingPayment(intentId)` alongside its existing
+  `sessionStorage` cleanup; a new effect calls the same for
+  `"failed"`/`"expired"` — this screen already tells the Consumer
+  directly in those cases, so leaving the record on file would just be
+  a stale duplicate the Dashboard would show later for no reason.
+- `src/modules/user/components/dashboard/DashboardScreen.tsx` — mounted
+  `<PendingPaymentsSection />` between `DashboardHeader` and
+  `ActiveDeliveriesSection`.
+
+**Bug caught by lint, fixed before this shipped**: the first draft of
+`use-pending-payments.ts` kept the "still pending" list in its own
+`useState`, populated by a `useEffect` that called `setRecords(...)`
+after inspecting the query's result — `react-hooks/set-state-in-effect`
+correctly flagged this (same category of violation this log has
+precedent for, from a 2026-08-17 Node Operator session). Fixed by
+moving the resolution/cleanup/logging logic *into* the query function
+itself, which returns the already-pruned "still pending" list directly
+as `query.data` — no separate state, no effect, no cascading render.
+
+**Verification performed**: `npx tsc --noEmit` (clean), `npx eslint
+src` (clean, whole repo — confirms the set-state-in-effect fix and
+that two initially-added-defensively `eslint-disable` comments for
+`no-console` were unnecessary and were removed, since this project's
+eslint config doesn't enable that rule), a cleared-`.next` `npx next
+build` (clean after one transient webpack-worker cache miss unrelated
+to this change — 45 routes, same count; `/dashboard` and `/checkout`
+both grew reflecting the new code, no other route affected).
+Dev-server smoke test: `/dashboard`, `/checkout`,
+`/orders/payment-callback` all return `200`, dev log grepped clean of
+`error`/`TypeError`. **Not performed**: no live or sandboxed Paystack
+payment was available, so an actual pending → paid transition, the
+card's real rendering with a genuine amount/Node pair, and the
+`console.log` trace's actual output have not been seen end to end —
+only compiled, built, and route-probed.
+
+---
+
+## 2026-08-22 (production-readiness pass: dead-endpoint removal + Admin backend gap list + animated PWA splash)
+
+**Feature**: three requests in one sitting, following a fresh
+role-by-role integration audit (Node/Admin/Customer) and a full
+`docs/API.md` re-read. (1) Remove every endpoint not documented in
+`API.md` that also has no live caller — explicit ask: "I need the
+project clean for production." (2) List all of `admin.service.ts`'s
+permanently-`NOT_IMPLEMENTED` methods with their function, to hand to
+the backend team. (3) An animated logo+wordmark launch splash for the
+mobile PWA.
+
+### Dead-endpoint removal
+
+Traced every candidate up to its hook and screen before deleting
+anything — a route with a real caller stays, no matter how it's
+described elsewhere; a route with zero callers goes, no matter how
+confidently a comment claimed it was "kept for later."
+
+**Files changed**:
+- `src/core/api/endpoints.ts` — removed `auth.consumerRequestOtp`,
+  `auth.consumerRequestLoginOtp`, the whole `identity` group
+  (`consumerOnboarding`), the whole `notifications` group
+  (`listForUser`/`markRead`/`markAllRead` — the latter two were never
+  called by anything either, not just `listForUser`), `orders.calculateFare`,
+  `orders.book`, and `payments.webhook` (a provider-parameterized
+  constant that never matched the real, plural
+  `/payments/webhooks/paystack` path anyway).
+- `src/core/api/services/auth.service.ts` — removed
+  `requestConsumerOtp()`, `requestConsumerLoginOtp()`,
+  `submitConsumerOnboarding()`, and their now-unused
+  `ConsumerOnboardingPayload`/`RequestOtpPayload` type imports.
+- `src/core/api/services/node.service.ts` — removed `listActivity()`
+  and its `mapNotificationToActivity()` helper, and the now-unused
+  `generateId`/`useAuthStore`/`ActivityLogEntry` imports. Rewrote the
+  file's header comment: it used to argue for keeping `listActivity()`
+  ("a real, working integration... pending a product decision") — that
+  decision is made now, in favor of deleting it, since `ActivityScreen`
+  has sourced the Activity Log from `getMyNodeOrders()` instead since
+  2026-08-17 and nothing else ever called it.
+- `src/modules/node/hooks/use-activity-log.ts` — **deleted**, not left
+  as dead code. Its only reference anywhere in the app, after the
+  service method it wrapped was removed, was a comment in
+  `ActivityScreen.tsx` describing history, not a real import.
+- `src/modules/user/hooks/use-auth.ts` — removed
+  `requestSignUpOtpMutation`/`requestLoginOtpMutation` and everything
+  they exposed (`requestSignUpOtp`, `isRequestingSignUpOtp`,
+  `requestSignUpOtpError`, `signUpOtpSent`, `requestLoginOtp`,
+  `isRequestingLoginOtp`, `requestLoginOtpError`, `loginOtpSent`), plus
+  the `target`/`setTarget` state that only existed to feed them and the
+  now-unused `useState`/`OtpChannel` imports.
+- `src/modules/user/components/auth/CreateAccountScreen.tsx` — removed
+  the ~120-line block of commented-out OTP-flow JSX (the two-step
+  "send code" / "verify code" form) that a same-day earlier session had
+  disabled by wrapping in a JSX comment rather than deleting. It
+  referenced several of the hook fields removed above, so it would have
+  been a compile error the moment anyone un-commented it — better gone
+  than left as a trap. The live registration form (first/last name,
+  email, phone, password, consent — `POST /auth/register`) is
+  unchanged.
+- `src/core/types/user.types.ts` — removed `OtpChannel`,
+  `RequestOtpPayload`, `ConsumerOnboardingPayload` (all now-orphaned),
+  and two long-`@deprecated` types explicitly marked "kept for the mock
+  service" — `SignUpPayload` and `LoginPayload`. The mock service they
+  referred to was deleted in the 2026-08-20 session; these two were
+  simply never cleaned up alongside it.
+
+**Deliberately not touched**: `GET /nodes/:id` (`nodesService.getById()`)
+and `POST /auth/verify-email` — both are genuinely documented in
+`API.md`, they just have no current UI caller. That's a different
+category from what this pass targeted ("not in API.md"); removing a
+real, documented integration because nothing calls it *yet* would be
+the wrong call — flagged instead, in the same-day audit response, as
+candidates for either a real UI or an explicit product decision to
+drop them.
+
+**Verification performed**: `npx tsc --noEmit` (clean — this is what
+caught every dangling reference; each deletion round surfaced the next
+one to fix, in order: `auth.service.ts`'s `RequestOtpPayload`/
+`ConsumerOnboardingPayload` imports, then `use-auth.ts`'s two missing
+service methods, then `node.service.ts`'s missing `ENDPOINTS.notifications`),
+`npx eslint src` (clean — caught the resulting unused-import warnings
+in the same three files plus `use-auth.ts`'s orphaned `target`/`setTarget`),
+a cleared-`.next` `npx next build` (clean after one transient
+webpack-worker cache miss unrelated to this change — 45 routes, same
+count). **Not performed**: `docs/API_INTEGRATION_STATUS.md`'s
+Inconsistencies section still describes some of what was just deleted
+as "still there, flagged" — needs a pass to mark these resolved, not
+done this session.
+
+### Admin backend gap list (no code changed)
+
+Read `admin.service.ts` in full and produced a per-screen table (14
+methods, not the 13 estimated in the prior session's audit — the
+Analytics screen's orders-trend chart is a distinct stub from the
+three other Analytics stubs already counted) for the user to hand to
+their backend engineer: which screen each blocks, a suggested route,
+and the response shape the frontend type already expects. Flagged two
+worth a product conversation rather than just an endpoint: Super Admin
+(no `super_admin` role exists in the documented enum at all) and the
+Rider leaderboard's rating field (no rating concept exists anywhere
+else in the real API).
+
+### Animated PWA splash screen
+
+**Files created**:
+- `src/components/splash/SplashScreen.tsx` — new. Logo (`LogoMark`,
+  72px) fades/scales in, "LOCOOMO" wordmark follows ~220ms later (CSS
+  `animation-delay`), holds ~650ms once both have settled, then the
+  whole overlay fades out over 400ms and unmounts (`isMounted` state
+  goes false — not just hidden, so it leaves the accessibility tree and
+  DOM once done). All timing is plain `setTimeout`s in a single
+  mount-time effect, no animation library added — matches this
+  codebase's existing pattern of hand-rolled CSS transitions/keyframes
+  elsewhere (`animate-spin`, `RouteRail`'s progress fill).
+
+**Files changed**:
+- `src/app/globals.css` — added `@keyframes splash-logo-in` /
+  `splash-wordmark-in` and their `.animate-splash-logo`/
+  `.animate-splash-wordmark` utility classes. No separate
+  `prefers-reduced-motion` handling needed — the file already had a
+  blanket rule (`* { animation-duration: 0.01ms !important; ... }`)
+  that collapses these too.
+- `src/app/layout.tsx` — mounted `<SplashScreen />` as the first child
+  of `<body>`, a sibling to `QueryProvider`/`ServiceWorkerRegistration`
+  rather than nested inside them, since it's a fixed-position overlay
+  that doesn't participate in the provider tree and must render
+  regardless of auth/query state.
+
+**Design decisions**:
+- Background is `--bg-canvas` (`#F7F9FC`) — deliberately the exact same
+  value as `manifest.webmanifest`'s `background_color`, which is what
+  Android already paints behind the app icon before any JS runs on a
+  standalone-installed PWA launch. Matching it means this component's
+  fade-in is the only visual transition a user sees, not a color swap
+  on top of one the OS already did.
+- `LogoMark` itself is unchanged — it has hardcoded blue fill colors
+  (not `currentColor`), so a light background was the only option that
+  wouldn't require a new monochrome logo asset just for this screen.
+- Shows on every page load (regular browser tab or installed PWA)
+  rather than being gated behind `window.matchMedia('(display-mode:
+  standalone)')` — a deliberate default favoring simplicity and
+  demoability over restricting it to only the installed-PWA case; easy
+  to add the gate later if it turns out to be wanted only there.
+- Mounted in the root layout specifically because the App Router keeps
+  that layout mounted across client-side navigation — so this only
+  ever plays once per actual page load/refresh, which is the "cold
+  launch" moment a splash should own, not something that would
+  otherwise replay every time a route link is clicked inside the app.
+
+**Verification performed**: `npx tsc --noEmit` (clean), `npx eslint
+src` (clean), a cleared-`.next` `npx next build` (clean — 45 routes,
+unchanged count). Dev-server smoke test: `/role-select`'s SSR output
+contains the `animate-splash-logo` class and the "LOCOOMO" text,
+confirming the component actually renders server-side rather than only
+existing in source; `200`, no runtime errors in the dev log.
+**Not performed**: no browser was available this session, so the
+animation's actual look/feel/timing — whether ~1.7s total (entrance +
+hold + exit) reads as polished rather than sluggish or too brief on a
+real device — has not been seen. Worth an actual look, ideally on an
+installed PWA on a phone, before considering this finished.
+
+---
+
+## 2026-08-22 (later — "Payment Processing" Dashboard section removed)
+
+**Feature**: full removal of the pending-payment feature added
+2026-08-21. Explicit reasoning given: "since user will not logout, it
+will give displaying pending and that is not good." The localStorage
+record backing it had no expiry — a payment that never resolved (no
+webhook confirmation, or the Consumer simply never came back) would
+show "Payment processing... check back shortly" on every Dashboard
+visit indefinitely, for as long as that browser's storage survived,
+across however many sessions. Decision was to remove the feature
+outright rather than patch the missing expiry.
+
+**Files deleted**:
+- `src/modules/user/lib/pending-payments.ts`
+- `src/modules/user/hooks/use-pending-payments.ts`
+- `src/modules/user/components/dashboard/PendingPaymentsSection.tsx`
+
+**Files reverted to their exact pre-2026-08-21 state** (confirmed via
+`git diff` against each file's last-committed version — zero diff on
+all three):
+- `src/modules/user/hooks/use-checkout.ts` — `redirectToPaystack()`
+  back to taking no arguments and only writing
+  `STORAGE_KEYS.pendingPaymentIntentId` to `sessionStorage`; the
+  `addPendingPayment()` call and its now-unused import removed.
+- `src/modules/user/components/checkout/CheckoutScreen.tsx` — "Confirm
+  & Pay" back to `onClick={redirectToPaystack}` directly, no longer
+  passing origin/destination Node names through.
+- `src/modules/user/components/tracking/PaymentCallbackScreen.tsx` —
+  the `matchedOrder` effect's `removePendingPayment()` call and the
+  second effect (added solely to clean up the pending record on
+  `"failed"`/`"expired"`) both removed; `removePendingPayment` import
+  gone.
+
+**Files changed**:
+- `src/modules/user/components/dashboard/DashboardScreen.tsx` —
+  `<PendingPaymentsSection />` and its import removed; back to
+  `RootTopBar` → `DashboardHeader` → `ActiveDeliveriesSection` →
+  `PastDeliveriesSection`.
+- `src/core/config/constants.ts` — `STORAGE_KEYS.pendingPayments`
+  removed. `STORAGE_KEYS.pendingPaymentIntentId` (the original,
+  tab-scoped `sessionStorage` key `PaymentCallbackScreen` has always
+  used) is untouched.
+
+**Verification performed**: `npx tsc --noEmit` (clean), `npx eslint
+src` (clean), a repo-wide grep for every symbol the feature introduced
+(`pendingPayments`, `addPendingPayment`, `removePendingPayment`,
+`usePendingPayments`, `PendingPaymentsSection`) confirming zero
+remaining references anywhere in `src/`, and a cleared-`.next` `npx
+next build` (clean — 45 routes, matching the pre-feature count exactly).
+Dev-server smoke test: `/dashboard`, `/checkout`,
+`/orders/payment-callback` all return `200`, dev log grepped clean of
+`error`/`TypeError`.
+
+**Consequence, left open by explicit choice**: the original panic
+scenario this feature was built to solve — a Consumer who closes the
+app mid-payment, or outlasts `PaymentCallbackScreen`'s ~90s poll
+window, sees nothing on Dashboard indicating their payment is still
+being confirmed — is back. Nothing here fixes that; the call made this
+session was that an indefinitely-persisting "pending" card was worse
+than that gap. A future fix, if wanted, should carry its own expiry
+(e.g. auto-drop the record after a fixed window, or re-check status
+against a max age) rather than reviving this exact implementation
+unchanged.

@@ -1,8 +1,9 @@
 "use client";
 
-import { TopBar } from "@/components/layout";
+import { RootTopBar } from "@/components/layout";
 import { Card, EmptyState } from "@/components/ui";
 import { WalletIcon } from "@/components/icons";
+import { ROUTES } from "@/core/config/constants";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { useNodeEarnings } from "@/modules/node/hooks/use-node-earnings";
 
@@ -12,6 +13,13 @@ import { useNodeEarnings } from "@/modules/node/hooks/use-node-earnings";
  * *origin* (the full Node share always goes to the origin Node, never
  * split with the destination) — read-only, same as the Rider/Admin
  * views; the actual payout stays off-system.
+ *
+ * Promoted from a Node Profile row to its own `NODE_NAV_ITEMS` tab
+ * 2026-08-21 — same route (`ROUTES.nodeEarnings`), now reached in one
+ * tap. `RootTopBar` replaces the old back-button `TopBar` accordingly,
+ * matching every other root/tab screen's convention (and the Rider
+ * module's own Earnings screen, which made the same switch when its
+ * tab was added).
  */
 export function NodeEarningsScreen() {
   const { entries, isLoading } = useNodeEarnings();
@@ -23,9 +31,11 @@ export function NodeEarningsScreen() {
 
   return (
     <div className="min-h-screen bg-bg-canvas">
-      <TopBar title="Earnings" showBack />
+      <RootTopBar profileHref={ROUTES.nodeProfile} />
 
       <div className="px-4 md:px-6 pt-2 md:pt-8 pb-10 max-w-140 mx-auto">
+        <h1 className="font-display text-[18px] font-bold text-text-primary mb-4">Earnings</h1>
+
         <div className="grid grid-cols-2 gap-3 mb-6">
           <Card padding="md">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-text-muted mb-1">

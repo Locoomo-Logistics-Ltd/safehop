@@ -17,7 +17,6 @@ import type {
   RequestHandoffCodePayload,
   RiderAvailability,
   RiderEarningsSummary,
-  RiderProfileDetails,
   RiderUploadSignature,
   RiderVerificationDocumentType,
   RiderVerificationProfile,
@@ -27,18 +26,24 @@ import type {
 /**
  * Rider service — the business-logic surface for the Rider role.
  *
- * REAL API GAPS — the live spec has no endpoints for:
+ * REAL API GAPS — the live spec has no endpoint for:
  *   - Online/Offline availability toggle (no such route exists, and no
  *     telemetry-ping route either — see setAvailability()'s comment
  *     below). Ask the backend team whether job-board eligibility is
  *     inferred some other way, or if a real toggle endpoint is planned.
- *   - Rider profile/vehicle details beyond what's captured once at
- *     onboarding (identity/rider/{userId}/onboarding) — no separate
- *     "get my profile" endpoint.
  *
- * Both throw NOT_IMPLEMENTED below so the gap is visible rather than
- * silently showing fake data. Flag to the backend team; wiring them is
- * a small job once those routes exist.
+ * Throws NOT_IMPLEMENTED below so the gap is visible rather than
+ * silently showing fake data. Flag to the backend team; wiring it is
+ * a small job once that route exists.
+ *
+ * **2026-08-21**: `getProfileDetails()` (a fabricated `VehicleDetails`
+ * shape — type/plate/isVerified, none of which the real API has ever
+ * had a route for) is deleted, not left `NOT_IMPLEMENTED` — its one
+ * caller (`RiderProfileScreen`'s "Vehicle Details" card) was rebuilt to
+ * show the one real, license-shaped field that *does* exist:
+ * `licenseNumber` off `GET /riders/me` (`useRiderVerification`,
+ * already fetched on that screen for the Verification card below it).
+ * `use-rider-profile.ts` is deleted along with it.
  *
  * `getEarningsSummary` / `listMyEarnings` (`GET /earnings/mine`) are
  * real, confirmed per docs/API.md — the rider's own revenue-split
@@ -118,10 +123,6 @@ const realRiderService = {
     }
 
     return { todayEarnings, todayDeliveries, totalEarnings, totalDeliveries: entries.length };
-  },
-
-  async getProfileDetails(): Promise<RiderProfileDetails> {
-    throw new ApiError({ message: "No rider profile endpoint in the real API yet — see this file's header.", code: "NOT_IMPLEMENTED" });
   },
 
   // ── Verification / KYC onboarding ───────────────────────────────

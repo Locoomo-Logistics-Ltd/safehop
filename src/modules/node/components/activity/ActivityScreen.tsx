@@ -1,7 +1,8 @@
 "use client";
 
-import { TopBar } from "@/components/layout";
+import { RootTopBar } from "@/components/layout";
 import { EmptyState } from "@/components/ui";
+import { ROUTES } from "@/core/config/constants";
 import { ActivityIcon } from "@/components/icons";
 import { getHandoffStatusLabel } from "@/modules/node/components/handoff/HandoffStatusPill";
 import { useMyNodeOrders } from "@/modules/node/hooks/use-my-node-orders";
@@ -87,10 +88,10 @@ export function ActivityScreen() {
 
   return (
     <div className="min-h-screen bg-bg-canvas">
-      <TopBar title="Activity" />
+      <RootTopBar profileHref={ROUTES.nodeProfile} />
 
       <div className="px-4 md:px-6 pt-2 md:pt-8 pb-8 max-w-[560px] mx-auto">
-        <h1 className="hidden md:block font-display text-[22px] font-bold text-text-primary mb-6">
+        <h1 className="font-display text-[18px] md:text-[22px] font-bold text-text-primary mb-4 md:mb-6">
           Activity
         </h1>
 

@@ -1,6 +1,7 @@
 "use client";
 
-import { TopBar } from "@/components/layout";
+import { RootTopBar } from "@/components/layout";
+import { ROUTES } from "@/core/config/constants";
 import { useAdminOrders } from "@/modules/admin/hooks/use-admin-orders";
 import { OrderFilterBar } from "./OrderFilterBar";
 import { OrderListTable } from "./OrderListTable";
@@ -11,7 +12,7 @@ export function OrderListScreen() {
 
   return (
     <div className="min-h-screen">
-      <TopBar title="All Orders" />
+      <RootTopBar profileHref={ROUTES.adminProfile} hideOnDesktop />
 
       <div className="px-4 md:px-6 pt-2 md:pt-8 pb-10">
         <div className="hidden md:block mb-6">

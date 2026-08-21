@@ -10,9 +10,14 @@ interface RouteRailProps {
 }
 
 /**
- * The signature visual motif of the Locoomo app: a horizontal dotted
- * route line between two waypoint dots, optionally showing progress.
- * Used in delivery cards (compact) and the tracking screen (full).
+ * A horizontal route line between two waypoint dots, optionally
+ * showing progress. `variant="full"` (the tracking screen, Admin's
+ * Order Details) keeps the dotted-line texture as the app's signature
+ * route motif; `variant="compact"` (the default — delivery/order-summary
+ * cards) renders a clean, solid progress bar instead, since a dashed
+ * line reads as a decorative route sketch rather than actual progress
+ * at card size (2026-08-21 — the dashed texture used to render on both
+ * variants).
  */
 export function RouteRail({
   originLabel,
@@ -27,20 +32,31 @@ export function RouteRail({
     <div className={cn("flex items-center gap-2", className)}>
       <Waypoint filled={clampedProgress > 0} size={variant} />
 
-      <div className="relative flex-1 h-[2px] rounded-full bg-border-default overflow-hidden">
+      <div
+        className={cn(
+          "relative flex-1 rounded-full bg-border-default overflow-hidden",
+          variant === "full" ? "h-[2px]" : "h-1.5"
+        )}
+        role="progressbar"
+        aria-valuenow={Math.round(clampedProgress * 100)}
+        aria-valuemin={0}
+        aria-valuemax={100}
+      >
         <div
           className="absolute inset-y-0 left-0 bg-brand-blue rounded-full transition-all duration-500"
           style={{ width: `${clampedProgress * 100}%` }}
         />
-        {/* Dotted texture overlay */}
-        <div
-          className="absolute inset-0 opacity-40"
-          style={{
-            backgroundImage:
-              "repeating-linear-gradient(90deg, transparent 0, transparent 3px, var(--bg-canvas) 3px, var(--bg-canvas) 6px)",
-          }}
-          aria-hidden="true"
-        />
+        {/* Dotted texture overlay — the app's signature route motif, full-screen tracking views only. */}
+        {variant === "full" && (
+          <div
+            className="absolute inset-0 opacity-40"
+            style={{
+              backgroundImage:
+                "repeating-linear-gradient(90deg, transparent 0, transparent 3px, var(--bg-canvas) 3px, var(--bg-canvas) 6px)",
+            }}
+            aria-hidden="true"
+          />
+        )}
       </div>
 
       <Waypoint filled={clampedProgress >= 1} active size={variant} />

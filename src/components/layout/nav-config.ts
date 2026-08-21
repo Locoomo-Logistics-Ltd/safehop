@@ -1,7 +1,6 @@
 import {
   HomeIcon,
   TrackIcon,
-  UserIcon,
   QrCodeIcon,
   ActivityIcon,
   BriefcaseIcon,
@@ -24,15 +23,24 @@ export interface NavItem {
   icon: typeof HomeIcon;
 }
 
-/** Shared between BottomNav (mobile) and Sidebar (desktop) so the two never drift. */
+/**
+ * Shared between BottomNav (mobile) and Sidebar (desktop) so the two
+ * never drift. "Profile" (2026-08-21) moved off this list — and off
+ * every other role's — onto the top-right of each root screen's
+ * `RootTopBar` instead, so it's no longer a tab here.
+ */
 export const USER_NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: ROUTES.dashboard, icon: HomeIcon },
-  { label: "Track", href: "/track", icon: TrackIcon },
-  { label: "Profile", href: "/profile", icon: UserIcon },
+  { label: "Track", href: ROUTES.trackList, icon: TrackIcon },
 ];
 
 /**
- * Node Operator nav — Home / Scan / Activity / Profile per Figma.
+ * Node Operator nav — Home / Scan / Activity / Earnings ("Profile"
+ * moved to `RootTopBar`, see `USER_NAV_ITEMS`'s header comment).
+ * "Earnings" (2026-08-21) moved here from a row inside Node Profile —
+ * same route (`ROUTES.nodeEarnings`, unchanged), promoted to its own
+ * tab so it's reachable in one tap instead of a Profile drill-down,
+ * matching how the Rider module's own Earnings tab already works.
  *
  * "Inventory" (added 2026-08-17, one screen tabbed into Pickup/Incoming/
  * Collection/History) is retired the same day, not just hidden — its
@@ -55,24 +63,26 @@ export const NODE_NAV_ITEMS: NavItem[] = [
   { label: "Home", href: ROUTES.nodeHome, icon: HomeIcon },
   { label: "Scan", href: ROUTES.nodeScan, icon: QrCodeIcon },
   { label: "Activity", href: ROUTES.nodeActivity, icon: ActivityIcon },
-  { label: "Profile", href: ROUTES.nodeProfile, icon: UserIcon },
+  { label: "Earnings", href: ROUTES.nodeEarnings, icon: WalletIcon },
 ];
 
 /**
- * Rider nav — Home / Jobs / Earnings / Profile per Figma, plus "Active"
- * (2026-08-14). "Jobs" now points at the real, documented board
- * (`GET /handoffs/available-orders`) rather than the undocumented
- * `riderOps.jobBoard`; "Active" is the accepted-deliveries list that
- * board feeds into, which the old single-offer model had no equivalent
- * of — a rider can hold up to 3 at once now, so they need somewhere to
- * see them.
+ * Rider nav — Home / Jobs / Earnings per Figma, plus "Activity"
+ * (2026-08-14 as "Active"; renamed and widened 2026-08-21 — "Profile"
+ * moved to `RootTopBar` the same day). "Jobs" now points at the real,
+ * documented board (`GET /handoffs/available-orders`) rather than the
+ * undocumented `riderOps.jobBoard`; "Activity" is the same route
+ * (`ROUTES.riderActiveDeliveries`, unchanged) the accepted-deliveries
+ * list always lived at — only the label and the screen's own content
+ * changed, from "just what's currently in transit" to every order this
+ * rider has ever taken (tabbed: All / In Transit / Awaiting Collection
+ * / Completed), so the name needed to widen with it.
  */
 export const RIDER_NAV_ITEMS: NavItem[] = [
   { label: "Home", href: ROUTES.riderHome, icon: HomeIcon },
   { label: "Jobs", href: ROUTES.riderAvailableJobs, icon: BriefcaseIcon },
-  { label: "Active", href: ROUTES.riderActiveDeliveries, icon: TruckIcon },
+  { label: "Activity", href: ROUTES.riderActiveDeliveries, icon: TruckIcon },
   { label: "Earnings", href: ROUTES.riderDeliveries, icon: WalletIcon },
-  { label: "Profile", href: ROUTES.riderProfile, icon: UserIcon },
 ];
 
 /**
