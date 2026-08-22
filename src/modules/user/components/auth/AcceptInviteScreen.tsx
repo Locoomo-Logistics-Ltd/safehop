@@ -212,7 +212,16 @@ export function AcceptInviteScreen() {
               checked={consentAccepted}
               onChange={(e) => setConsentAccepted(e.target.checked)}
             />
-            <span>I accept the Terms of Service and Privacy Policy</span>
+            <span>
+              I accept the{" "}
+              <Link href={ROUTES.terms} target="_blank" rel="noopener noreferrer" className="text-brand-blue underline">
+                Terms of Service
+              </Link>{" "}
+              and{" "}
+              <Link href={ROUTES.privacy} target="_blank" rel="noopener noreferrer" className="text-brand-blue underline">
+                Privacy Policy
+              </Link>
+            </span>
           </label>
 
           {confirmInviteError && (() => {
