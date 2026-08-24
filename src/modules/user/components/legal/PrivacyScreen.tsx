@@ -1,4 +1,4 @@
-import { LegalDocLayout } from "./LegalDocLayout";
+import { LegalDocLayout, Placeholder } from "./LegalDocLayout";
 
 /**
  * Drafted from an audit of this app's actual data practices
@@ -81,6 +81,7 @@ export function PrivacyScreen() {
         <li><strong>Cloudinary</strong> &mdash; securely stores Rider verification document images, uploaded directly from your browser using a time-limited signed link.</li>
         <li><strong>Paystack</strong> &mdash; processes payments; we never receive or store your card details.</li>
         <li><strong>Geoapify</strong> &mdash; provides maps and converts addresses you search into coordinates.</li>
+        <li><strong>Vercel</strong> &mdash; hosts our frontend infrastructure.</li>
         <li><strong>Railway</strong> &mdash; hosts our backend infrastructure.</li>
       </ul>
 
