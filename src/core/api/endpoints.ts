@@ -153,4 +153,12 @@ export const ENDPOINTS = {
     /** Admin. Records an entry as settled off-system. Idempotent. */
     markEntryPaid: (entryId: string) => `/admin/revenue-split/entries/${entryId}/mark-paid`,
   },
+
+  // ── Admin diagnostics ────────────────────────────────────────────
+  // Real, confirmed route per docs/API.md. Read-only reconciliation
+  // report comparing the stored rider/Node capacity counters against
+  // freshly-computed expected values.
+  adminDiagnostics: {
+    capacityAudit: "/admin/capacity-audit",
+  },
 } as const;

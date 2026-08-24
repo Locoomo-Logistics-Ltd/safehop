@@ -18,6 +18,7 @@ import type {
   AdminRevenueSplitEntryFilters,
   AdminTeamMember,
   AdminOrderSummary,
+  CapacityAuditReport,
   CreatePricingRulePayload,
   CreateRevenueSplitRatioPayload,
   InvitedStaffMember,
@@ -93,6 +94,13 @@ function mapNodeRecord(node: AdminNodeRecord): AdminNodeStatus {
  *      appeared in `docs/API.md` and has been removed. Distinct from
  *      the still-`NOT_IMPLEMENTED` `getRiderPerformance` leaderboard
  *      below, which has no real route.
+ *    - `createPricingRule` also now sends `destinationFeeNaira` — a
+ *      flat fee paid entirely to the destination Node, separate from
+ *      the rider/origin-Node/platform percentage split. Added
+ *      alongside `getCapacityAudit` below.
+ *    - `getCapacityAudit` → `GET /admin/capacity-audit` (Capacity
+ *      Audit screen). Read-only reconciliation report — no mutation,
+ *      no request body.
  *
  * Every method the Admin UI needs beyond the above has **no backend
  * route at all** per `API.md` (Super Admin elevation included — there's
@@ -306,6 +314,12 @@ const realAdminService = {
   /** Records an entry as settled off-system. No request body. Idempotent — marking an already-paid entry again just returns its current state. */
   async markRevenueSplitEntryPaid(entryId: string): Promise<MarkEntryPaidResult> {
     return httpClient.patch<MarkEntryPaidResult>(ENDPOINTS.adminRevenueSplit.markEntryPaid(entryId));
+  },
+
+  // ── Admin diagnostics ────────────────────────────────────────────
+  /** Real, confirmed route — read-only reconciliation report comparing stored vs. expected rider/Node capacity counters. */
+  async getCapacityAudit(): Promise<CapacityAuditReport> {
+    return httpClient.get<CapacityAuditReport>(ENDPOINTS.adminDiagnostics.capacityAudit);
   },
 
   // ── Analytics (no endpoints) ────────────────────────────────────

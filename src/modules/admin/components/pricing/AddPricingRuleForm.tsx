@@ -18,14 +18,16 @@ interface AddPricingRuleFormProps {
 export function AddPricingRuleForm({ onClose }: AddPricingRuleFormProps) {
   const [baseFeeNaira, setBaseFeeNaira] = useState("");
   const [perKmRateNaira, setPerKmRateNaira] = useState("");
+  const [destinationFeeNaira, setDestinationFeeNaira] = useState("");
   const { createPricingRule, isSubmitting } = useCreatePricingRule();
 
-  const isValid = baseFeeNaira.trim() && perKmRateNaira.trim();
+  const isValid = baseFeeNaira.trim() && perKmRateNaira.trim() && destinationFeeNaira.trim();
 
   const handleSubmit = () => {
     createPricingRule({
       baseFeeNaira: Number(baseFeeNaira),
       perKmRateNaira: Number(perKmRateNaira),
+      destinationFeeNaira: Number(destinationFeeNaira),
     });
   };
 
@@ -41,7 +43,7 @@ export function AddPricingRuleForm({ onClose }: AddPricingRuleFormProps) {
         This becomes the current rate immediately. It doesn&apos;t edit or remove any existing rule — past orders keep
         referencing whichever rule was current when their fee was calculated.
       </p>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
         <Input
           placeholder="Base fee (₦)"
           type="number"
@@ -54,7 +56,17 @@ export function AddPricingRuleForm({ onClose }: AddPricingRuleFormProps) {
           value={perKmRateNaira}
           onChange={(e) => setPerKmRateNaira(e.target.value)}
         />
+        <Input
+          placeholder="Destination fee (₦)"
+          type="number"
+          value={destinationFeeNaira}
+          onChange={(e) => setDestinationFeeNaira(e.target.value)}
+        />
       </div>
+      <p className="text-[11px] text-text-muted mb-3">
+        Destination fee is a flat amount added to the order total, paid entirely to the destination Node on
+        completion — separate from the rider/origin-Node/platform revenue split.
+      </p>
       <Button
         size="sm"
         disabled={!isValid}

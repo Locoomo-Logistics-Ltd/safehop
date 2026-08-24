@@ -12,6 +12,16 @@
 > never edit it from a frontend session.** This file is the one that
 > gets edited here, to track the frontend's side of the contract.
 
+**2026-08-24 update**: `docs/API.md` picked up a `destinationFeeNaira`
+field on `POST/GET /admin/pricing` (flat fee paid entirely to the
+destination Node on order completion, separate from the rider/origin-
+Node/platform percentage split), a `destination_node` addition to the
+revenue-split `partyType` enum (a fourth row per completed order), and
+one wholly new endpoint, `GET /admin/capacity-audit` (read-only
+reconciliation report). All three are now wired — see the Admin
+Pricing and Earnings sections below and the new Admin Diagnostics
+section. Summary counts now cover **48** documented endpoints, not 47.
+
 **Legend**
 
 - ✅ **Fully Integrated** — correct route, correct request body, correct
@@ -149,17 +159,19 @@ not a re-verification of any endpoint's behavior).
 
 | Method | Endpoint | Feature/Module | Status | Related page(s)/component(s) | Service/hook | Missing work |
 |---|---|---|---|---|---|---|
-| POST | `/admin/pricing` | Admin sets a new pricing rule | ✅ | `AddPricingRuleForm`, `PricingScreen` (`/admin/pricing`) | `adminService.createPricingRule` via `useCreatePricingRule` | None — new 2026-08-12. Same generic-toast validation issue as `/users/invite`/`/nodes` above (`getErrorMessage`, not `getFriendlyError`). |
-| GET | `/admin/pricing` | Admin views rate history | ✅ | Same screen — table below the form, newest-first, top row marked "Current" | `adminService.getPricingRules` via `usePricingRules` | None — new 2026-08-12. `/admin/pricing` has no home in the original 8-frame design; placed as a new nav item next to "Approvals" (see `nav-config.ts`'s comment). This closes the real gap the pre-2026-08-12 audit flagged: Consumer checkout (`POST /payments/intents`) depends on a pricing rule existing, and there was previously no Admin-facing way to create one. |
+| POST | `/admin/pricing` | Admin sets a new pricing rule | ✅ | `AddPricingRuleForm`, `PricingScreen` (`/admin/pricing`) | `adminService.createPricingRule` via `useCreatePricingRule` | Same generic-toast validation issue as `/users/invite`/`/nodes` above (`getErrorMessage`, not `getFriendlyError`). **2026-08-24**: form and payload extended with `destinationFeeNaira` (a flat fee paid entirely to the destination Node — see the Earnings section's `destination_node` party type below), required alongside the other two fields. |
+| GET | `/admin/pricing` | Admin views rate history | ✅ | Same screen — table below the form, newest-first, top row marked "Current" | `adminService.getPricingRules` via `usePricingRules` | None. `/admin/pricing` has no home in the original 8-frame design; placed as a new nav item next to "Approvals" (see `nav-config.ts`'s comment). This closes the real gap the pre-2026-08-12 audit flagged: Consumer checkout (`POST /payments/intents`) depends on a pricing rule existing, and there was previously no Admin-facing way to create one. **2026-08-24**: table gained a "Destination Fee" column reading `rule.destinationFeeNaira`. |
 ## Earnings (revenue split)
 
 New 2026-08-20. Every `completed` order's fee is split rider/origin-Node/platform per an Admin-configured ratio — see `docs/API.md`'s "Earnings (revenue split)" section. **Supersedes `GET /admin/rider-earnings`**, an endpoint the 2026-08-17 session wired `RiderEarningsScreen` to that never actually appeared in `docs/API.md` — deleted, see Inconsistencies.
+
+**2026-08-24**: `docs/API.md` added a fourth party type, `destination_node` — a flat fee (`PricingRule.destinationFeeKobo`, set on `POST /admin/pricing`) paid entirely to the destination Node, a separate line item from the rider/origin-Node/platform percentage split (so tuning that ratio never changes what a destination Node earns and vice versa). Every `completed` order now produces four `revenue_split_entries` rows, not three. `RevenueSplitPartyType` (`earnings.types.ts`) widened accordingly; `RevenueSplitScreen`'s party label map and filter both cover it now.
 
 | Method | Endpoint | Feature/Module | Status | Related page(s)/component(s) | Service/hook | Missing work |
 |---|---|---|---|---|---|---|
 | POST | `/admin/revenue-split` | Admin sets the split ratio | ✅ | `SetRevenueSplitRatioForm`, `RevenueSplitScreen` (`/admin/revenue-split`) | `adminService.createRevenueSplitRatio` via `useCreateRevenueSplitRatio` | None — new 2026-08-20. Client-side validates the three percentages sum to exactly 100 before enabling submit, mirroring the server's `400 INVALID_REVENUE_SPLIT`. Same generic-toast validation issue as `/users/invite`/`/nodes` above. |
 | GET | `/admin/revenue-split` | Admin views ratio history | ✅ | Same screen — "Current split" card reads the newest entry | `adminService.getRevenueSplitRatios` via `useRevenueSplitRatios` | None — new 2026-08-20. |
-| GET | `/admin/revenue-split/entries` | Admin views payout-readiness entries | ✅ | Same screen — filterable table, `partyType`/`payoutStatus` | `adminService.getRevenueSplitEntries` via `useRevenueSplitEntries` | None — new 2026-08-20. Requested at `limit=100`, no pagination UI yet. |
+| GET | `/admin/revenue-split/entries` | Admin views payout-readiness entries | ✅ | Same screen — filterable table, `partyType`/`payoutStatus` | `adminService.getRevenueSplitEntries` via `useRevenueSplitEntries` | Requested at `limit=100`, no pagination UI yet. **2026-08-24**: `partyType` filter's `<select>` now offers `destination_node` alongside rider/node/platform. |
 | PATCH | `/admin/revenue-split/entries/:id/mark-paid` | Admin marks an entry settled off-system | ✅ | Same screen, "Mark Paid" per pending row | `adminService.markRevenueSplitEntryPaid` via `useMarkRevenueSplitEntryPaid` | None — new 2026-08-20. No request body, idempotent per `API.md`. |
 | GET | `/earnings/mine` | Rider views own earnings | ✅ | `EarningsStatCards`/`RiderHomeScreen`, `RiderProfileScreen`'s stat row, `MyEarningsScreen` (`/rider/deliveries`, "Earnings" nav tab) | `riderService.listMyEarnings`/`getEarningsSummary` via `useMyEarnings` (list), `useRiderEarnings` (reduced today/total summary) | None — new 2026-08-20, closes a real gap (`getEarningsSummary()` previously `NOT_IMPLEMENTED`, no endpoint existed). No server-side "today" filter or rating field — summary is reduced client-side from the full entry list; `RiderEarningsSummary` no longer carries a `rating` field (nothing in the real API supplies one). |
 | GET | `/earnings/my-node` | NodeOperator views this Node's earnings | ✅ | `NodeEarningsScreen` (`/node/earnings`, reached from Node Profile) | `nodeService.getMyNodeEarnings` via `useNodeEarnings` | None — new 2026-08-20, first integration of this route (previously zero frontend calls). Only shows entries where this Node was the *origin*, per the documented split rule. |
@@ -172,6 +184,14 @@ New 2026-08-20. Every `completed` order's fee is split rider/origin-Node/platfor
 | GET | `/payments/intents/:id` | Consumer polls payment status after the Paystack redirect | ✅ | `PaymentCallbackScreen` (`/orders/payment-callback`) | `deliveryService.getPaymentIntent` via `usePaymentIntentStatus` | **New 2026-08-12.** Polls every 2.5s (capped at ~90s) while `status: "pending"`; on `"paid"` looks up the resulting Order via `GET /orders` (no dedicated "order by intent id" route exists) and forwards to the success screen; `"failed"`/`"expired"`/timeout each get a distinct retry state. The intent id is recovered from `sessionStorage` (set right before the Paystack redirect), not the callback URL's query string — `API.md` doesn't document what Paystack appends there. **Not verified against a live backend.** |
 | POST | `/payments/webhooks/paystack` | Paystack → backend payment confirmation | ⚪ | n/a | n/a | Server-to-server only per `API.md` ("your frontend never does" this) — correctly has no frontend call site. Listed here for completeness, not a gap. |
 
+## Admin Diagnostics
+
+New 2026-08-24. `GET /admin/capacity-audit` — no prior frontend integration at all (confirmed via grep before starting: zero references to `capacity-audit` anywhere in `src/`). Read-only reconciliation report comparing the stored `RiderProfile.currentActiveOrderCount`/`Node.currentCount` counters against freshly-computed expected values.
+
+| Method | Endpoint | Feature/Module | Status | Related page(s)/component(s) | Service/hook | Missing work |
+|---|---|---|---|---|---|---|
+| GET | `/admin/capacity-audit` | Admin views the rider/Node capacity reconciliation report | ✅ | `CapacityAuditScreen` (`/admin/capacity-audit`, new nav item, last in `ADMIN_NAV_ITEMS`) | `adminService.getCapacityAudit` via `useCapacityAudit` | None — new 2026-08-24. Manual "Refresh" button, no auto-polling (a diagnostic pull, not a live feed). No write/reconcile action exists on the screen since `docs/API.md` documents no mutation sibling for this route — surfacing the drift is the whole job. |
+
 ## Orders
 
 | Method | Endpoint | Feature/Module | Status | Related page(s)/component(s) | Service/hook | Missing work |
@@ -181,12 +201,14 @@ New 2026-08-20. Every `completed` order's fee is split rider/origin-Node/platfor
 
 ## Summary
 
-**47** endpoints documented in `API.md` as of 2026-08-20 (up from 39 at
-the 2026-08-15 audit — the `admin/revenue-split` group and
-`earnings/mine`/`earnings/my-node` are new). **Every one has a row in
-this file** (verified by a 1:1 diff of every `### METHOD /api/v1/...`
-header in `API.md` against every table row here — no gaps either
-direction). **44 ✅ Fully Integrated**, **2 🟡 Partially Integrated**
+**48** endpoints documented in `API.md` as of 2026-08-24 (up from 47 at
+the 2026-08-20 audit — `GET /admin/capacity-audit` is new;
+`destinationFeeNaira` on `admin/pricing` and `destination_node` on the
+revenue-split `partyType` enum are field/enum additions to already-
+documented endpoints, not new rows). **Every one has a row in this
+file** (verified by a 1:1 diff of every `### METHOD /api/v1/...` header
+in `API.md` against every table row here — no gaps either direction).
+**45 ✅ Fully Integrated**, **2 🟡 Partially Integrated**
 (`/auth/verify-email`, `PATCH /nodes/:id`), **0 ❌ Not Integrated**,
 **1 ⚪ No UI Required Yet**.
 

@@ -1,15 +1,19 @@
 /**
  * Earnings / revenue-split domain types — shared across Rider,
- * NodeOperator, and Admin. Every `completed` order's fee is
- * split three ways (rider / origin-Node / platform) per an
- * Admin-configured ratio, at the exact moment
- * `POST /handoffs/orders/:id/collect` succeeds — see docs/API.md's
- * "Earnings (revenue split)" section. Payout itself stays off-system
- * (bank transfer, cash, etc.); these types only describe who's owed
- * what and whether an Admin has settled it.
+ * NodeOperator, and Admin. Every `completed` order produces four
+ * `revenue_split_entries` rows: rider / origin-Node / platform get an
+ * Admin-configured percentage split of the delivery revenue, and
+ * `destination_node` gets a separate flat fee
+ * (`PricingRule.destinationFeeKobo`) paid entirely to the destination
+ * Node — not part of the percentage split, so tuning the split ratio
+ * never changes what a destination Node earns and vice versa. All at
+ * the exact moment `POST /handoffs/orders/:id/collect` succeeds — see
+ * docs/API.md's "Earnings (revenue split)" section. Payout itself
+ * stays off-system (bank transfer, cash, etc.); these types only
+ * describe who's owed what and whether an Admin has settled it.
  */
 
-export type RevenueSplitPartyType = "rider" | "node" | "platform";
+export type RevenueSplitPartyType = "rider" | "node" | "destination_node" | "platform";
 export type PayoutStatus = "pending" | "paid";
 
 /** `GET /earnings/mine` (Rider) and `GET /earnings/my-node` (NodeOperator) — same response shape. */
@@ -46,8 +50,8 @@ export interface RevenueSplitRatio {
 }
 
 // ── Admin: revenue-split entries (payout-readiness report) ──────
-// GET /admin/revenue-split/entries — three rows per completed order
-// (rider, origin Node, platform).
+// GET /admin/revenue-split/entries — four rows per completed order
+// (rider, origin Node, destination Node, platform).
 
 export interface AdminRevenueSplitEntry {
   id: string;

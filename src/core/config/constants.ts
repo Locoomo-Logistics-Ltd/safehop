@@ -64,6 +64,8 @@ export const ROUTES = {
   adminAnalytics: "/admin/analytics",
   /** Split-ratio config + payout-readiness entries — `POST/GET /admin/revenue-split`, `GET .../entries`, `PATCH .../mark-paid`. Replaces the old `/admin/rider-earnings` screen (undocumented endpoint, removed) next to "Analytics" (its closest thematic neighbour). */
   adminRevenueSplit: "/admin/revenue-split",
+  /** Read-only reconciliation report — `GET /admin/capacity-audit`. Compares stored rider/Node capacity counters against expected values. */
+  adminCapacityAudit: "/admin/capacity-audit",
   adminSettings: "/admin/settings",
   adminProfile: "/admin/profile",
 } as const;
@@ -123,6 +125,7 @@ export const QUERY_KEYS = {
   adminOrdersTrend: ["admin", "orders-trend"] as const,
   adminRevenueSplitRatios: ["admin", "revenue-split-ratios"] as const,
   adminRevenueSplitEntries: ["admin", "revenue-split-entries"] as const,
+  adminCapacityAudit: ["admin", "capacity-audit"] as const,
 };
 
 /** Business rules shared between UI validation and quote calculation */

@@ -247,10 +247,17 @@ export interface SuperAdminOverview {
 // Append-only: POST never edits an existing rule, it adds a new one
 // that becomes "current." Historical orders keep referencing whichever
 // rule was current when their fee was calculated.
+//
+// `destinationFeeNaira` (added to docs/API.md alongside the capacity
+// audit endpoint) is a flat fee added to the order total and paid
+// entirely to the *destination* Node on order completion — it is not
+// part of the rider/origin-Node/platform percentage split. See the
+// `destination_node` party type in `earnings.types.ts`.
 
 export interface CreatePricingRulePayload {
   baseFeeNaira: number;
   perKmRateNaira: number;
+  destinationFeeNaira: number;
 }
 
 export interface PricingRule {
@@ -259,8 +266,37 @@ export interface PricingRule {
   baseFeeKobo: number;
   perKmRateNaira: number;
   perKmRateKobo: number;
+  destinationFeeNaira: number;
+  destinationFeeKobo: number;
   effectiveFrom: string;
   createdByAdminId: string;
+}
+
+// ── Admin diagnostics: capacity audit ───────────────────────────
+// GET /admin/capacity-audit — real, confirmed route per docs/API.md.
+// Read-only reconciliation report: `RiderProfile.currentActiveOrderCount`
+// and `Node.currentCount` are mutable counters (incremented on
+// reservation, decremented on release) that can drift from what the
+// order data actually implies — this compares the stored counter
+// against a freshly-computed expected value for each row.
+
+export interface CapacityAuditRiderRow {
+  riderId: string;
+  riderEmail: string;
+  storedCount: number;
+  expectedCount: number;
+}
+
+export interface CapacityAuditNodeRow {
+  nodeId: string;
+  nodeName: string;
+  storedCount: number;
+  expectedCount: number;
+}
+
+export interface CapacityAuditReport {
+  riders: CapacityAuditRiderRow[];
+  nodes: CapacityAuditNodeRow[];
 }
 
 // ── Analytics ────────────────────────────────────────────────────

@@ -14,6 +14,7 @@ import {
   SettingsIcon,
   ShieldCheckIcon,
   CreditCardIcon,
+  RefreshCcwIcon,
 } from "@/components/icons";
 import { ROUTES } from "@/core/config/constants";
 
@@ -99,7 +100,10 @@ export const RIDER_NAV_ITEMS: NavItem[] = [
  * neighbour — rather than a new section, same reasoning as above; it
  * replaces an earlier "Rider Earnings" screen built against
  * `/admin/rider-earnings`, an endpoint that doesn't exist in
- * docs/API.md.
+ * docs/API.md. "Capacity Audit" (`/admin/capacity-audit`) joined the
+ * same way, placed last — a read-only diagnostics report with no home
+ * in the original design either, closest in spirit to "Revenue Split"
+ * (an operational reconciliation view, not a config screen).
  * "Settings" (Super Admin) is rendered separately, pinned to the bottom
  * of the sidebar, same as the account footer pattern already used
  * there.
@@ -114,6 +118,7 @@ export const ADMIN_NAV_ITEMS: NavItem[] = [
   { label: "Disputes", href: ROUTES.adminDisputes, icon: AlertTriangleIcon },
   { label: "Analytics", href: ROUTES.adminAnalytics, icon: BarChartIcon },
   { label: "Revenue Split", href: ROUTES.adminRevenueSplit, icon: WalletIcon },
+  { label: "Capacity Audit", href: ROUTES.adminCapacityAudit, icon: RefreshCcwIcon },
 ];
 
 export const ADMIN_SETTINGS_NAV_ITEM: NavItem = {

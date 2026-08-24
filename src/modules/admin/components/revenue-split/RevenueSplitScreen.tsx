@@ -23,6 +23,7 @@ function nairaFromKobo(kobo: number): number {
 const PARTY_LABEL: Record<RevenueSplitPartyType, string> = {
   rider: "Rider",
   node: "Node",
+  destination_node: "Destination Node",
   platform: "Platform",
 };
 
@@ -105,6 +106,7 @@ export function RevenueSplitScreen() {
             <option value="">All parties</option>
             <option value="rider">Rider</option>
             <option value="node">Node</option>
+            <option value="destination_node">Destination Node</option>
             <option value="platform">Platform</option>
           </AdminSelect>
           <AdminSelect

@@ -60,6 +60,7 @@ export function PricingScreen() {
                   <tr className="text-[11px] uppercase tracking-wide text-text-muted bg-bg-subtle">
                     <th className="font-medium px-5 py-2.5">Base Fee</th>
                     <th className="font-medium px-5 py-2.5">Per-Km Rate</th>
+                    <th className="font-medium px-5 py-2.5">Destination Fee</th>
                     <th className="font-medium px-5 py-2.5">Effective From</th>
                     <th className="px-5 py-2.5" />
                   </tr>
@@ -72,6 +73,9 @@ export function PricingScreen() {
                       </td>
                       <td className="px-5 py-3 text-[13px] text-text-secondary whitespace-nowrap">
                         {formatCurrency(rule.perKmRateNaira)} / km
+                      </td>
+                      <td className="px-5 py-3 text-[13px] text-text-secondary whitespace-nowrap">
+                        {formatCurrency(rule.destinationFeeNaira)}
                       </td>
                       <td className="px-5 py-3 text-[12px] text-text-muted whitespace-nowrap">
                         {new Date(rule.effectiveFrom).toLocaleString("en-US", {

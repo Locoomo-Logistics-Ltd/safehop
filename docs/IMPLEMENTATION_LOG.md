@@ -4195,3 +4195,122 @@ with real generated assets, no placeholder-sized files found.
 **Not performed**: no Android device or installed PWA was available to
 see the actual before/after handoff, so whether 250ms is the right
 amount of settle-time hasn't been observed on real hardware.
+
+---
+
+## 2026-08-24 (Admin: destination fee on Pricing, `destination_node` revenue-split party, new Capacity Audit screen)
+
+**Feature**: `docs/API.md` picked up three related additions —
+`POST /admin/pricing` gained `destinationFeeNaira` (a flat fee added to
+the order total, paid entirely to the destination Node on completion,
+separate from the rider/origin-Node/platform percentage split), the
+Earnings/revenue-split section's `partyType` enum gained
+`destination_node` (a fourth row per completed order, alongside rider/
+node/platform), and a wholly new endpoint,
+`GET /admin/capacity-audit` — a read-only reconciliation report
+comparing the stored `RiderProfile.currentActiveOrderCount`/
+`Node.currentCount` counters against freshly-computed expected values.
+Read `docs/API.md`, `docs/ARCHITECTURE.md`, `docs/HANDOFF.md`,
+`docs/IMPLEMENTATION_LOG.md`, `docs/PROJECT_CONTEXT.md`,
+`docs/API_INTEGRATION_STATUS.md` first, per standing instruction;
+confirmed via grep that `capacity-audit` had zero prior references
+anywhere in `src/` — genuinely new, not a partial integration.
+
+**Files changed**:
+- `src/core/types/admin.types.ts` — `CreatePricingRulePayload` and
+  `PricingRule` both gained `destinationFeeNaira`/`destinationFeeKobo`
+  (the latter only on the response type, matching the existing
+  `baseFee*`/`perKmRate*` dual-unit pattern). New: `CapacityAuditRiderRow`,
+  `CapacityAuditNodeRow`, `CapacityAuditReport`, modeled directly on
+  `docs/API.md`'s documented response shape.
+- `src/core/types/earnings.types.ts` — `RevenueSplitPartyType` widened
+  to `"rider" | "node" | "destination_node" | "platform"`; header
+  comment and the entries-table comment updated from "three rows" to
+  "four rows per completed order" to match.
+- `src/core/api/endpoints.ts` — new `adminDiagnostics.capacityAudit`
+  group (`GET /admin/capacity-audit`). No change needed to
+  `adminPricing`/`adminRevenueSplit` — same routes, just a wider
+  payload/enum.
+- `src/core/api/services/admin.service.ts` — new
+  `getCapacityAudit()`, a plain `GET` with no query params or mapping
+  (the response shape is rendered as-is). `createPricingRule` needed no
+  code change — it already forwards the whole payload object; only its
+  type grew. Updated the file's header comment to list both additions
+  under "confirmed real."
+- `src/core/config/constants.ts` — `ROUTES.adminCapacityAudit`
+  (`/admin/capacity-audit`) and `QUERY_KEYS.adminCapacityAudit`.
+- `src/modules/admin/hooks/use-admin-capacity-audit.ts` — new.
+  `useCapacityAudit()`, a plain `useQuery` with `retry: false` and no
+  automatic polling — same "an Admin pulls a fresh read on demand"
+  convention `useRevenueSplitEntries` already uses for a diagnostic
+  table, not a live dashboard.
+- `src/modules/admin/components/pricing/AddPricingRuleForm.tsx` — third
+  input, "Destination fee (₦)", required alongside the other two (the
+  request example in `docs/API.md` always includes all three fields, no
+  optionality documented). A one-line note under the fields explains
+  what the fee is for, matching the form's existing explanatory-copy
+  convention.
+- `src/modules/admin/components/pricing/PricingScreen.tsx` — rate
+  history table gained a "Destination Fee" column between "Per-Km Rate"
+  and "Effective From".
+- `src/modules/admin/components/revenue-split/RevenueSplitScreen.tsx` —
+  `PARTY_LABEL` gained `destination_node: "Destination Node"`; the
+  party filter `<select>` gained the matching option. The "Current
+  split" ratio pills (Rider/Node/Platform, summing to 100) are
+  correctly untouched — `destination_node` is a flat fee, not part of
+  that percentage split, so it has no ratio pill to show.
+- New `src/modules/admin/components/capacity-audit/CapacityAuditScreen.tsx`
+  + `index.ts` — two read-only tables (Riders, Nodes), each row showing
+  `storedCount` vs. `expectedCount` with a "Mismatch" pill and a
+  highlighted row background when they differ, plus a summary banner
+  (green "no discrepancies" / amber "N discrepancies found — X riders,
+  Y nodes") above both tables. Manual "Refresh" button
+  (`isFetching`-gated spinner via `refetch()`) rather than polling —
+  this is a diagnostic pull, not a live feed. No write action anywhere
+  on the screen: `docs/API.md` documents no mutation endpoint for this
+  report, so there's nothing to wire beyond display.
+- `src/app/(admin)/admin/capacity-audit/page.tsx` — new route, inside
+  the `(admin)` group so it inherits the existing `AuthGuard`.
+- `src/components/layout/nav-config.ts` — `ADMIN_NAV_ITEMS` gained
+  "Capacity Audit" (`RefreshCcwIcon`, already imported elsewhere in the
+  codebase for Node Network's "Manage" panel — reused here, not a new
+  icon), placed last. Tenth entry on a nav array `BottomNav`'s "More"
+  overflow already collapses past four items, so this adds one more row
+  to the existing sheet rather than changing that mechanism.
+
+**Design decisions**:
+- `destinationFeeNaira` made a required field on the Add Pricing Rule
+  form, not optional — `docs/API.md`'s one request example for
+  `POST /admin/pricing` includes all three fields together with no
+  field-rules table marking any of them optional (unlike, say,
+  `country` on `POST /nodes`, which the doc explicitly calls out as
+  optional). Safer to require it and let the backend's own validation
+  be the final word than to silently omit a field the doc doesn't say
+  is optional.
+- Capacity Audit's two tables are built off one small generic
+  `AuditTable<TRow>` component (shared shape: an id key, a label key, a
+  title/subtitle/empty-text) rather than two near-duplicate table
+  components — the Riders and Nodes tables are structurally identical
+  (label column + stored/expected/mismatch-pill), differing only in
+  which fields to read and what to call things.
+- No client-side "auto-fix" or write action was built for capacity
+  audit mismatches — `docs/API.md` documents this endpoint as
+  read-only ("Read-only reconciliation report"), and no PATCH/POST
+  sibling route exists anywhere in the doc. Surfacing the drift is the
+  whole job; reconciling it is presumably a backend/ops action outside
+  this app's scope.
+
+**Verification performed**: `npx tsc --noEmit` (clean), `npx eslint` on
+every changed/new file (clean), a cleared-`.next` `npx next build`
+succeeds (46 routes, up from 45 — `/admin/capacity-audit` is new; every
+other route's size unaffected except `/admin/pricing` and
+`/admin/revenue-split`, which grew marginally reflecting the new
+field/column/filter option). Dev-server smoke test: `/admin/capacity-audit`,
+`/admin/pricing`, `/admin/revenue-split`, `/admin-login` all return
+`200`, dev log grepped clean of errors. **Not verified**: no live Admin
+session or real backend response was available, so the actual populated
+tables (real mismatch rows, the summary banner's two states), the
+pricing form's new field submitting successfully, and the revenue-split
+filter actually returning `destination_node`-only rows have not been
+seen rendered against live data — same standing caveat as most sessions
+in this log for Admin-module work.

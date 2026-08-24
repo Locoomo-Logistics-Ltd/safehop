@@ -6,7 +6,67 @@
 
 ## Current objective
 
-**Latest session (2026-08-22 — clarified the "default splash screen"
+**Latest session (2026-08-24 — Admin: destination fee on Pricing,
+`destination_node` revenue-split party, new Capacity Audit screen):**
+`docs/API.md` was updated with three related additions and the ask was
+to implement all of them for Admin: `POST /admin/pricing` gained a
+`destinationFeeNaira` field (flat fee paid entirely to the destination
+Node on order completion, separate from the rider/origin-Node/platform
+percentage split), the revenue-split `partyType` enum gained
+`destination_node` as a fourth row per completed order, and a wholly
+new endpoint, `GET /admin/capacity-audit` — a read-only reconciliation
+report comparing the stored `RiderProfile.currentActiveOrderCount`/
+`Node.currentCount` counters against freshly-computed expected values.
+Confirmed via grep first that `capacity-audit` had zero prior
+references anywhere in `src/` — a genuinely new integration, not a
+partial one to extend.
+
+**Pricing**: `CreatePricingRulePayload`/`PricingRule` both gained
+`destinationFeeNaira` (+`destinationFeeKobo` on the response type,
+matching the existing `baseFee*`/`perKmRate*` dual-unit pattern).
+`AddPricingRuleForm` gained a third required input ("Destination fee
+(₦)") plus a one-line explanation of what the fee is for; `PricingScreen`'s
+rate-history table gained a matching column. Made required, not
+optional — `docs/API.md`'s one request example includes all three
+fields together with no field explicitly marked optional.
+
+**Revenue Split**: `RevenueSplitPartyType` widened to include
+`"destination_node"`. `RevenueSplitScreen`'s `PARTY_LABEL` map and party
+filter `<select>` both gained the new option ("Destination Node"). The
+"Current split" ratio pills (Rider/Node/Platform, summing to 100) are
+correctly untouched — the destination fee is a flat amount, not part of
+that percentage split, so it has no ratio pill of its own.
+
+**Capacity Audit — new screen**: `GET /admin/capacity-audit` had no
+frontend integration at all before this session. New
+`CapacityAuditScreen` (`/admin/capacity-audit`, reached from a new last
+entry in `ADMIN_NAV_ITEMS`) renders two read-only tables (Riders,
+Nodes) off one small generic `AuditTable<TRow>` component — each row
+shows `storedCount` vs. `expectedCount`, a highlighted background and
+"Mismatch" pill when they differ, and a summary banner above both
+tables (green "no discrepancies" / amber "N discrepancies — X riders, Y
+nodes"). A manual "Refresh" button (`isFetching`-gated) re-pulls the
+report; no polling, no write action anywhere on the screen — the
+endpoint is documented as read-only with no PATCH/POST sibling, so
+there's nothing to reconcile from the UI itself, only to surface.
+
+**Verified**: `npx tsc --noEmit` clean, `npx eslint` clean on every
+changed/new file, a cleared-`.next` `npx next build` succeeds (46
+routes, up from 45 — `/admin/capacity-audit` is new). Dev-server smoke
+test: `/admin/capacity-audit`, `/admin/pricing`, `/admin/revenue-split`,
+`/admin-login` all return `200`, dev log grepped clean of errors. **Not
+verified**: no live Admin session or real backend response was
+available, so the actual populated tables (real mismatch rows, both
+summary-banner states), the pricing form's new field submitting
+successfully against a live rule, and the revenue-split filter actually
+returning `destination_node`-only rows have not been seen rendered
+against live data — same standing caveat as most Admin-module sessions
+in this log. Full detail in `docs/IMPLEMENTATION_LOG.md`'s matching
+entry; `docs/API_INTEGRATION_STATUS.md` updated to match (Pricing row's
+Missing Work note, Earnings section intro, new Admin Diagnostics
+section, Summary counts now 48 endpoints).
+
+**Previous session (2026-08-22 — clarified the "default splash screen"
 question on Android and trimmed the custom splash's hold time):** the
 "default splash" the user saw on an installed Android PWA is **not**
 rendered by this app — it's Chrome's own OS-level splash for any

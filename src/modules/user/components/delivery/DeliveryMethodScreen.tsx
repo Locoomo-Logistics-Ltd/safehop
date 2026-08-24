@@ -26,12 +26,12 @@ const METHOD_OPTIONS: MethodOption[] = [
     recommended: true,
     icon: <PackageIcon size={20} />,
   },
-  {
-    value: "express",
-    title: "Express Delivery",
-    description: "Door-to-door convenience. Fastest delivery with zero effort.",
-    icon: <BoltIcon size={20} />,
-  },
+  // {
+  //   value: "express",
+  //   title: "Express Delivery",
+  //   description: "Door-to-door convenience. Fastest delivery with zero effort.",
+  //   icon: <BoltIcon size={20} />,
+  // },
 ];
 
 /**
