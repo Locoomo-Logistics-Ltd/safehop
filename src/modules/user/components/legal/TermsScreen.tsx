@@ -1,4 +1,4 @@
-import { LegalDocLayout, Placeholder } from "./LegalDocLayout";
+import { LegalDocLayout } from "./LegalDocLayout";
 
 /**
  * Drafted from an audit of this app's actual auth flow, roles, and
@@ -9,15 +9,16 @@ import { LegalDocLayout, Placeholder } from "./LegalDocLayout";
  */
 export function TermsScreen() {
   return (
-    <LegalDocLayout title="Terms of Service" effectiveDate={<Placeholder>[EFFECTIVE DATE]</Placeholder>}>
+    <LegalDocLayout title="Terms of Service" effectiveDate="22 August 2026">
       <p>
         These Terms of Service (&ldquo;Terms&rdquo;) govern your access to and use of the
         Locoomo application, website, and related services (together, the &ldquo;App&rdquo;),
         operated by <strong>Locoomo Ltd</strong> (&ldquo;Locoomo,&rdquo; &ldquo;we,&rdquo;
         &ldquo;us&rdquo;), a company registered in Nigeria under CAC number{" "}
-        <Placeholder>[CAC REGISTRATION NUMBER]</Placeholder>, with its registered address at{" "}
-        <Placeholder>[REGISTERED ADDRESS]</Placeholder>. By creating an account or otherwise
-        using the App, you agree to these Terms. If you do not agree, do not use the App.
+        <strong>8562367</strong>, with its registered address at{" "}
+        <strong>16 Ehighieda Street, off Ekosodin Road, Benin City, Edo State, Nigeria</strong>.
+        By creating an account or otherwise using the App, you agree to these Terms. If you do
+        not agree, do not use the App.
       </p>
 
       <h2>1. Definitions</h2>
@@ -136,19 +137,24 @@ export function TermsScreen() {
       <p>
         Delivery fees are calculated at checkout and payable in full before a delivery is
         dispatched. Payment is processed by Paystack; Locoomo does not receive or store your
-        card details.{" "}
-        <Placeholder>
-          [Refund/cancellation policy &mdash; needs a confirmed business decision]
-        </Placeholder>
+        card details.
+      </p>
+      <p>
+        <strong>Refund &amp; Cancellation Policy.</strong> Orders can be cancelled and
+        refunded before the package is handed over to a Locoomo Pickup Station or Rider. Once
+        the delivery is in transit, cancellation is no longer permitted. Refunds for eligible
+        cancellations or failed deliveries will be processed to the original payment method
+        within 5&ndash;10 business days.
       </p>
 
       <h2>12. Transactions Between Parties</h2>
       <p>
-        Locoomo operates the platform connecting Consumers, Riders, and Node Operators; Riders
-        and Node Operators act as{" "}
-        <Placeholder>[independent operators &mdash; confirm classification]</Placeholder>{" "}
-        facilitating delivery on their own account, not as Locoomo employees, unless
-        separately agreed.
+        Locoomo operates a technology platform connecting Consumers, Riders, and Node
+        Operators. Riders and Node Operators are independent service providers operating on
+        their own account and are not employees, agents, or representatives of Locoomo,
+        except where expressly agreed otherwise in writing. Each Rider and Node Operator is
+        responsible for determining how they perform their services, subject to
+        Locoomo&rsquo;s platform rules, safety, security, and service standards.
       </p>
 
       <h2>13. Service Availability</h2>
@@ -190,13 +196,21 @@ export function TermsScreen() {
 
       <h2>18. Limitation of Liability</h2>
       <p>
-        To the maximum extent permitted by Nigerian law, Locoomo&rsquo;s total liability
-        arising from your use of the App is limited to{" "}
-        <Placeholder>
-          [liability cap, e.g. the fees paid for the specific order giving rise to the claim]
-        </Placeholder>
-        . We are not liable for indirect, incidental, or consequential losses. Nothing here
-        limits liability that cannot lawfully be limited.
+        To the maximum extent permitted by Nigerian law, Locoomo&rsquo;s total aggregate
+        liability arising out of or relating to your use of the App or any delivery arranged
+        through the App shall not exceed the total delivery fees actually paid by you for the
+        specific transaction giving rise to the claim. Locoomo shall not be liable for any
+        indirect, incidental, special, consequential, or punitive loss, including loss of
+        profits, revenue, business, goodwill, or anticipated savings. Nothing in these Terms
+        excludes or limits any liability that cannot lawfully be excluded or limited under
+        applicable Nigerian law.
+      </p>
+      <p>
+        <strong>Package Loss or Damage.</strong> Where Locoomo is directly responsible for the
+        loss or damage of a package while it is in Locoomo&rsquo;s custody or under a delivery
+        arranged through the Platform, Locoomo&rsquo;s liability shall be limited to the
+        applicable compensation limit stated in the relevant delivery terms, subject to any
+        exclusions or limitations permitted by law.
       </p>
 
       <h2>19. Indemnification</h2>
@@ -208,11 +222,12 @@ export function TermsScreen() {
 
       <h2>20. Dispute Resolution &amp; Governing Law</h2>
       <p>
-        If a dispute arises, contact us first at{" "}
-        <a href="mailto:info@locoomo.com">info@locoomo.com</a> to seek an informal resolution.
-        These Terms are governed by the laws of the Federal Republic of Nigeria. Disputes not
-        resolved informally are subject to the exclusive jurisdiction of the courts of{" "}
-        <Placeholder>[STATE / COURT VENUE]</Placeholder>.
+        If a dispute arises, you agree to first contact Locoomo at{" "}
+        <a href="mailto:info@locoomo.com">info@locoomo.com</a> and make a good-faith effort to
+        resolve the dispute informally. These Terms are governed by and construed in
+        accordance with the laws of the Federal Republic of Nigeria. Any dispute that cannot
+        be resolved informally shall be subject to the exclusive jurisdiction of the competent
+        courts of Lagos State, Nigeria.
       </p>
 
       <h2>21. Handoff &amp; Collection Codes</h2>

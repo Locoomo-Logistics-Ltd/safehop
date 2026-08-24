@@ -1,4 +1,4 @@
-import { LegalDocLayout, Placeholder } from "./LegalDocLayout";
+import { LegalDocLayout } from "./LegalDocLayout";
 
 /**
  * Drafted from an audit of this app's actual data practices
@@ -9,12 +9,13 @@ import { LegalDocLayout, Placeholder } from "./LegalDocLayout";
  */
 export function PrivacyScreen() {
   return (
-    <LegalDocLayout title="Privacy Policy" effectiveDate={<Placeholder>[EFFECTIVE DATE]</Placeholder>}>
+    <LegalDocLayout title="Privacy Policy" effectiveDate="22 August 2026">
       <p>
         <strong>Locoomo Ltd</strong> (&ldquo;Locoomo,&rdquo; &ldquo;we,&rdquo; &ldquo;us&rdquo;)
         operates the Locoomo App and acts as the data controller for the personal information
         described below, under the Nigeria Data Protection Act, 2023 (&ldquo;NDPA&rdquo;). Our
-        registered address is <Placeholder>[REGISTERED ADDRESS]</Placeholder>.
+        registered address is 16 Ehighieda Street, off Ekosodin Road, Benin City, Edo State,
+        Nigeria (CAC registration number 8562367).
       </p>
 
       <h2>1. Scope</h2>
@@ -85,12 +86,12 @@ export function PrivacyScreen() {
 
       <h2>7. International Data Transfers</h2>
       <p>
-        <Placeholder>
-          [Needs confirmation: whether our service providers store or process data outside
-          Nigeria, and under what safeguard]
-        </Placeholder>
-        . Where personal data is transferred outside Nigeria, we take steps consistent with
-        NDPA cross-border transfer requirements to keep it protected.
+        Locoomo may use third-party service providers that process personal data outside
+        Nigeria. Where personal data is transferred outside Nigeria, we will take appropriate
+        steps to ensure that the transfer and processing are carried out in accordance with
+        the Nigeria Data Protection Act (NDPA) and applicable data-protection requirements. We
+        require appropriate safeguards to protect personal data and will only transfer data
+        where permitted by applicable law.
       </p>
 
       <h2>8. Cookies &amp; Similar Technologies</h2>
@@ -102,13 +103,22 @@ export function PrivacyScreen() {
 
       <h2>9. Data Retention</h2>
       <p>
-        <Placeholder>
-          [Needs confirmation: specific retention periods for account data, KYC documents,
-          order records, and payment records]
-        </Placeholder>
-        . As a general principle, we retain personal data for as long as your account is
-        active and as necessary to fulfil the purposes above, resolve disputes, and meet legal
-        obligations, after which it is deleted or anonymized.
+        We retain personal data only for as long as reasonably necessary to provide our
+        services, maintain your account, process transactions, prevent fraud, resolve
+        disputes, enforce our agreements, and comply with applicable legal, regulatory, and
+        accounting obligations.
+      </p>
+      <p>
+        Different categories of information may be retained for different periods. Account
+        and profile information may be retained while your account remains active and for a
+        reasonable period thereafter. Order, transaction, and payment records may be retained
+        for as long as required for accounting, tax, legal, and regulatory purposes. KYC and
+        verification records are retained only for as long as necessary to satisfy applicable
+        legal, regulatory, and fraud-prevention requirements.
+      </p>
+      <p>
+        When personal data is no longer required, we will securely delete it or anonymize it
+        where appropriate, subject to any legal obligation requiring continued retention.
       </p>
 
       <h2>10. Data Security</h2>
@@ -143,11 +153,10 @@ export function PrivacyScreen() {
 
       <h2>14. Marketing Communications</h2>
       <p>
-        We only send transactional messages required to operate the App &mdash; account
-        verification, password resets, and delivery/collection notifications.{" "}
-        <Placeholder>[Needs confirmation: whether marketing emails are sent today]</Placeholder>
-        . If we introduce marketing communications in future, we will provide a clear way to
-        opt out.
+        We do not currently send marketing emails. We only send transactional messages
+        required to operate the App &mdash; account verification, password resets, and
+        delivery/collection notifications. If we introduce marketing communications in
+        future, we will provide a clear way to opt out.
       </p>
 
       <h2>15. Children&rsquo;s Privacy</h2>
@@ -187,17 +196,18 @@ export function PrivacyScreen() {
 
       <h2>20. Data Protection Officer</h2>
       <p>
-        <Placeholder>
-          [Needs confirmation: whether a DPO has been designated, as may be required under the
-          NDPA depending on processing scale]
-        </Placeholder>
+        Locoomo is in the process of designating a Data Protection Officer (DPO) in
+        accordance with applicable data-protection requirements. Once appointed, the
+        DPO&rsquo;s contact details will be made available in this Privacy Policy. In the
+        meantime, privacy-related enquiries may be directed to{" "}
+        <a href="mailto:info@locoomo.com">info@locoomo.com</a>.
       </p>
 
       <h2>21. Contact</h2>
       <p>
         General questions and privacy/data-protection requests:{" "}
-        <a href="mailto:info@locoomo.com">info@locoomo.com</a>. Postal address:{" "}
-        <Placeholder>[REGISTERED ADDRESS]</Placeholder>.
+        <a href="mailto:info@locoomo.com">info@locoomo.com</a>. Postal address: 16 Ehighieda
+        Street, off Ekosodin Road, Benin City, Edo State, Nigeria.
       </p>
     </LegalDocLayout>
   );
