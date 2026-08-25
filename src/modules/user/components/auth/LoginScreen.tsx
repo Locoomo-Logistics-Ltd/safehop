@@ -4,11 +4,12 @@ import { useState } from "react";
 import Link from "next/link";
 // import { Button, Input, OtpInputBoxes } from "@/components/ui";
 import { Button, Input } from "@/components/ui";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, LogIn } from "lucide-react";
 import { useAuth } from "@/modules/user/hooks/use-auth";
 import { getFriendlyError } from "@/core/api/errors";
 import { ROUTES } from "@/core/config/constants";
 import { ErrorAlert } from "@/components/ui/error-alert";
+import { OnboardingLayout } from "./OnboardingLayout";
 // import { useSearchParams } from "next/navigation";
 
 // type LoginMethod = "password" | "otp";
@@ -48,10 +49,18 @@ const [showPassword, setShowPassword] = useState(false);
 
 
   return (
-    <div className="min-h-screen flex flex-col bg-bg-canvas">
-      <div className="flex-1 px-6 py-10 max-w-105 w-full mx-auto">
+    <OnboardingLayout
+      title="Welcome back to Locoomo"
+      subtitle="Track parcels, manage deliveries, and stay connected across every node in the network."
+    >
+      <div className="flex flex-col">
         <div className="flex items-center gap-2 mb-1.5">
-          <span className="text-[20px]" aria-hidden="true">📍</span>
+          <span
+            className="w-9 h-9 rounded-[10px] bg-status-info-bg flex items-center justify-center shrink-0"
+            aria-hidden="true"
+          >
+            <LogIn size={17} className="text-brand-blue" />
+          </span>
           <h1 className="font-display text-[22px] font-bold text-text-primary">Log in</h1>
         </div>
         <p className="text-[14px] text-text-secondary mb-6">Enter your login details</p>
@@ -124,12 +133,12 @@ return (
 
         <p className="text-center text-[13px] text-text-secondary mt-5">
           Don&apos;t have an account?{" "}
-          <Link href={ROUTES.createAccount} className="text-brand-blue font-semibold">
+          <Link href={ROUTES.roleSelect} className="text-brand-blue font-semibold">
             Sign up
           </Link>
         </p>
-        
+
       </div>
-    </div>
+    </OnboardingLayout>
   );
 }

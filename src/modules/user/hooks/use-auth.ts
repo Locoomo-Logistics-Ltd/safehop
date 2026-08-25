@@ -104,7 +104,7 @@ export function useAuth() {
     onSuccess: () => {
       setSession(null);
       queryClient.setQueryData(QUERY_KEYS.session, null);
-      router.push(ROUTES.roleSelect);
+      router.push(ROUTES.login);
     },
   });
 

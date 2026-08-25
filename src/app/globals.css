@@ -178,3 +178,49 @@ h1, h2, h3, h4, h5, h6 {
   animation: splash-wordmark-in 450ms cubic-bezier(0.16, 1, 0.3, 1) both;
   animation-delay: 220ms;
 }
+
+/* OnboardingLayout (modules/user/components/auth/OnboardingLayout.tsx) —
+   decorative logistics scene on the login/role-select/create-account split
+   panel. The reduced-motion override above already neutralizes all three. */
+@keyframes locoomo-drive {
+  0%,
+  100% {
+    left: 0%;
+  }
+  50% {
+    left: calc(100% - 44px);
+  }
+}
+.animate-locoomo-drive {
+  animation: locoomo-drive 7s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+
+@keyframes locoomo-float {
+  0%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.35;
+  }
+  50% {
+    transform: translateY(-10px);
+    opacity: 0.9;
+  }
+}
+.animate-locoomo-float {
+  animation: locoomo-float 3.4s ease-in-out infinite;
+}
+
+@keyframes locoomo-pulse {
+  0% {
+    transform: scale(0.85);
+    opacity: 0.55;
+  }
+  70%,
+  100% {
+    transform: scale(1.9);
+    opacity: 0;
+  }
+}
+.animate-locoomo-pulse {
+  animation: locoomo-pulse 2.4s cubic-bezier(0, 0, 0.2, 1) infinite;
+}

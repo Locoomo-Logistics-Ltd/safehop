@@ -2,10 +2,10 @@ import { redirect } from "next/navigation";
 import { ROUTES } from "@/core/config/constants";
 
 /**
- * Root route — redirects to the role-select onboarding entry point.
- * Once auth state is checked client-side, screens like Dashboard
- * handle redirecting an already-authenticated user past onboarding.
+ * Root route — redirects to login, the app's primary entry point (fewer
+ * clicks for returning users). New users reach role-select/create-account
+ * via the "Sign up" link on the login screen instead.
  */
 export default function RootPage() {
-  redirect(ROUTES.roleSelect);
+  redirect(ROUTES.login);
 }

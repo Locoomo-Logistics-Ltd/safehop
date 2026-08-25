@@ -1,36 +1,53 @@
 "use client";
 
 import { useState } from "react";
+import type { ComponentType } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Button, Input } from "@/components/ui";
 import { useAuth } from "@/modules/user/hooks/use-auth";
 import { getFriendlyError } from "@/core/api/errors";
 import { ROUTES } from "@/core/config/constants";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, User, Bike, Building2 } from "lucide-react";
 import { ErrorAlert } from "@/components/ui/error-alert";
 import type { UserRole } from "@/core/types";
+import { OnboardingLayout } from "./OnboardingLayout";
 
 /** Only these three roles can self-register — Admin is provisioned via POST /users/invite. */
 type RegistrableRole = Extract<UserRole, "consumer" | "node_operator" | "rider">;
 
-const ROLE_COPY: Record<RegistrableRole, { emoji: string; heading: string; subheading: string }> = {
+const ROLE_COPY: Record<
+  RegistrableRole,
+  {
+    icon: ComponentType<{ size?: number; className?: string }>;
+    heading: string;
+    subheading: string;
+    panelTitle: string;
+    panelSubtitle: string;
+  }
+> = {
   consumer: {
-    emoji: "🧑",
+    icon: User,
     heading: "Create an account",
     subheading: "Create your Locoomo account to get started.",
+    panelTitle: "Ship smarter with Locoomo",
+    panelSubtitle: "Send parcels across our node network and track every step in real time.",
   },
   rider: {
-    emoji: "🛵",
+    icon: Bike,
     heading: "Create your Rider account",
     subheading:
       "Sign up to start delivering. You'll complete a quick verification step after your first login.",
+    panelTitle: "Start earning on your schedule",
+    panelSubtitle: "Accept jobs, navigate to pickups, and get paid for every delivery you complete.",
   },
   node_operator: {
-    emoji: "🏬",
+    icon: Building2,
     heading: "Create your Node Operator account",
     subheading:
       "Sign up to run a Node. You'll set up your Node's details after your first login.",
+    panelTitle: "Grow your pickup station",
+    panelSubtitle: "Run a Node, facilitate parcel handoffs, and build a new revenue stream.",
   },
 };
 
@@ -118,13 +135,15 @@ const isPasswordValid = passwordChecks.length && passwordChecks.match;
 };
 
   return (
-    <div className="min-h-screen flex flex-col bg-bg-canvas">
-       <div className="flex-1 px-6 py-10 max-w-105 w-full mx-auto">
-       
-
+    <OnboardingLayout title={copy.panelTitle} subtitle={copy.panelSubtitle}>
              <>
   <div className="flex items-center gap-2 mb-1.5">
-    <span className="text-[22px]" aria-hidden="true">{copy.emoji}</span>
+    <span
+      className="w-9 h-9 rounded-[10px] bg-status-info-bg flex items-center justify-center shrink-0"
+      aria-hidden="true"
+    >
+      <copy.icon size={17} className="text-brand-blue" />
+    </span>
     <h1 className="font-display text-[22px] font-bold text-text-primary">
       {copy.heading}
     </h1>
@@ -288,10 +307,6 @@ const isPasswordValid = passwordChecks.length && passwordChecks.match;
             Log in
           </Link>
         </p>
-       
-      </div>
-     
-    
-    </div>
+    </OnboardingLayout>
   );
 }

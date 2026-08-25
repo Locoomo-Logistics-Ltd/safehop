@@ -1,10 +1,12 @@
+import type { ComponentType } from "react";
+import { User, Bike, Building2 } from "lucide-react";
 import type { UserRole } from "@/core/types";
 
 export interface RoleOption {
   role: UserRole;
   title: string;
   description: string;
-  emoji: string;
+  icon: ComponentType<{ size?: number; className?: string }>;
 }
 
 export const ROLE_OPTIONS: RoleOption[] = [
@@ -12,25 +14,25 @@ export const ROLE_OPTIONS: RoleOption[] = [
     role: "consumer",
     title: "User",
     description: "Send and receive parcels securely across the network.",
-    emoji: "🧑",
+    icon: User,
   },
   {
     role: "rider",
     title: "Rider",
     description: "Deliver parcels, optimize routes, and earn dynamically.",
-    emoji: "🛵",
+    icon: Bike,
   },
   {
     role: "node_operator",
     // title: "Node Operator",
     title: "Pickup Station",
     description: "Manage a Node/site, facilitate transfers, and build business.",
-    emoji: "🏬",
+    icon: Building2,
   },
   // {
   //   role: "admin",
   //   title: "Admin",
   //   description: "Manage users, riders and vendors. Control the platform.",
-  //   emoji: "🛡️",
+  //   icon: ShieldCheck,
   // },
 ];

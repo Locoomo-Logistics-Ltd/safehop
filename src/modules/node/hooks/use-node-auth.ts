@@ -22,7 +22,7 @@ export function useNodeAuth() {
     onSuccess: () => {
       setSession(null);
       queryClient.setQueryData(QUERY_KEYS.session, null);
-      router.push(ROUTES.roleSelect);
+      router.push(ROUTES.login);
     },
   });
 

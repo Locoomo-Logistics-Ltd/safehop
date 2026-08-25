@@ -65,8 +65,12 @@ src/
 │   ├── vendor-scan/             Full-screen camera scanner — outside the shell.
 │   ├── rider-login/             Phone + OTP login — outside the shell.
 │   ├── rider-scan/[jobId]/       Full-screen camera scanner — outside the shell.
-│   ├── role-select/, create-account/, login/   Public onboarding routes
+│   ├── login/, role-select/, create-account/   Public onboarding routes
 │   │                                          (shared by User + Vendor signup).
+│   │                                          `/` redirects to `login` — it's
+│   │                                          the entry point, not role-select.
+│   │                                          See "Onboarding flow & auth
+│   │                                          screens" below.
 │   └── providers/               QueryProvider, AuthProvider, SW registration.
 │
 ├── modules/                     Feature/business logic, organized by role.
@@ -242,6 +246,71 @@ decorative placeholder pattern (shown to the *sender* as a drop-off
 code). Swap in a real QR generation library (e.g. the `qrcode` npm
 package) inside this one file — the `value` prop contract stays the
 same.
+
+---
+
+## Onboarding flow & auth screens
+
+### Login is the entry point, not role-select
+
+The root route (`src/app/page.tsx`) redirects to `/login`, not
+`/role-select` — the app assumes most people opening it already have
+an account, so login is one tap away instead of sitting behind a role
+picker. New users reach signup via the "Sign up" link on the login
+screen, which takes them to `/role-select` first (unlike before, when
+it linked straight to `/create-account`).
+
+Full flow: `/` → **`/login`** → (no account) "Sign up" → `/role-select`
+→ `/create-account` → back to `/login` to sign in with the new
+account. `CreateAccountScreen`'s "Already have an account? Log in"
+link and `AuthGuard`'s unauthenticated-session redirect already
+pointed at `/login`, so those needed no change. Logout
+(`modules/user/hooks/use-auth.ts`, `modules/rider/hooks/use-rider-auth.ts`,
+`modules/node/hooks/use-node-auth.ts`) now also sends users to
+`/login` instead of `/role-select`, for the same reason — a
+signed-out user most likely wants to sign back in, not re-pick a role.
+
+If you add a new place that needs to send someone to "start over"
+(another logout path, an expired-session handler, etc.), route it to
+`ROUTES.login`, not `ROUTES.roleSelect`.
+
+### Shared `OnboardingLayout` (split-screen shell)
+
+`src/modules/user/components/auth/OnboardingLayout.tsx` is the shared
+visual shell for `LoginScreen`, `RoleSelectScreen`, and
+`CreateAccountScreen` (not used by `ForgotPasswordScreen`,
+`ResetPasswordScreen`, or `AcceptInviteScreen` — those still use the
+older single-column layout). It renders:
+
+- **Left panel** (`hidden lg:flex`, desktop/tablet only) — brand
+  gradient background, the Locoomo logo, a purely decorative animated
+  "logistics scene" (a truck driving back and forth along a dashed
+  route, a pulsing destination pin, floating package icons — CSS
+  keyframes in `globals.css`: `locoomo-drive`, `locoomo-float`,
+  `locoomo-pulse`, all covered by the existing
+  `prefers-reduced-motion` override), plus a per-screen headline/
+  subcopy and a small feature-bullet list.
+- **Right panel** — the actual form (`children`), with a compact
+  logo header that only shows on mobile (`lg:hidden`), since the left
+  panel's logo is hidden there.
+
+Usage: wrap a screen's form content in `<OnboardingLayout title="…"
+subtitle="…">…</OnboardingLayout>` instead of the old
+`<div className="min-h-screen flex flex-col bg-bg-canvas">` wrapper.
+`CreateAccountScreen` passes different `title`/`subtitle` copy per
+role (via its `ROLE_COPY` map's `panelTitle`/`panelSubtitle` fields),
+since the same form serves Consumer, Rider, and Node Operator signup.
+
+### Emoji icons replaced with lucide-react
+
+The role emoji (🧑 / 🛵 / 🏬) previously used in
+`modules/user/constants/roles.ts` (`RoleOption.emoji`) and
+`CreateAccountScreen`'s `ROLE_COPY` map are gone — both now carry an
+`icon` field pointing at a `lucide-react` component (`User`, `Bike`,
+`Building2`) instead, rendered in a rounded badge. `LoginScreen`'s 📍
+became a `LogIn` icon the same way. If you add a fourth role or touch
+these screens again, follow the same pattern rather than reaching for
+an emoji.
 
 ---
 
