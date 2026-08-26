@@ -43,11 +43,11 @@ const ROLE_COPY: Record<
   },
   node_operator: {
     icon: Building2,
-    heading: "Create your Node Operator account",
+    heading: "Create your Pickup station Operator account",
     subheading:
-      "Sign up to run a Node. You'll set up your Node's details after your first login.",
+      "Sign up to run a Pickup Station. You'll set up your Pickup station's details after your first login.",
     panelTitle: "Grow your pickup station",
-    panelSubtitle: "Run a Node, facilitate parcel handoffs, and build a new revenue stream.",
+    panelSubtitle: "Run a Pickup station, facilitate parcel handoffs, and build a new revenue stream.",
   },
 };
 

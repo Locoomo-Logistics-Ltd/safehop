@@ -1,5 +1,6 @@
 "use client";
 
+import { CheckCircleIcon } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import type { ParcelSize } from "@/core/types";
 
@@ -36,10 +37,18 @@ export function ParcelSizeSelector({ value, onChange }: ParcelSizeSelectorProps)
             aria-checked={isSelected}
             onClick={() => onChange(option.value)}
             className={cn(
-              "flex flex-col items-start gap-1 p-4 rounded-[14px] border-2 text-left transition-all duration-150",
-              isSelected ? "border-brand-blue bg-status-info-bg" : "border-border-default bg-bg-card"
+              "tap-shrink relative flex flex-col items-start gap-1 p-4 rounded-[14px] border-2 text-left transition-all duration-150",
+              isSelected
+                ? "border-brand-blue bg-status-info-bg shadow-[var(--shadow-raised)]"
+                : "border-border-default bg-bg-card hover:border-border-strong"
             )}
           >
+            {isSelected && (
+              <CheckCircleIcon
+                size={16}
+                className="absolute top-2.5 right-2.5 text-brand-blue"
+              />
+            )}
             <span className="text-[20px]" aria-hidden="true">{option.emoji}</span>
             <span className="font-semibold text-[14px] text-text-primary">{option.label}</span>
             <span className="text-[11px] text-text-muted leading-tight">{option.hint}</span>

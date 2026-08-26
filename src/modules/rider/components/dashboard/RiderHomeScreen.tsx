@@ -5,6 +5,7 @@ import Link from "next/link";
 import { RootTopBar } from "@/components/layout";
 import { Card } from "@/components/ui";
 import { BriefcaseIcon } from "@/components/icons";
+import { PayoutReminderBanner } from "@/components/payout";
 import { ROUTES } from "@/core/config/constants";
 import { useCurrentUser } from "@/store/auth.store";
 import { useRiderAvailability } from "@/modules/rider/hooks/use-rider-availability";
@@ -65,6 +66,13 @@ export function RiderHomeScreen() {
             {user?.firstName ?? "Rider"}
           </p>
         </div>
+
+        {/* Payout account — keeps resurfacing until one is on file, since
+            Admin has no way to pay a rider without it. Not dismissible,
+            unlike the verification sheet above. */}
+        {verification && !verification.payoutAccountConfigured && (
+          <PayoutReminderBanner href={ROUTES.riderVerification} />
+        )}
 
         {/* Online/Offline toggle */}
         <OnlineToggle />

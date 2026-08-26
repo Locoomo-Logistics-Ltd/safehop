@@ -5,6 +5,8 @@
  * profile, its Activity Log, and self-onboarding.
  */
 
+import type { PayoutAccountFields } from "./earnings.types";
+
 export type ActivityEventType =
   | "handoff_to_rider"
   | "batch_received"
@@ -62,8 +64,14 @@ export interface NodeOperatorNode {
   createdAt: string;
 }
 
-/** Response shape for both POST /node-operators/onboarding and GET /node-operators/me. */
-export interface NodeOperatorProfile {
+/**
+ * Response shape for POST /node-operators/onboarding, GET
+ * /node-operators/me, and PATCH /node-operators/me/payout-account.
+ * Also carries the five `payoutAccountFields` — always present per
+ * docs/API.md (unset until the payout-account route is called), used
+ * to drive the "set up your payout account" prompt.
+ */
+export interface NodeOperatorProfile extends PayoutAccountFields {
   profileId: string;
   node: NodeOperatorNode;
 }

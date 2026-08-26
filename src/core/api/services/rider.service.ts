@@ -8,12 +8,14 @@ import type { PaginatedList } from "@/core/api/types";
 import type {
   AuthSession,
   AvailableOrder,
+  BankOption,
   HandoffCode,
   HandoffOrderSummary,
   HandoffType,
   ListAvailableOrdersParams,
   MyOrderSummary,
   MyRevenueSplitEntry,
+  PayoutAccountPayload,
   RequestHandoffCodePayload,
   RiderAvailability,
   RiderEarningsSummary,
@@ -190,6 +192,27 @@ const realRiderService = {
   /** Throws `404 NOT_FOUND` (via ApiError) if the rider hasn't started verification yet — callers check `error.code`, same pattern as `nodeService.getMyNodeOperatorProfile`. */
   async getVerificationProfile(): Promise<RiderVerificationProfile> {
     return httpClient.get<RiderVerificationProfile>(ENDPOINTS.riders.me);
+  },
+
+  // ── Payout account ───────────────────────────────────────────────
+  // Real, confirmed routes per docs/API.md — the bank account Admin
+  // disburses this rider's earned revenue-split entries to.
+
+  /** Paystack's full bank list, for the bank picker ahead of `setPayoutAccount`. Not paginated. */
+  async getPayoutBanks(): Promise<BankOption[]> {
+    return httpClient.get<BankOption[]>(ENDPOINTS.payments.banks);
+  },
+
+  /**
+   * Sets (or replaces) the rider's payout bank account. Verified
+   * against Paystack server-side at submission time —
+   * `payoutAccountName` on the response is whatever Paystack resolved,
+   * never what was sent. `400 BANK_ACCOUNT_VERIFICATION_FAILED` means
+   * Paystack couldn't resolve that account number at that bank;
+   * nothing is saved and any previously-verified account is untouched.
+   */
+  async setPayoutAccount(payload: PayoutAccountPayload): Promise<RiderVerificationProfile> {
+    return httpClient.patch<RiderVerificationProfile>(ENDPOINTS.riders.payoutAccount, payload);
   },
 
   // ── Handoffs: the rider's side ──────────────────────────────────

@@ -77,6 +77,8 @@ export const QUERY_KEYS = {
   deliveries: ["deliveries"] as const,
   delivery: (id: string) => ["deliveries", id] as const,
   paymentIntent: (id: string) => ["payment-intent", id] as const,
+  /** `GET /payments/banks` — Paystack's bank list, shared by the Rider and NodeOperator payout-account forms. Static reference data, same result regardless of which role fetches it. */
+  payoutBanks: ["payments", "banks"] as const,
 
   nodeOperatorProfile: ["node", "operator-profile"] as const,
   nodeParcels: ["node", "parcels"] as const,

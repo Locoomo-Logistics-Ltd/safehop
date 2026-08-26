@@ -26,6 +26,7 @@ export function useNodeProfile() {
 
   return {
     node: query.data?.node,
+    payoutAccountConfigured: query.data?.payoutAccountConfigured,
     isLoading: query.isLoading,
     notOnboarded,
     error: notOnboarded ? null : query.error,

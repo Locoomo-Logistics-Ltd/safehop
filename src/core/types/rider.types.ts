@@ -4,6 +4,8 @@
  * via the 6-digit handoff codes in `core/types/handoff.types.ts`.
  */
 
+import type { PayoutAccountFields } from "./earnings.types";
+
 export type RiderAvailability = "online" | "offline";
 
 /**
@@ -47,7 +49,12 @@ export interface RiderVerificationDocument {
   viewUrl: string;
 }
 
-export interface RiderVerificationProfile {
+/**
+ * Also carries the five `payoutAccountFields` — always present on this
+ * response per docs/API.md (unset until `PATCH /riders/me/payout-account`
+ * is called), used to drive the "set up your payout account" prompt.
+ */
+export interface RiderVerificationProfile extends PayoutAccountFields {
   profileId: string;
   currentEmployer: string;
   /** Self-reported, 1-50 chars, no format/document verification. `null` for riders who onboarded before this field existed (added to docs/API.md 2026-08-17). */

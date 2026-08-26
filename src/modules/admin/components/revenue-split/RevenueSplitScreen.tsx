@@ -5,15 +5,16 @@ import { RootTopBar } from "@/components/layout";
 import { ROUTES } from "@/core/config/constants";
 import { Card, Button, EmptyState } from "@/components/ui";
 import { AdminSelect } from "@/modules/admin/components/shared/AdminSelect";
-import { WalletIcon, PlusIcon, CheckCircleIcon } from "@/components/icons";
+import { WalletIcon, PlusIcon, CheckCircleIcon, CopyIcon } from "@/components/icons";
 import { formatCurrency, formatDate } from "@/lib/format";
+import { useNotificationStore } from "@/store/notification.store";
 import {
   useRevenueSplitRatios,
   useRevenueSplitEntries,
   useMarkRevenueSplitEntryPaid,
 } from "@/modules/admin/hooks/use-admin-revenue-split";
 import { SetRevenueSplitRatioForm } from "./SetRevenueSplitRatioForm";
-import type { PayoutStatus, RevenueSplitPartyType } from "@/core/types";
+import type { AdminRevenueSplitEntry, PayoutStatus, RevenueSplitPartyType } from "@/core/types";
 
 /** Kobo, as every amount here arrives, isn't what an Admin reads at a glance. */
 function nairaFromKobo(kobo: number): number {
@@ -139,6 +140,7 @@ export function RevenueSplitScreen() {
                     <th className="font-medium px-5 py-2.5">Order</th>
                     <th className="font-medium px-5 py-2.5">Party</th>
                     <th className="font-medium px-5 py-2.5">Owed to</th>
+                    <th className="font-medium px-5 py-2.5">Payout Account</th>
                     <th className="font-medium px-5 py-2.5">Amount</th>
                     <th className="font-medium px-5 py-2.5">Status</th>
                     <th className="px-5 py-2.5" />
@@ -155,6 +157,9 @@ export function RevenueSplitScreen() {
                       </td>
                       <td className="px-5 py-3 text-[13px] text-text-primary whitespace-nowrap">
                         {entry.partyLabel}
+                      </td>
+                      <td className="px-5 py-3 whitespace-nowrap">
+                        <PayoutAccountCell entry={entry} />
                       </td>
                       <td className="px-5 py-3 text-[13px] font-semibold text-text-primary whitespace-nowrap">
                         {formatCurrency(nairaFromKobo(entry.amountKobo))}
@@ -192,6 +197,60 @@ export function RevenueSplitScreen() {
           </Card>
         )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * The bank account to actually send this entry's money to, next to
+ * what's owed — `payoutAccountConfigured`/`payoutBank*`/`payoutAccount*`
+ * on `GET /admin/revenue-split/entries`, real per docs/API.md. Always
+ * unset on `platform` rows (no payout account concept) and on any
+ * rider/node/destination_node row that hasn't called their own
+ * `PATCH .../payout-account` yet.
+ */
+function PayoutAccountCell({ entry }: { entry: AdminRevenueSplitEntry }) {
+  const showNotification = useNotificationStore((s) => s.showNotification);
+
+  if (!entry.payoutAccountConfigured) {
+    return <span className="text-[12px] text-text-muted">Not set up</span>;
+  }
+
+  const copyText = `${entry.payoutBankName} - ${entry.payoutAccountNumber} - ${entry.payoutAccountName}`;
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(copyText);
+      showNotification({
+        type: "success",
+        title: "Copied",
+        message: "Payout account details copied to clipboard.",
+      });
+    } catch {
+      showNotification({
+        type: "error",
+        title: "Couldn't copy",
+        message: "Copy the account details manually instead.",
+      });
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-2 max-w-[220px]">
+      <div className="min-w-0">
+        <p className="text-[12px] font-medium text-text-primary truncate">{entry.payoutBankName}</p>
+        <p className="text-[11px] text-text-muted truncate">
+          {entry.payoutAccountNumber} · {entry.payoutAccountName}
+        </p>
+      </div>
+      <button
+        type="button"
+        aria-label="Copy payout account details"
+        onClick={handleCopy}
+        className="shrink-0 w-7 h-7 rounded-[8px] text-text-muted hover:bg-bg-subtle hover:text-text-primary flex items-center justify-center transition-colors"
+      >
+        <CopyIcon size={13} />
+      </button>
     </div>
   );
 }

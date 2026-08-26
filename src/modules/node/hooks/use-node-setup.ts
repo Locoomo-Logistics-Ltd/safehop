@@ -3,8 +3,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { nodeService } from "@/core/api/services";
 import { QUERY_KEYS } from "@/core/config/constants";
-import { isApiError } from "@/core/api/errors";
-import type { NodeOperatorOnboardingPayload } from "@/core/types";
+import { getErrorMessage, isApiError } from "@/core/api/errors";
+import { useNotificationStore } from "@/store/notification.store";
+import type { NodeOperatorOnboardingPayload, PayoutAccountPayload } from "@/core/types";
 
 /**
  * Drives the Node Operator's self-onboarding step:
@@ -20,6 +21,7 @@ import type { NodeOperatorOnboardingPayload } from "@/core/types";
  */
 export function useNodeSetup() {
   const queryClient = useQueryClient();
+  const showNotification = useNotificationStore((s) => s.showNotification);
 
   const profileQuery = useQuery({
     queryKey: QUERY_KEYS.nodeOperatorProfile,
@@ -36,6 +38,37 @@ export function useNodeSetup() {
     },
   });
 
+  const banksQuery = useQuery({
+    queryKey: QUERY_KEYS.payoutBanks,
+    queryFn: () => nodeService.getPayoutBanks(),
+    staleTime: Infinity,
+  });
+
+  const payoutAccountMutation = useMutation({
+    mutationFn: (payload: PayoutAccountPayload) => nodeService.setPayoutAccount(payload),
+    onSuccess: (profile) => {
+      queryClient.setQueryData(QUERY_KEYS.nodeOperatorProfile, profile);
+      // The account holder name is only ever known once Paystack has
+      // resolved it as part of this same save — there's no separate
+      // preview/verify route per docs/API.md, so this toast is the
+      // first moment the operator actually sees the resolved name.
+      showNotification({
+        type: "success",
+        title: "Payout account saved",
+        message: profile.payoutAccountName
+          ? `Verified as ${profile.payoutAccountName}.`
+          : "Your payout account is on file.",
+      });
+    },
+    onError: (error) => {
+      showNotification({
+        type: "error",
+        title: "Couldn't save payout account",
+        message: getErrorMessage(error),
+      });
+    },
+  });
+
   return {
     profile: profileQuery.data,
     isLoadingProfile: profileQuery.isLoading,
@@ -45,5 +78,13 @@ export function useNodeSetup() {
     onboard: onboardMutation.mutate,
     isOnboarding: onboardMutation.isPending,
     onboardError: onboardMutation.error,
+
+    banks: banksQuery.data ?? [],
+    isLoadingBanks: banksQuery.isLoading,
+
+    setPayoutAccount: payoutAccountMutation.mutate,
+    isSettingPayoutAccount: payoutAccountMutation.isPending,
+    payoutAccountError: payoutAccountMutation.error,
+    payoutAccountSaved: payoutAccountMutation.isSuccess,
   };
 }

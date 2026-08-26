@@ -4314,3 +4314,397 @@ pricing form's new field submitting successfully, and the revenue-split
 filter actually returning `destination_node`-only rows have not been
 seen rendered against live data — same standing caveat as most sessions
 in this log for Admin-module work.
+
+---
+
+## 2026-08-26
+
+**Feature**: Payout accounts — the three new routes `docs/API.md`
+gained (`GET /payments/banks`, `PATCH /riders/me/payout-account`,
+`PATCH /node-operators/me/payout-account`) plus the five
+`payoutAccount*` fields that were already documented on `GET
+/riders/me`/`GET /node-operators/me`/`GET /admin/revenue-split/entries`
+but had zero frontend integration — confirmed via grep before starting
+(no reference to "payout" anywhere in `src/` beyond the pre-existing
+`payoutStatus`/`PayoutStatus` naming on the unrelated revenue-split
+ratio/entries flow). Explicit ask: let a Rider/NodeOperator add their
+bank account, surface it (with a copy action) on the Admin's Revenue
+Split screen next to the existing "Mark Paid" action, and keep
+prompting a Rider/NodeOperator who hasn't set one up yet.
+
+**Types**: new `PayoutAccountFields` (the five-field shape shared by
+all three responses), `BankOption`, `PayoutAccountPayload` in
+`core/types/earnings.types.ts`. `RiderVerificationProfile`
+(`rider.types.ts`) and `NodeOperatorProfile` (`node.types.ts`) both now
+`extends PayoutAccountFields`; `AdminRevenueSplitEntry` does too — no
+mapper needed on the Admin side, `adminService.getRevenueSplitEntries`
+already passes `raw.items` straight through, so the new fields just
+started flowing once the type declared them.
+
+**Endpoints/services**: `ENDPOINTS.payments.banks`,
+`ENDPOINTS.riders.payoutAccount`, `ENDPOINTS.nodeOperators.payoutAccount`
+added. `getPayoutBanks`/`setPayoutAccount` added to *both*
+`riderService` and `nodeService` (one line of real duplication each —
+same endpoint pattern, no cross-domain service introduced for a single
+shared GET, matching this codebase's "one service per domain" rule
+documented in `docs/DECISIONS.md`). `QUERY_KEYS.payoutBanks` is one
+shared key across both roles (`staleTime: Infinity` — static reference
+data, not something that needs revalidation). New `BANK_ACCOUNT_VERIFICATION_FAILED`
+case in `core/api/errors.ts`'s `getFriendlyError` switch.
+
+**New shared component, `components/payout/`** (promoted straight to a
+shared location rather than built once and promoted later, since both
+Rider Verification and Node Setup needed it from the start — same
+reasoning `QrScannerView`'s original promotion pattern documents in
+`docs/DECISIONS.md`):
+- `PayoutAccountCard` — configured state (bank/account number/account
+  name, a "Change" button that re-opens the form) or the form itself
+  (native `<select>` bank picker sourced from `getPayoutBanks`, a
+  10-digit-only account number `Input`, submit). No shared `Select`
+  primitive exists in `components/ui` yet (same gap `AdminSelect`'s own
+  header comment already flags) — styled the native `<select>` inline
+  to match `Input`'s surface rather than introducing one.
+- `PayoutReminderBanner` — deliberately **not** dismissible, unlike
+  `VerificationReminderSheet`: the explicit ask was to "keep prompting…
+  if they have not added it," and without a payout account on file
+  Admin genuinely cannot pay them, so a one-time "maybe later" would
+  work against the ask.
+
+**Rider side**: `useRiderVerification` (`use-rider-verification.ts`)
+gained a `banks` query and a `setPayoutAccount` mutation alongside the
+existing profile query/submit mutation — same query key
+(`QUERY_KEYS.riderVerification`) on success, so the screen flips from
+form to configured-summary automatically once it lands.
+`RiderVerificationScreen`'s `VerificationStatusView` (shared by both
+the pending and active states, since the real route only requires
+onboarding to be complete, not approval) now renders `PayoutAccountCard`
+below the Verification Details card. `RiderHomeScreen` shows
+`PayoutReminderBanner` above the online/offline toggle whenever the
+already-fetched verification profile has `payoutAccountConfigured:
+false`. `RiderProfileScreen` gained a "Payout" row (same status-aware
+card pattern as the existing "Verification" row) linking back to
+`/rider/verification`, where the form actually lives.
+
+**Node side**: same shape. `useNodeSetup` gained the matching
+`banks`/`setPayoutAccount`. `NodeSetupScreen`'s `NodeStatusView` (both
+the "waiting for approval" and "approved" branches) renders
+`PayoutAccountCard`. `useNodeProfile` (and `useNodeDashboard`, which
+wraps it) now also returns `payoutAccountConfigured` off the same `GET
+/node-operators/me` response `node` was already read from, so
+`NodeHomeScreen` can show `PayoutReminderBanner` (both in the
+"waiting for approval" empty state and above the tab bar in the active
+dashboard) with no new network call. `NodeProfileScreen` switched its
+one query from `useNodeProfile` to `useNodeSetup` (same query key,
+`QUERY_KEYS.nodeOperatorProfile`, so this is a dedupe, not an extra
+fetch) so it has the full profile to render its new "Payout Account"
+row from, mirroring `RiderProfileScreen`'s.
+
+**Admin side**: `RevenueSplitScreen`'s entries table gained a "Payout
+Account" column (`PayoutAccountCell`, screen-local) — bank name +
+account number + account name when `payoutAccountConfigured`, a muted
+"Not set up" otherwise — with a copy-to-clipboard button
+(`navigator.clipboard.writeText`, a formatted `"{bank} - {number} -
+{name}"` string) and a toast via the existing `useNotificationStore` on
+success/failure. Placed directly next to the existing "Mark Paid"
+button per the ask ("admin will see it… copy… once payment is made he
+will click paid") — no new screen, no new endpoint, since `GET
+/admin/revenue-split/entries` already returned these fields
+unrendered.
+
+**Verification performed**: `npx tsc --noEmit` (clean), `npx eslint
+src` (clean — the two pre-existing unused-import warnings in
+`DeliveryMethodScreen.tsx`/`PrivacyScreen.tsx` are unrelated to this
+session), a cleared-`.next` `npx next build` succeeds (51 routes,
+unchanged count before/after this session's changes — no new routes
+were needed, the payout UI was embedded into existing screens per the
+"no screenless integration" policy rather than given dedicated ones;
+note the repo was already at 51 routes going into this session, not the
+46 the 2026-08-24 `HANDOFF.md` entry last recorded — that figure had
+drifted stale, unrelated to this session's work). Dev-server smoke
+test: `/rider/home`,
+`/rider/verification`, `/rider/profile`, `/node/home`, `/node/setup`,
+`/node/profile`, `/admin/revenue-split`, `/admin-login` all return
+`200`, dev log grepped clean of errors. **Not verified**: no live
+Rider/NodeOperator/Admin session was available, so an actual bank
+selection + `400 BANK_ACCOUNT_VERIFICATION_FAILED` rejection, a real
+Paystack-resolved `payoutAccountName` round-tripping into the summary
+view, the copy button's clipboard behavior in a real browser, and the
+reminder banner actually disappearing once an account is set have not
+been seen against live data — same standing caveat as most sessions in
+this log.
+
+---
+
+## 2026-08-26 (later — payout-account follow-ups, live-data bug fix + name-on-save UX)
+
+**Feature**: Two small follow-ups to the same-day payout-account work
+above, both surfaced by actually running the feature.
+
+**Bug, found live**: the real `GET /payments/banks` response returns
+duplicate `code` values (the same bank listed more than once) —
+confirmed from an actual React "duplicate key" console error, not
+something predictable from `docs/API.md`'s description of the route.
+`PayoutAccountCard`'s bank `<select>` now dedupes `banks` by `code`
+(`useMemo`, first occurrence wins) before rendering options and before
+resolving the selected bank from `bankCode`, so both the React key
+collision and the "which duplicate did I pick" ambiguity are gone.
+
+**UX**: explicit ask — show the user the Paystack-resolved account
+holder name before they "save." `docs/API.md` has no separate
+preview/verify route (the name is only ever resolved as a side effect
+of the same `PATCH .../payout-account` call that persists it), so the
+two options were "submit then confirm" vs. a fake local name field —
+user picked "submit then confirm." `PayoutAccountCard.saved` (new
+prop, backed by `payoutAccountMutation.isSuccess` in both
+`use-rider-verification.ts`/`use-node-setup.ts`) now flips the card
+from the form back to the summary the instant a save succeeds — fixing
+a real pre-existing bug along the way, where the card's `showForm`
+state was only ever initialized from `configured` at mount and never
+reacted to it changing later. Adjusted during render (React's
+documented "reset state when a prop changes" pattern), not inside a
+`useEffect`, since this repo's `react-hooks/set-state-in-effect` lint
+rule rejects the effect-based version (hit it, fixed it). Both mutation
+hooks also gained a success/error toast via the existing
+`useNotificationStore` — the success one reads `Verified as
+{payoutAccountName}`, which is the actual "see the name" ask. The
+summary card itself now breaks the account name out into its own
+labeled row ("Account Name (verified by Paystack)") instead of burying
+it in the subtitle.
+
+**Verified**: `npx tsc --noEmit` clean, `npx eslint` clean on every
+changed file, a cleared-`.next` `npx next build` succeeds (51 routes,
+unchanged). Dev-server smoke test: `/rider/verification` returns `200`,
+dev log grepped clean. The duplicate-bank-code bug and the
+never-closes-the-form bug were both caught by the user actually running
+the feature against the live backend — not something either the type
+system or a `curl` smoke test would have surfaced, worth noting for
+future sessions that skip a real click-through.
+
+---
+
+## 2026-08-26 (later still — Track Package: animated Delivery Journey card, captivating Order Details)
+
+**Feature**: Explicit ask — "beautify the track package page, create a
+beautify animated card instead of using dash, and the order details to
+be captivating." Scoped to `TrackPackageScreen`
+(`/delivery/[id]/track`) only; `RouteRail`'s dashed-line texture (the
+"dash" in the ask) is unchanged everywhere else it's used (Admin's
+Order Details, delivery/order-summary cards) — this is a dedicated
+replacement for this one screen, not a change to the shared component.
+
+**`DeliveryJourneyCard`** (new, `modules/user/components/tracking/`):
+a 5-stage animated stepper (Order Placed → At Pickup Station → On The
+Way → Arrived → Delivered) replacing the old `RouteRail variant="full"`
+block. The 5 stages are a real mapping, not fabricated — keyed off
+`core/types/handoff.types.ts`'s already-exported `HANDOFF_STATUS`
+constant (`awaiting_drop_off`/`parcel_received_at_origin`/
+`rider_assigned`/`in_transit`/`arrived_at_destination`/
+`ready_for_collection`/`completed`), the real lifecycle values
+confirmed elsewhere in `docs/API.md`'s Handoffs module even though the
+Orders endpoint's own doc entry only confirms one. Any status this
+doesn't recognize falls back to the existing `getOrderProgress` 0/0.5/1
+heuristic rather than defaulting to "just placed." The connector
+segments between completed stages fill in on mount via a pure CSS
+`scaleX` keyframe (`animate-locoomo-fill`, new in `globals.css`) rather
+than a JS-driven width transition — deliberately not a `useEffect`
+mount-trigger, since that pattern already tripped this repo's
+`react-hooks/set-state-in-effect` rule once this same session (see the
+payout-account entry above). The current stage's icon gets a soft
+pulsing ring, reusing the existing `animate-locoomo-pulse` keyframe
+(previously only used by the login screens' decorative scenes).
+
+**`OrderDetailsCard`** (new, same folder): the old plain label/dash
+rows replaced with an icon-row list (Parcel with a size pill, Receiver,
+Phone, Email, Origin, Destination) plus a highlighted "Amount Paid"
+receipt line at the bottom (`formatCurrency` + `formatRelativeDateTime`
+for a friendlier "Placed" line than the old bare date). Every field is
+real — `receiverPhone`/`receiverEmail`/`parcelSize` were already on the
+`Order` type (`payment.types.ts`) but the old layout never rendered
+them; no new endpoint or field was invented.
+
+**`TrackPackageScreen`**: the tracking-code header card gained a
+copy-to-clipboard button (`CopyIcon`, already added to the icon set for
+Admin's Revenue Split screen; `useNotificationStore` for the
+success/error toast — same pattern as that screen's
+`PayoutAccountCell`). All three sections (tracking-code header, journey
+card, details card) get a staggered fade-up entrance on mount
+(`animate-locoomo-fade-up`, new in `globals.css`, 0/80/160ms delays) —
+also pure CSS, same reasoning as the fill animation above.
+
+**Verified**: `npx tsc --noEmit` clean, `npx eslint` clean on every
+new/changed file, a cleared-`.next` `npx next build` succeeds (51
+routes, unchanged — `/delivery/[id]/track` unaffected in route count,
+just richer client code). Dev-server smoke test:
+`/delivery/some-id/track` and `/track` both return `200`, dev log
+grepped clean of errors. **Not verified**: no browser session was
+available this session (Claude in Chrome wasn't connected), so the
+actual animation timing/feel and the stepper's real-status rendering
+against a live Order haven't been seen — worth a look in a real browser
+before calling this done. Not the same "not verified against a live
+backend" caveat as most other entries — this one is specifically "not
+seen rendered at all," since even a mock/static render wasn't checked
+visually.
+
+---
+
+## 2026-08-26 (later still — Dashboard's Past Deliveries: beautified rows + a "View All" link it never had)
+
+**Feature**: Explicit ask — beautify Past Deliveries, and make sure it
+"does not grow too large" while still letting the user "view all." The
+section was already capped at 4 (`MAX_VISIBLE`), so it wasn't going to
+grow unbounded — the actual gap was that anything past those first 4
+was simply unreachable: unlike `ActiveDeliveriesSection` (same
+dashboard, right above it), `PastDeliveriesSection` had no "View All"
+link at all.
+
+**Files changed**:
+- `modules/user/components/dashboard/PastDeliveriesSection.tsx` —
+  rewritten. Rows are now `Card interactive` (icon badge, tracking
+  code, destination + `formatRelativeDateTime` instead of the old bare
+  `formatDate`, status badge), each wrapped in a `Link` with a
+  staggered `animate-locoomo-fade-up` entrance (60ms apart) — same
+  keyframe added earlier this session for the Track Package redesign,
+  reused as-is, no new CSS needed. Deliberately kept more compact than
+  the full `DeliveryCard` (no `RouteRail`) — a completed order's
+  progress bar is always just "done," not worth the space here, which
+  was the original design's stated reasoning for a lighter row and is
+  preserved, just with real card chrome instead of a plain
+  border-bottom dash list. Gained the same "View All" link
+  `ActiveDeliveriesSection` already has (shown once `past.length >
+  MAX_VISIBLE`), pointing at `ROUTES.trackList` (`/track`,
+  `TrackListScreen` — already shows every delivery, active and past
+  alike, as full cards; no new screen or endpoint needed).
+- `modules/user/components/dashboard/ActiveDeliveriesSection.tsx` —
+  one-line fix noticed while mirroring its pattern: its own "View All"
+  link hardcoded `href="/track"` instead of `ROUTES.trackList`,
+  violating this repo's own "never hardcode a route" rule
+  (`docs/ARCHITECTURE.md`). Fixed to use the constant, now consistent
+  with the row above it.
+
+**Verified**: `npx tsc --noEmit` clean, `npx eslint` clean on both
+changed files (whole-repo lint run also clean — 0 errors, same 6
+pre-existing unrelated warnings as before this session). A
+cleared-`.next` `npx next build` succeeds (51 routes, unchanged) after
+one transient `ENOENT`/"Cannot find module for page" failure on the
+first attempt that a second clean rebuild didn't reproduce — a stale
+`.next` artifact from the same `rm -rf .next && next build` sequence
+run back-to-back moments earlier, not a real regression; flagging the
+flakiness in case it recurs for someone else, not because it's expected
+behavior. Dev-server smoke test: `/dashboard` and `/track` both return
+`200`, dev log grepped clean of errors. **Not verified**: same standing
+caveat as the Track Package entry above — no browser session was
+available, so the beautified rows, the stagger, and the "View All"
+link's actual appearance haven't been seen rendered.
+
+---
+
+## 2026-08-26 (most recent — New Delivery form: receiver-email notice + visual polish)
+
+**Feature**: Explicit ask — under the receiver email field, add a small
+message explaining this must be the receiver's own email (they get the
+collection code there once the package arrives), and beautify the form
+generally.
+
+**The copy is accurate against the real contract, not just plausible**:
+`docs/API.md`'s `POST /handoffs/orders/:id/intake` "mints a 6-digit
+collection code and emails it to the receiver — you never see the code
+yourself, only the receiver does," reading `receiverEmail` off the
+`Order` (originally submitted here, on `POST /payments/intents`) — so
+the notice states a real, documented behavior, not a guess.
+
+**Files changed**:
+- `modules/user/components/delivery/NewDeliveryScreen.tsx` — the
+  Email Address `Input` gained a small inline notice directly beneath
+  it (icon + "Make sure this is the **receiver's own email** — it's
+  where we'll send their 6-digit collection code once the package
+  arrives at the destination station"), not just the `Input`
+  component's plain-text `hint` prop, since the ask was for something
+  that stands out. Beyond that one addition, the rest was the "beautify
+  the form" half of the ask: both sections ("Receiver details",
+  "Parcel details") are now `Card`s with an icon-badge + subheading
+  header (same pattern already used elsewhere — `RiderVerificationScreen`,
+  `PayoutAccountCard`) instead of a bare `<h2>`, each `Input` gained a
+  matching `leftElement` icon (`UserIcon`/`MailIcon`/`PhoneIcon`/
+  `PackageIcon` — all already in the icon set), and both cards get a
+  staggered `animate-locoomo-fade-up` entrance (reusing the keyframe
+  added earlier this session for Track Package, no new CSS).
+- `modules/user/components/delivery/ParcelSizeSelector.tsx` — small
+  polish pass on the existing 2×2 size-tile grid: `tap-shrink` on each
+  tile, a raised shadow + checkmark badge on the selected tile instead
+  of just a color/border change, `hover:border-border-strong` on
+  unselected tiles. No layout/behavior change — same four tiles, same
+  `onChange` contract.
+
+**Verified**: `npx tsc --noEmit` clean, `npx eslint` clean on both
+changed files (whole-repo run also clean — 0 errors, same 6
+pre-existing unrelated warnings). A cleared-`.next` `npx next build`
+succeeds (51 routes, unchanged) — again hit a transient stale-worker
+build failure on the first attempt (`Cannot find module './1331.js'`,
+same class of flakiness as the previous entry's `ENOENT`), gone on a
+clean retry; not a real regression, flagging the pattern in case
+`rm -rf .next && next build` run back-to-back keeps tripping this on
+whatever machine runs these sessions. Dev-server smoke test:
+`/delivery/new` returns `200`, dev log grepped clean. **Not verified**:
+same standing gap as the two entries above it — no browser session was
+available this session, so the notice's actual placement/prominence
+and the card/icon polish haven't been seen rendered.
+
+---
+
+## 2026-08-26 (most recent — Node Setup form beautified; `AddressGeocodeButton` explained for first-time users)
+
+**Feature**: Explicit ask — beautify the Node Setup onboarding form,
+and give the "Find Coordinates from Address" button proper context,
+since a first-time user has no way to know what it does or when to use
+it from a bare button alone.
+
+**`AddressGeocodeButton`** (`components/maps/`, shared between
+`modules/admin`'s `OnboardNodeForm` and `modules/node`'s
+`NodeSetupScreen` — a promoted component, one file, both callers):
+wrapped in an info card explaining, in order, what to do — "Fill in
+the Address, City, and State above, then tap the button below — we'll
+look up the exact Latitude and Longitude for you and fill them in
+automatically" — plus a disabled-state hint ("Enter the address, city,
+and state above first to enable this") instead of the button just
+silently being unclickable, and the existing matched-address/error
+states restyled with icons instead of bare text. Fixing it here fixes
+both forms at once, not just the ask's `NodeSetupScreen` — neither
+caller has its own copy.
+
+**`NodeSetupScreen`'s `OnboardingForm`**: rebuilt on the same two-`Card`
+pattern established earlier this session for `NewDeliveryScreen`
+("Location Details" / "Capacity & Hours", each an icon-badge header +
+subheading), every input gained a matching `leftElement` icon, both
+cards fade up staggered on mount. Also reordered the geocode helper to
+sit between City/State and Latitude/Longitude (it was previously placed
+*after* the lat/lng fields it fills, reading backwards) and split
+City/State and Latitude/Longitude into 2-column rows instead of a
+single stacked list. No field, validation, or submit-payload change —
+same seven fields, same `isValid` gate, same `onSubmit` shape.
+
+**Root-caused this session's recurring build flakiness**: the last two
+sessions' `npx next build` runs each hit one transient
+`ENOENT`/`MODULE_NOT_FOUND` failure that cleared on a bare retry,
+logged as unexplained flakiness. This session traced it to a real
+cause: a `next dev` server from several tasks earlier in today's
+conversation was still running in the background (its `kill` in an
+earlier task's cleanup step apparently didn't land), racing
+`next build` for the same `.next` directory. Killed the stray process
+(`pkill`-equivalent via explicit PIDs, confirmed via `ps aux` showing
+nothing left) — the very next `rm -rf .next && next build` succeeded on
+the first attempt with no retry needed. Worth remembering for future
+sessions: verify no dev server survived a "kill it" step, don't just
+assume the kill command's exit code was honest, especially before
+diagnosing a build failure as flakiness.
+
+**Verified**: `npx tsc --noEmit` clean, `npx eslint` clean on both
+changed files (whole-repo run also clean — 0 errors, same 6
+pre-existing unrelated warnings). A cleared-`.next` `npx next build`
+succeeds on the first try after the stray-process cleanup above (51
+routes, unchanged). Dev-server smoke test: `/node/setup` and
+`/delivery/new` both return `200`, dev log grepped clean — and this
+time the dev server was confirmed to actually exit (`ps aux` re-checked
+after `kill`), unlike the possible cause of this session's earlier
+flakiness. **Not verified**: no interactive browser session was
+available (Claude in Chrome not connected), so the redesigned info card
+and form layout haven't been seen rendered.

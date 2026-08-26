@@ -3,8 +3,9 @@
 import { useRouter } from "next/navigation";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Button, Input, ProgressSteps } from "@/components/ui";
+import { Button, Card, Input, ProgressSteps } from "@/components/ui";
 import { TopBar } from "@/components/layout";
+import { UserIcon, MailIcon, PhoneIcon, PackageIcon } from "@/components/icons";
 import { newDeliverySchema, type NewDeliveryFormValues } from "@/modules/user/schemas/delivery.schema";
 import { useDeliveryDraftStore } from "@/store/delivery-draft.store";
 import { ROUTES } from "@/core/config/constants";
@@ -58,45 +59,77 @@ export function NewDeliveryScreen() {
 
         <ProgressSteps total={4} current={1} className="mb-6" />
 
-        <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-7" noValidate>
+        <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-5" noValidate>
           {/* Receiver details */}
-          <section>
-            <h2 className="font-semibold text-[15px] text-text-primary mb-3">
-              Receiver details
-            </h2>
-            <div className="flex flex-col gap-3">
+          <Card padding="lg" className="animate-locoomo-fade-up">
+            <div className="flex items-center gap-2.5 mb-4">
+              <span className="w-9 h-9 rounded-[10px] bg-status-info-bg text-brand-blue flex items-center justify-center shrink-0">
+                <UserIcon size={17} />
+              </span>
+              <div>
+                <h2 className="font-semibold text-[15px] text-text-primary leading-tight">
+                  Receiver details
+                </h2>
+                <p className="text-[12px] text-text-muted">Who&apos;s picking this up?</p>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-3.5">
               <Input
                 label="Full Name"
                 placeholder="Jane Doe"
+                leftElement={<UserIcon size={16} />}
                 error={errors.receiverFullName?.message}
                 {...register("receiverFullName")}
               />
-              <Input
-                label="Email Address"
-                type="email"
-                placeholder="jane.doe@gmail.com"
-                error={errors.receiverEmail?.message}
-                {...register("receiverEmail")}
-              />
+              <div>
+                <Input
+                  label="Email Address"
+                  type="email"
+                  placeholder="jane.doe@gmail.com"
+                  leftElement={<MailIcon size={16} />}
+                  error={errors.receiverEmail?.message}
+                  {...register("receiverEmail")}
+                />
+                <div className="flex items-start gap-2 mt-2 px-1">
+                  <MailIcon size={13} className="text-brand-blue shrink-0 mt-0.5" />
+                  <p className="text-[11.5px] text-text-secondary leading-snug">
+                    Make sure this is the <span className="font-semibold text-red-700">receiver&apos;s own email</span>, 
+                    it&apos;s where we&apos;ll send their collection code once the package
+                    arrives at the destination station.
+                  </p>
+                </div>
+              </div>
               <Input
                 label="Phone Number"
                 type="tel"
                 placeholder="+234 801 234 5678"
+                leftElement={<PhoneIcon size={16} />}
                 error={errors.receiverPhone?.message}
                 {...register("receiverPhone")}
               />
             </div>
-          </section>
+          </Card>
 
           {/* Parcel details */}
-          <section>
-            <h2 className="font-semibold text-[15px] text-text-primary mb-3">
-              Parcel details
-            </h2>
+          <Card padding="lg" className="animate-locoomo-fade-up" style={{ animationDelay: "80ms" }}>
+            <div className="flex items-center gap-2.5 mb-4">
+              <span className="w-9 h-9 rounded-[10px] bg-status-info-bg text-brand-blue flex items-center justify-center shrink-0">
+                <PackageIcon size={17} />
+              </span>
+              <div>
+                <h2 className="font-semibold text-[15px] text-text-primary leading-tight">
+                  Parcel details
+                </h2>
+                <p className="text-[12px] text-text-muted">What are you sending?</p>
+              </div>
+            </div>
+
             <div className="flex flex-col gap-4">
               <Input
                 label="Description"
                 placeholder="e.g. Documents, Electronics"
+                leftElement={<PackageIcon size={16} />}
                 error={errors.parcelDescription?.message}
                 {...register("parcelDescription")}
               />
@@ -112,9 +145,9 @@ export function NewDeliveryScreen() {
                 />
               </div>
             </div>
-          </section>
+          </Card>
 
-          <Button type="submit" fullWidth size="lg" className="mt-2">
+          <Button type="submit" fullWidth size="lg" className="mt-1">
             Next step →
           </Button>
         </form>

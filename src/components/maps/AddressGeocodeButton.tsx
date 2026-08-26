@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui";
+import { NavigationIcon, HelpCircleIcon, CheckCircleIcon, AlertTriangleIcon } from "@/components/icons";
 import { getErrorMessage } from "@/core/api/errors";
 import { geocodingService } from "@/core/api/services/geocoding.service";
 
@@ -31,6 +32,12 @@ interface AddressGeocodeButtonProps {
  * pre-fills them, and shows the matched address back so the person
  * filling the form can catch a plausible-but-wrong match before
  * saving.
+ *
+ * **2026-08-26**: wrapped in an explanatory info card — a plain button
+ * with no context left first-time users (Admin or NodeOperator) unsure
+ * what it does, when to press it, or why it might be disabled. Fixing
+ * it here fixes it for both forms at once, since neither has its own
+ * copy of this component.
  */
 export function AddressGeocodeButton({
   address,
@@ -74,26 +81,58 @@ export function AddressGeocodeButton({
   };
 
   return (
-    <div className="mb-3">
+    <div className="rounded-[14px] border border-border-default bg-status-info-bg/50 p-4 mb-4">
+      <div className="flex items-start gap-2.5 mb-3">
+        <span className="w-7 h-7 rounded-full bg-bg-card text-brand-blue flex items-center justify-center shrink-0">
+          <HelpCircleIcon size={14} />
+        </span>
+        <div>
+          <p className="text-[13px] font-semibold text-text-primary leading-tight">
+            Not sure about the coordinates?
+          </p>
+          <p className="text-[12px] text-text-secondary mt-1 leading-relaxed">
+            Fill in the Address, City, and State above, then tap the button below, we&apos;ll look
+            up the exact Latitude and Longitude for you and fill them in automatically, so
+            customers and riders can find this station.
+          </p>
+        </div>
+      </div>
+
       <Button
         type="button"
         variant="outline"
         size="sm"
+        leftIcon={<NavigationIcon size={14} />}
         disabled={!canLookUp}
         isLoading={isLooking}
         onClick={handleClick}
+        className="bg-bg-card"
       >
         Find Coordinates from Address
       </Button>
 
-      {matchedAddress && (
-        <p className="text-[11px] text-text-secondary mt-1.5">
-          Matched <span className="font-medium text-text-primary">{matchedAddress}</span> — check
-          this is the right place before saving.
+      {!canLookUp && (
+        <p className="text-[11px] text-text-muted mt-2">
+          Enter the address, city, and state above first to enable this.
         </p>
       )}
 
-      {lookupError && <p className="text-[11px] text-status-danger mt-1.5">{lookupError}</p>}
+      {matchedAddress && (
+        <p className="flex items-start gap-1.5 text-[11px] mt-2.5">
+          <CheckCircleIcon size={13} className="text-status-success shrink-0 mt-0.5" />
+          <span className="text-text-secondary">
+            Matched <span className="font-medium text-text-primary">{matchedAddress}</span> — check
+            this is the right place before saving.
+          </span>
+        </p>
+      )}
+
+      {lookupError && (
+        <p className="flex items-start gap-1.5 text-[11px] text-status-danger mt-2.5">
+          <AlertTriangleIcon size={13} className="shrink-0 mt-0.5" />
+          {lookupError}
+        </p>
+      )}
     </div>
   );
 }

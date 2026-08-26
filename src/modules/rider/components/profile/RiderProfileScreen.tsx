@@ -14,6 +14,7 @@ import {
   LifeBuoyIcon,
   ChevronRightIcon,
   LogOutIcon,
+  WalletIcon,
 } from "@/components/icons";
 import { useCurrentUser } from "@/store/auth.store";
 import { ROUTES } from "@/core/config/constants";
@@ -22,12 +23,12 @@ import { useRiderEarnings } from "@/modules/rider/hooks/use-rider-earnings";
 import { useRiderVerification } from "@/modules/rider/hooks/use-rider-verification";
 import { formatCurrency } from "@/lib/format";
 
-const SETTINGS_ITEMS = [
-  { icon: CreditCardIcon, label: "Payment Methods" },
-  { icon: BellRingIcon, label: "Notification Preferences" },
-  { icon: LockIcon, label: "Security & PIN" },
-  { icon: LifeBuoyIcon, label: "Contact Support" },
-];
+// const SETTINGS_ITEMS = [
+//   { icon: CreditCardIcon, label: "Payment Methods" },
+//   { icon: BellRingIcon, label: "Notification Preferences" },
+//   { icon: LockIcon, label: "Security & PIN" },
+//   { icon: LifeBuoyIcon, label: "Contact Support" },
+// ];
 
 /** Rider Profile — stats, personal info, vehicle details, settings, logout. Matches Figma frame 8. */
 export function RiderProfileScreen() {
@@ -170,8 +171,54 @@ export function RiderProfileScreen() {
           </Card>
         </Link>
 
-        {/* Account settings */}
+        {/* Payout account — set on the Verification screen (the real
+            PATCH .../payout-account route only requires onboarding to
+            be complete, not approval), surfaced here too so it's not
+            missed. */}
         <p className="text-[11px] font-semibold uppercase tracking-wide text-text-muted mb-2">
+          Payout
+        </p>
+        <Link href={ROUTES.riderVerification} className="block mb-6">
+          <Card
+            padding="md"
+            interactive
+            className={
+              "flex items-center gap-3 border-l-[3px] " +
+              (verification?.payoutAccountConfigured
+                ? "border-l-status-success"
+                : "border-l-status-warning")
+            }
+          >
+            <span
+              className={
+                "w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0 " +
+                (verification?.payoutAccountConfigured
+                  ? "bg-status-success-bg text-status-success"
+                  : "bg-status-warning-bg text-status-warning")
+              }
+            >
+              <WalletIcon size={16} />
+            </span>
+            <div className="flex-1 min-w-0">
+              <p className="text-[13px] font-semibold text-text-primary">
+                {isLoadingVerification
+                  ? "Checking…"
+                  : verification?.payoutAccountConfigured
+                    ? verification.payoutBankName
+                    : "Add your payout account"}
+              </p>
+              <p className="text-[12px] text-text-muted truncate">
+                {verification?.payoutAccountConfigured
+                  ? `${verification.payoutAccountNumber} - ${verification.payoutAccountName}`
+                  : "Required before Admin can pay you."}
+              </p>
+            </div>
+            <ChevronRightIcon size={16} className="text-text-muted shrink-0" />
+          </Card>
+        </Link>
+
+        {/* Account settings */}
+        {/* <p className="text-[11px] font-semibold uppercase tracking-wide text-text-muted mb-2">
           Account Settings
         </p>
         <Card padding="none" className="overflow-hidden mb-6">
@@ -187,7 +234,7 @@ export function RiderProfileScreen() {
               </button>
             </div>
           ))}
-        </Card>
+        </Card> */}
 
         <Button
           fullWidth

@@ -5,6 +5,7 @@ import { RootTopBar } from "@/components/layout";
 import { Button, EmptyState } from "@/components/ui";
 import { ErrorAlert } from "@/components/ui/error-alert";
 import { QrCodeIcon, PackageIcon, ClockIcon, MapPinIcon } from "@/components/icons";
+import { PayoutReminderBanner } from "@/components/payout";
 import { getFriendlyError } from "@/core/api/errors";
 import { ROUTES } from "@/core/config/constants";
 import { useNodeDashboard } from "@/modules/node/hooks/use-node-dashboard";
@@ -43,6 +44,7 @@ import { CollectionSummaryList } from "./CollectionSummaryList";
 export function NodeHomeScreen() {
   const {
     node,
+    payoutAccountConfigured,
     isNodeActive,
     notOnboarded,
     nodeError,
@@ -113,6 +115,11 @@ export function NodeHomeScreen() {
             </Link>
           }
         />
+        {payoutAccountConfigured === false && (
+          <div className="px-4 md:px-6 max-w-[640px] mx-auto">
+            <PayoutReminderBanner href={ROUTES.nodeSetup} />
+          </div>
+        )}
       </div>
     );
   }
@@ -134,6 +141,12 @@ export function NodeHomeScreen() {
         </div>
 
         <CapacityBar total={total} occupied={occupied} isHighFull={isHighFull} />
+
+        {payoutAccountConfigured === false && (
+          <div className="mt-4">
+            <PayoutReminderBanner href={ROUTES.nodeSetup} />
+          </div>
+        )}
 
         <div className="mt-5 mb-4">
           <ParcelFilterTabs active={activeTab} onChange={setActiveTab} />

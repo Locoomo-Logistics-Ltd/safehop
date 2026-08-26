@@ -1,25 +1,36 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { Card, RouteRail } from "@/components/ui";
+import { Card } from "@/components/ui";
+import { CopyIcon } from "@/components/icons";
 import { TopBar } from "@/components/layout";
 import { useDelivery } from "@/modules/user/hooks/use-delivery";
-import { getOrderProgress, OrderStatusBadge } from "./OrderStatusBadge";
-import { formatCurrency, formatDate } from "@/lib/format";
+import { useNotificationStore } from "@/store/notification.store";
+import { OrderStatusBadge } from "./OrderStatusBadge";
+import { DeliveryJourneyCard } from "./DeliveryJourneyCard";
+import { OrderDetailsCard } from "./OrderDetailsCard";
 
 /**
- * Tracking screen — route progress + order details.
+ * Tracking screen — animated journey card + a captivating order-details
+ * receipt, both real data off `GET /orders/:id` (`Order`, `payment.types.ts`).
  *
- * Rebuilt 2026-08-12 against the real `Order` type (`GET /orders/:id`).
- * The previous version rendered a `TrackingHistory`/`TrackingTimeline`
- * event-by-event log — the real Order response has no such field
- * (only `status`, a single current value), so that section is dropped
- * rather than fabricated. Re-add it if a real order-events endpoint is
- * ever confirmed against docs/API.md.
+ * Rebuilt 2026-08-12 against the real `Order` type — the previous
+ * event-by-event `TrackingHistory` log is gone for good (the real Order
+ * response has no such field, only a single current `status`; re-add it
+ * if a real order-events endpoint is ever confirmed against
+ * docs/API.md). Rebuilt again 2026-08-26 for visual polish: the route
+ * card is now `DeliveryJourneyCard` (an animated 5-stage stepper,
+ * mapped off the real lifecycle values in
+ * `core/types/handoff.types.ts`'s `HANDOFF_STATUS`) instead of
+ * `RouteRail`'s dashed-line texture, and order details moved into
+ * `OrderDetailsCard`, an icon-row receipt layout that also surfaces
+ * `receiverPhone`/`receiverEmail`/`parcelSize` — real fields on `Order`
+ * the old plain list never showed.
  */
 export function TrackPackageScreen() {
   const params = useParams<{ id: string }>();
   const { delivery, isLoading, isError } = useDelivery(params.id);
+  const showNotification = useNotificationStore((s) => s.showNotification);
 
   if (isLoading) {
     return (
@@ -40,7 +51,14 @@ export function TrackPackageScreen() {
     );
   }
 
-  const progress = getOrderProgress(delivery.status);
+  const handleCopyTrackingCode = async () => {
+    try {
+      await navigator.clipboard.writeText(delivery.trackingCode);
+      showNotification({ type: "success", title: "Copied", message: "Tracking code copied to clipboard." });
+    } catch {
+      showNotification({ type: "error", title: "Couldn't copy", message: "Copy the tracking code manually instead." });
+    }
+  };
 
   return (
     <div className="min-h-screen bg-bg-canvas">
@@ -52,59 +70,40 @@ export function TrackPackageScreen() {
         </div>
 
         {/* Tracking code header */}
-        <Card padding="md" className="mb-4 flex items-center justify-between gap-3">
-          <div>
+        <Card padding="md" className="mb-4 flex items-center justify-between gap-3 animate-locoomo-fade-up">
+          <div className="min-w-0">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-text-muted mb-1">
               Tracking Code
             </p>
-            <p className="text-[16px] font-bold text-text-primary font-mono tracking-tight">
-              {delivery.trackingCode}
-            </p>
+            <div className="flex items-center gap-2">
+              <p className="text-[16px] font-bold text-text-primary font-mono tracking-tight truncate">
+                {delivery.trackingCode}
+              </p>
+              <button
+                type="button"
+                aria-label="Copy tracking code"
+                onClick={handleCopyTrackingCode}
+                className="shrink-0 w-6 h-6 rounded-[7px] text-text-muted hover:bg-bg-subtle hover:text-text-primary flex items-center justify-center transition-colors"
+              >
+                <CopyIcon size={13} />
+              </button>
+            </div>
           </div>
-          <OrderStatusBadge status={delivery.status} />
+          <OrderStatusBadge status={delivery.status} className="shrink-0" />
         </Card>
 
-        {/* Route overview */}
-        <Card padding="md" className="mb-4">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-text-muted mb-3">
-            Route Overview
-          </p>
-          <RouteRail
+        <div className="animate-locoomo-fade-up" style={{ animationDelay: "80ms" }}>
+          <DeliveryJourneyCard
             originLabel={delivery.originNodeName}
             destinationLabel={delivery.destinationNodeName}
-            progress={progress}
-            variant="full"
+            status={delivery.status}
           />
-          <div className="flex items-center justify-between text-[12px] text-text-secondary mt-2 font-medium">
-            <span>{delivery.originNodeName}</span>
-            <span>{delivery.destinationNodeName}</span>
-          </div>
-        </Card>
+        </div>
 
-        {/* Order details */}
-        <Card padding="lg">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-text-muted mb-4">
-            Order Details
-          </p>
-          <div className="flex flex-col gap-2.5 text-[13px]">
-            <DetailRow label="Receiver" value={delivery.receiverFullName} />
-            <DetailRow label="Parcel" value={delivery.parcelDescription} />
-            <DetailRow label="Origin address" value={delivery.originNodeAddress} />
-            <DetailRow label="Destination address" value={delivery.destinationNodeAddress} />
-            <DetailRow label="Amount paid" value={formatCurrency(delivery.amountKobo / 100)} />
-            <DetailRow label="Placed" value={formatDate(delivery.createdAt)} />
-          </div>
-        </Card>
+        <div className="animate-locoomo-fade-up" style={{ animationDelay: "160ms" }}>
+          <OrderDetailsCard order={delivery} />
+        </div>
       </div>
-    </div>
-  );
-}
-
-function DetailRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between gap-3">
-      <span className="text-text-muted">{label}</span>
-      <span className="font-medium text-text-primary text-right">{value}</span>
     </div>
   );
 }

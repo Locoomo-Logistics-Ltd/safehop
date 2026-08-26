@@ -6,10 +6,11 @@ import { TopBar } from "@/components/layout";
 import { Button, Card, Input } from "@/components/ui";
 import { ErrorAlert } from "@/components/ui/error-alert";
 import { CheckCircleIcon, ClockIcon, ShieldCheckIcon, CameraIcon } from "@/components/icons";
+import { PayoutAccountCard } from "@/components/payout";
 import { getFriendlyError } from "@/core/api/errors";
 import { ROUTES } from "@/core/config/constants";
 import { useRiderVerification } from "@/modules/rider/hooks/use-rider-verification";
-import type { RiderVerificationProfile } from "@/core/types";
+import type { BankOption, PayoutAccountPayload, RiderVerificationProfile } from "@/core/types";
 
 /**
  * Rider Verification — the self-service KYC step between "logged in"
@@ -29,6 +30,12 @@ export function RiderVerificationScreen() {
     submitVerification,
     isSubmitting,
     submitError,
+    banks,
+    isLoadingBanks,
+    setPayoutAccount,
+    isSettingPayoutAccount,
+    payoutAccountError,
+    payoutAccountSaved,
   } = useRiderVerification();
 
   if (isLoadingProfile) {
@@ -65,7 +72,17 @@ export function RiderVerificationScreen() {
   }
 
   if (profile) {
-    return <VerificationStatusView profile={profile} />;
+    return (
+      <VerificationStatusView
+        profile={profile}
+        banks={banks}
+        isLoadingBanks={isLoadingBanks}
+        onSetPayoutAccount={setPayoutAccount}
+        isSettingPayoutAccount={isSettingPayoutAccount}
+        payoutAccountError={payoutAccountError}
+        payoutAccountSaved={payoutAccountSaved}
+      />
+    );
   }
 
   return null;
@@ -168,7 +185,23 @@ function VerificationForm({
  * present, the uploaded image itself (not just a link to it), and a
  * small "Verified" tag once approved.
  */
-function VerificationStatusView({ profile }: { profile: RiderVerificationProfile }) {
+function VerificationStatusView({
+  profile,
+  banks,
+  isLoadingBanks,
+  onSetPayoutAccount,
+  isSettingPayoutAccount,
+  payoutAccountError,
+  payoutAccountSaved,
+}: {
+  profile: RiderVerificationProfile;
+  banks: BankOption[];
+  isLoadingBanks: boolean;
+  onSetPayoutAccount: (payload: PayoutAccountPayload) => void;
+  isSettingPayoutAccount: boolean;
+  payoutAccountError: unknown;
+  payoutAccountSaved: boolean;
+}) {
   const isActive = profile.status === "active";
 
   return (
@@ -248,6 +281,19 @@ function VerificationStatusView({ profile }: { profile: RiderVerificationProfile
             </div>
           </div>
         )}
+
+        <PayoutAccountCard
+          configured={profile.payoutAccountConfigured}
+          bankName={profile.payoutBankName}
+          accountNumber={profile.payoutAccountNumber}
+          accountName={profile.payoutAccountName}
+          banks={banks}
+          isLoadingBanks={isLoadingBanks}
+          onSubmit={onSetPayoutAccount}
+          isSubmitting={isSettingPayoutAccount}
+          error={payoutAccountError}
+          saved={payoutAccountSaved}
+        />
 
         {isActive && (
           <Link href={ROUTES.riderHome} className="block">

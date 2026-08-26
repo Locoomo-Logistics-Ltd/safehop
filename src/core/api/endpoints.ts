@@ -37,6 +37,10 @@ export const ENDPOINTS = {
   nodeOperators: {
     onboarding: "/node-operators/onboarding",
     me: "/node-operators/me",
+    // Sets/replaces this Node's payout bank account — real, confirmed
+    // route per docs/API.md. Verified against Paystack at submission
+    // time; requires a `bankCode` from `payments.banks` below.
+    payoutAccount: "/node-operators/me/payout-account",
     // Admin-only review queue — real, confirmed routes per docs/API.md.
     pending: "/node-operators/pending",
     approve: (profileId: string) => `/node-operators/${profileId}/approve`,
@@ -109,13 +113,17 @@ export const ENDPOINTS = {
     uploadSignature: "/riders/verification/upload-signature",
     onboarding: "/riders/onboarding",
     me: "/riders/me",
+    // Sets/replaces the rider's payout bank account — real, confirmed
+    // route per docs/API.md. Verified against Paystack at submission
+    // time; requires a `bankCode` from `payments.banks` below.
+    payoutAccount: "/riders/me/payout-account",
     // Admin-only review queue — real, confirmed routes per docs/API.md.
     pending: "/riders/pending",
     approve: (profileId: string) => `/riders/${profileId}/approve`,
   },
 
   // ── Payments ─────────────────────────────────────────────────────
-  // Both real, confirmed, frontend-facing routes per docs/API.md.
+  // Real, confirmed, frontend-facing routes per docs/API.md.
   // (`POST /payments/webhooks/paystack` is deliberately absent — it's
   // server-to-server only, Paystack calls it directly, this app never
   // does. A `webhook(provider)` constant that didn't match it was
@@ -123,6 +131,10 @@ export const ENDPOINTS = {
   payments: {
     intents: "/payments/intents",
     intentDetail: (id: string) => `/payments/intents/${id}`,
+    // Paystack's full bank list — Rider/NodeOperator session required.
+    // Deliberately not paginated per docs/API.md; a whole reference
+    // list meant to back one dropdown/search, not a growing resource.
+    banks: "/payments/banks",
   },
 
   // ── Admin Pricing ────────────────────────────────────────────────

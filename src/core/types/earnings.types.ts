@@ -16,6 +16,42 @@
 export type RevenueSplitPartyType = "rider" | "node" | "destination_node" | "platform";
 export type PayoutStatus = "pending" | "paid";
 
+// ── Payout accounts (Rider / NodeOperator) ──────────────────────
+// `GET /payments/banks`, `PATCH /riders/me/payout-account`,
+// `PATCH /node-operators/me/payout-account` — the bank account Admin
+// disburses a Rider's or Node's earned revenue-split entries to.
+// Verified against the real bank via Paystack at submission time; the
+// account holder name is resolved server-side, never typed by the
+// caller.
+
+/** One row from `GET /payments/banks` — used to populate a bank picker. */
+export interface BankOption {
+  code: string;
+  name: string;
+}
+
+/** `PATCH /riders/me/payout-account` / `PATCH /node-operators/me/payout-account` request body. */
+export interface PayoutAccountPayload {
+  bankCode: string;
+  bankName: string;
+  /** Exactly 10 digits (NUBAN). */
+  accountNumber: string;
+}
+
+/**
+ * The five payout fields present on both `RiderVerificationProfile`
+ * and `NodeOperatorProfile` (onboarding/`me`/payout-account responses
+ * all share this shape) — `payoutAccountName` is always whatever
+ * Paystack resolved, never what the caller sent.
+ */
+export interface PayoutAccountFields {
+  payoutAccountConfigured: boolean;
+  payoutBankCode: string | null;
+  payoutBankName: string | null;
+  payoutAccountNumber: string | null;
+  payoutAccountName: string | null;
+}
+
 /** `GET /earnings/mine` (Rider) and `GET /earnings/my-node` (NodeOperator) — same response shape. */
 export interface MyRevenueSplitEntry {
   id: string;
@@ -53,7 +89,7 @@ export interface RevenueSplitRatio {
 // GET /admin/revenue-split/entries — four rows per completed order
 // (rider, origin Node, destination Node, platform).
 
-export interface AdminRevenueSplitEntry {
+export interface AdminRevenueSplitEntry extends PayoutAccountFields {
   id: string;
   orderId: string;
   orderTrackingCode: string;

@@ -44,7 +44,13 @@ const HIGH_FULL_THRESHOLD = 0.6;
  * the operator can see it coming.
  */
 export function useNodeDashboard() {
-  const { node, isLoading: isNodeLoading, notOnboarded, error: nodeError } = useNodeProfile();
+  const {
+    node,
+    payoutAccountConfigured,
+    isLoading: isNodeLoading,
+    notOnboarded,
+    error: nodeError,
+  } = useNodeProfile();
   const { orders, isLoading: isOrdersLoading } = useMyNodeOrders();
   const [activeTab, setActiveTab] = useState<DashboardFilterTab>("awaiting_pickup");
 
@@ -64,6 +70,7 @@ export function useNodeDashboard() {
 
   return {
     node,
+    payoutAccountConfigured,
     isNodeActive: node?.status === "active",
     notOnboarded,
     nodeError,

@@ -4,6 +4,7 @@ import { ENDPOINTS } from "@/core/api/endpoints";
 import { ApiError } from "@/core/api/errors";
 import type { PaginatedList } from "@/core/api/types";
 import type {
+  BankOption,
   CollectParcelPayload,
   CollectionCodeResendResult,
   ConfirmHandoffPayload,
@@ -13,6 +14,7 @@ import type {
   NodeOperatorOnboardingPayload,
   NodeOperatorProfile,
   NodeOrderSummary,
+  PayoutAccountPayload,
 } from "@/core/types";
 
 /**
@@ -63,6 +65,27 @@ const realNodeService = {
   /** Real, confirmed route — the operator's own profile + Node, including its approval status. */
   async getMyNodeOperatorProfile(): Promise<NodeOperatorProfile> {
     return httpClient.get<NodeOperatorProfile>(ENDPOINTS.nodeOperators.me);
+  },
+
+  // ── Payout account ───────────────────────────────────────────────
+  // Real, confirmed routes per docs/API.md — the bank account Admin
+  // disburses this Node's earned revenue-split entries to.
+
+  /** Paystack's full bank list, for the bank picker ahead of `setPayoutAccount`. Not paginated. */
+  async getPayoutBanks(): Promise<BankOption[]> {
+    return httpClient.get<BankOption[]>(ENDPOINTS.payments.banks);
+  },
+
+  /**
+   * Sets (or replaces) this Node's payout bank account. Verified
+   * against Paystack server-side at submission time —
+   * `payoutAccountName` on the response is whatever Paystack resolved,
+   * never what was sent. `400 BANK_ACCOUNT_VERIFICATION_FAILED` means
+   * Paystack couldn't resolve that account number at that bank;
+   * nothing is saved and any previously-verified account is untouched.
+   */
+  async setPayoutAccount(payload: PayoutAccountPayload): Promise<NodeOperatorProfile> {
+    return httpClient.patch<NodeOperatorProfile>(ENDPOINTS.nodeOperators.payoutAccount, payload);
   },
 
   /**

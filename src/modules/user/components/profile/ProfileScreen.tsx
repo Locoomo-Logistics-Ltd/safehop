@@ -38,7 +38,7 @@ export function ProfileScreen() {
         <Button
           fullWidth
           size="lg"
-          variant="outline"
+          variant="danger"
           className="mt-8"
           isLoading={isLoggingOut}
           onClick={() => logout()}

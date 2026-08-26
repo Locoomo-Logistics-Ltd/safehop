@@ -224,3 +224,36 @@ h1, h2, h3, h4, h5, h6 {
 .animate-locoomo-pulse {
   animation: locoomo-pulse 2.4s cubic-bezier(0, 0, 0.2, 1) infinite;
 }
+
+/* TrackPackageScreen (modules/user/components/tracking/) — the
+   Delivery Journey card's fill-in-on-mount progress bar and the
+   staggered entrance of the tracking screen's sections. Both are pure
+   CSS (no JS mount-state) so there's nothing for the
+   reduced-motion override above to race against — it just shortens
+   these to ~0ms like everything else. */
+@keyframes locoomo-fill {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+.animate-locoomo-fill {
+  transform-origin: left;
+  animation: locoomo-fill 900ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes locoomo-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-locoomo-fade-up {
+  animation: locoomo-fade-up 500ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}

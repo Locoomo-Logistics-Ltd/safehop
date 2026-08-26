@@ -222,6 +222,17 @@ export function getFriendlyError(error: unknown) {
       };
 
 
+    case "BANK_ACCOUNT_VERIFICATION_FAILED":
+      return {
+        title: "We couldn't verify that account 🏦",
+        message:
+          "That account number doesn't match the bank you selected. Nothing was saved.",
+        action:
+          "Double-check the account number and bank, then try again.",
+        type: "error",
+      };
+
+
     case "PAYMENT_PROVIDER_ERROR":
       return {
         title: "Payment couldn't start 💳",

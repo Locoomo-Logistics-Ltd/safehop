@@ -12,6 +12,23 @@
 > never edit it from a frontend session.** This file is the one that
 > gets edited here, to track the frontend's side of the contract.
 
+**2026-08-26 update**: `docs/API.md` picked up three payout-account
+routes with zero prior frontend integration — `GET /payments/banks`,
+`PATCH /riders/me/payout-account`, `PATCH /node-operators/me/payout-account`
+— plus five `payoutAccount*` fields that were already documented on
+`GET /riders/me`/`GET /node-operators/me`/`GET
+/admin/revenue-split/entries` but never rendered anywhere. All three
+routes are now wired: a new shared `PayoutAccountCard` component
+(`components/payout/`) embedded in `RiderVerificationScreen` and
+`NodeSetupScreen` lets a Rider/NodeOperator set the bank account Admin
+disburses their earnings to; `RevenueSplitScreen`'s entries table gained
+a "Payout Account" column with a copy-to-clipboard button so an Admin
+can pay without a second lookup, plus the existing "Mark Paid" action
+right next to it. A non-dismissible `PayoutReminderBanner` nudges an
+unconfigured Rider/NodeOperator on Home and Profile until they set one
+up — see the Riders, Node Operators, Payments, and Earnings sections
+below. Summary counts now cover **51** documented endpoints, not 48.
+
 **2026-08-24 update**: `docs/API.md` picked up a `destinationFeeNaira`
 field on `POST/GET /admin/pricing` (flat fee paid entirely to the
 destination Node on order completion, separate from the rider/origin-
@@ -141,7 +158,8 @@ not a re-verification of any endpoint's behavior).
 | Method | Endpoint | Feature/Module | Status | Related page(s)/component(s) | Service/hook | Missing work |
 |---|---|---|---|---|---|---|
 | POST | `/node-operators/onboarding` | Node Operator self-service Node setup | ✅ | `NodeSetupScreen` (`/node/setup`) | `nodeService.onboardNode` via `useNodeSetup` | None. Fields match the real required body exactly. |
-| GET | `/node-operators/me` | Node Operator checks Node approval status | ✅ | Same screen, reachable from Node Profile's "Node Setup" row; also `NodeHomeScreen` (`/node/home`) and `NodeProfileScreen` (Node identity/address), both since 2026-08-17 follow-up 2 | `nodeService.getMyNodeOperatorProfile` via `useNodeSetup` (Node Setup), `useNodeProfile` (Home + Profile) | None. Drives all three states correctly (`404`→onboarding form, `pending`→waiting view, `active`→dashboard link), field-level errors via `getFriendlyError`. Same query key (`QUERY_KEYS.nodeOperatorProfile`) across all three call sites, so TanStack Query dedupes them. |
+| GET | `/node-operators/me` | Node Operator checks Node approval status | ✅ | Same screen, reachable from Node Profile's "Node Setup" row; also `NodeHomeScreen` (`/node/home`) and `NodeProfileScreen` (Node identity/address), both since 2026-08-17 follow-up 2 | `nodeService.getMyNodeOperatorProfile` via `useNodeSetup` (Node Setup, Profile), `useNodeProfile` (Home) | None. Drives all three states correctly (`404`→onboarding form, `pending`→waiting view, `active`→dashboard link), field-level errors via `getFriendlyError`. Same query key (`QUERY_KEYS.nodeOperatorProfile`) across all three call sites, so TanStack Query dedupes them. |
+| PATCH | `/node-operators/me/payout-account` | Node Operator sets/replaces payout bank account | ✅ | `PayoutAccountCard` (shared component) embedded in `NodeSetupScreen` (both pending and active states) — reused verbatim, not rebuilt, from the Rider Verification screen's payout section | `nodeService.setPayoutAccount` via `useNodeSetup` | None — new 2026-08-26. Bank picker sourced from `GET /payments/banks` (`getPayoutBanks`), same `useNodeSetup` hook. `NodeHomeScreen` and `NodeProfileScreen` both surface a "not set up yet" nudge off `payoutAccountConfigured` (from the same query, deduped) until this is called once. |
 | GET | `/node-operators/pending` | Admin's NodeOperator review queue | ✅ | `ApprovalsScreen` (`/admin/approvals`, "Node Operators" tab) | `adminService.getPendingNodeOperators` via `useNodeOperatorApprovals` | None — new 2026-08-12. `/admin/approvals` has no home in the original 8-frame design; placed as a new nav item after "Team" (see `nav-config.ts`'s comment). |
 | PATCH | `/node-operators/:id/approve` | Admin approves a NodeOperator | ✅ | Same screen, "Approve" button per row | `adminService.approveNodeOperator` via `useNodeOperatorApprovals` | None — new 2026-08-12. Closes the gap this row used to describe: an Admin can now approve a self-registered NodeOperator through the UI. |
 
@@ -151,7 +169,8 @@ not a re-verification of any endpoint's behavior).
 |---|---|---|---|---|---|---|
 | GET | `/riders/verification/upload-signature` | Rider KYC — get Cloudinary signature | ✅ | `RiderVerificationScreen` (`/rider/verification`) | `riderService.getVerificationUploadSignature` via `useRiderVerification` | None — only sends `documentType: "rating_screenshot"`, the one documented value. |
 | POST | `/riders/onboarding` | Rider KYC — submit verification | ✅ | Same screen | `riderService.submitVerification` via `useRiderVerification` | None. Upload flows client-side straight to Cloudinary first (`uploadVerificationDocument`), then submits the resulting `public_id` — matches `API.md`'s "file bytes never pass through this API" instruction exactly. `licenseNumber` (added to `docs/API.md` 2026-08-17, self-reported, no document check) is now a required field on the form and the payload; existing riders' profiles show `null` until they resubmit, which the form doesn't currently prompt for — a re-verification nudge would need a product decision, not a frontend one. |
-| GET | `/riders/me` | Rider checks verification status | ✅ | `RiderVerificationScreen`, `RiderHomeScreen`'s reminder sheet, `AvailableJobsScreen`'s gate (this row's "`JobOfferScreen`" was stale — that screen was deleted 2026-08-15, superseded by `AvailableJobsScreen`, which carries the same gate), Rider Profile's "Verification" row **and** (new 2026-08-21) its "Vehicle Details" card | `riderService.getVerificationProfile` via `useRiderVerification` (called independently from each of those call sites, same query key — TanStack Query dedupes) | None. Drives all three states correctly (`404`→form, `pending`→under-review, `active`→dashboard link) on the verification screen itself — **2026-08-21**: the `active`/`pending` views now share one layout showing employer/license/the uploaded document image inline, instead of `active` showing none of it. Also gates `data.status !== "active"` on `AvailableJobsScreen` and drives a dismissible reminder on `RiderHomeScreen`. **2026-08-21**: `RiderProfileScreen`'s "Vehicle Details" card now reads `data.licenseNumber` here too — replacing a fabricated, permanently-`NOT_IMPLEMENTED` "vehicle" call that never had a real route (see Inconsistencies). Deliberately **not** gated on Home/Earnings/Profile — those stay browsable pre-approval (product decision, see `docs/HANDOFF.md`). |
+| GET | `/riders/me` | Rider checks verification status | ✅ | `RiderVerificationScreen`, `RiderHomeScreen`'s reminder sheet, `AvailableJobsScreen`'s gate (this row's "`JobOfferScreen`" was stale — that screen was deleted 2026-08-15, superseded by `AvailableJobsScreen`, which carries the same gate), Rider Profile's "Verification" row **and** (new 2026-08-21) its "Vehicle Details" card | `riderService.getVerificationProfile` via `useRiderVerification` (called independently from each of those call sites, same query key — TanStack Query dedupes) | None. Drives all three states correctly (`404`→form, `pending`→under-review, `active`→dashboard link) on the verification screen itself — **2026-08-21**: the `active`/`pending` views now share one layout showing employer/license/the uploaded document image inline, instead of `active` showing none of it. Also gates `data.status !== "active"` on `AvailableJobsScreen` and drives a dismissible reminder on `RiderHomeScreen`. **2026-08-21**: `RiderProfileScreen`'s "Vehicle Details" card now reads `data.licenseNumber` here too — replacing a fabricated, permanently-`NOT_IMPLEMENTED` "vehicle" call that never had a real route (see Inconsistencies). Deliberately **not** gated on Home/Earnings/Profile — those stay browsable pre-approval (product decision, see `docs/HANDOFF.md`). **2026-08-26**: response now also carries the five `payoutAccount*` fields — see the row below. |
+| PATCH | `/riders/me/payout-account` | Rider sets/replaces payout bank account | ✅ | `PayoutAccountCard` (new shared component, `components/payout/`) embedded in `RiderVerificationScreen`'s status view (both pending and active states — the real route only requires onboarding to be complete, not approval) | `riderService.setPayoutAccount` via `useRiderVerification` | None — new 2026-08-26. Bank picker sourced from `GET /payments/banks` (`getPayoutBanks`), same hook. `RiderHomeScreen` (persistent banner, not dismissible) and `RiderProfileScreen` (a status row, same pattern as the Verification row) both nudge off `payoutAccountConfigured` until this is called once — "keep prompting until it's set" was an explicit ask, so unlike the KYC reminder sheet this one doesn't have a "maybe later." |
 | GET | `/riders/pending` | Admin's Rider review queue | ✅ | `ApprovalsScreen` (`/admin/approvals`, "Riders" tab) | `adminService.getPendingRiders` via `useRiderApprovals` | None — new 2026-08-12. Shows a "View screenshot" link to the pending Rider's signed `viewUrl` document alongside each row. |
 | PATCH | `/riders/:id/approve` | Admin approves a Rider | ✅ | Same screen, "Approve" button per row | `adminService.approveRider` via `useRiderApprovals` | None — new 2026-08-12. Closes the gap this row used to describe: a Rider who completes verification can now be moved to `active` through the UI, reaching the job board. |
 
@@ -172,7 +191,7 @@ New 2026-08-20. Every `completed` order's fee is split rider/origin-Node/platfor
 | POST | `/admin/revenue-split` | Admin sets the split ratio | ✅ | `SetRevenueSplitRatioForm`, `RevenueSplitScreen` (`/admin/revenue-split`) | `adminService.createRevenueSplitRatio` via `useCreateRevenueSplitRatio` | None — new 2026-08-20. Client-side validates the three percentages sum to exactly 100 before enabling submit, mirroring the server's `400 INVALID_REVENUE_SPLIT`. Same generic-toast validation issue as `/users/invite`/`/nodes` above. |
 | GET | `/admin/revenue-split` | Admin views ratio history | ✅ | Same screen — "Current split" card reads the newest entry | `adminService.getRevenueSplitRatios` via `useRevenueSplitRatios` | None — new 2026-08-20. |
 | GET | `/admin/revenue-split/entries` | Admin views payout-readiness entries | ✅ | Same screen — filterable table, `partyType`/`payoutStatus` | `adminService.getRevenueSplitEntries` via `useRevenueSplitEntries` | Requested at `limit=100`, no pagination UI yet. **2026-08-24**: `partyType` filter's `<select>` now offers `destination_node` alongside rider/node/platform. |
-| PATCH | `/admin/revenue-split/entries/:id/mark-paid` | Admin marks an entry settled off-system | ✅ | Same screen, "Mark Paid" per pending row | `adminService.markRevenueSplitEntryPaid` via `useMarkRevenueSplitEntryPaid` | None — new 2026-08-20. No request body, idempotent per `API.md`. |
+| PATCH | `/admin/revenue-split/entries/:id/mark-paid` | Admin marks an entry settled off-system | ✅ | Same screen, "Mark Paid" per pending row | `adminService.markRevenueSplitEntryPaid` via `useMarkRevenueSplitEntryPaid` | None — new 2026-08-20. No request body, idempotent per `API.md`. **2026-08-26**: the same table now has a "Payout Account" column reading the five `payoutAccount*` fields `GET .../entries` already returned (see the row above) but the screen never rendered — bank name + account number + account name, with a copy-to-clipboard button (`PayoutAccountCell`, this screen only) next to it, so the Admin doesn't need a second lookup before running a transfer. Reads "Not set up" when the party hasn't configured a payout account yet. |
 | GET | `/earnings/mine` | Rider views own earnings | ✅ | `EarningsStatCards`/`RiderHomeScreen`, `RiderProfileScreen`'s stat row, `MyEarningsScreen` (`/rider/deliveries`, "Earnings" nav tab) | `riderService.listMyEarnings`/`getEarningsSummary` via `useMyEarnings` (list), `useRiderEarnings` (reduced today/total summary) | None — new 2026-08-20, closes a real gap (`getEarningsSummary()` previously `NOT_IMPLEMENTED`, no endpoint existed). No server-side "today" filter or rating field — summary is reduced client-side from the full entry list; `RiderEarningsSummary` no longer carries a `rating` field (nothing in the real API supplies one). |
 | GET | `/earnings/my-node` | NodeOperator views this Node's earnings | ✅ | `NodeEarningsScreen` (`/node/earnings`, reached from Node Profile) | `nodeService.getMyNodeEarnings` via `useNodeEarnings` | None — new 2026-08-20, first integration of this route (previously zero frontend calls). Only shows entries where this Node was the *origin*, per the documented split rule. |
 
@@ -183,6 +202,7 @@ New 2026-08-20. Every `completed` order's fee is split rider/origin-Node/platfor
 | POST | `/payments/intents` | Consumer places an order (fee calc + Node capacity reservation + Paystack checkout) | ✅ | `CheckoutScreen` (`/checkout`) | `deliveryService.createPaymentIntent` via `useCheckout` | **Rebuilt 2026-08-12.** `CheckoutScreen` now creates the intent once per visit (guarded against double-fire), shows the real `feeBreakdown`, and "Confirm & Pay" redirects to the returned `authorizationUrl`. Replaces the old `useCreateDelivery` → `ENDPOINTS.orders.book`/`orders.calculate-fare` flow (undocumented routes, never actually collected payment — `deliveryService.pay()` was a no-op re-fetch). No payment-method picker in-app anymore — Paystack's hosted page presents card/bank/USSD, the real payload has no such field; `PaymentMethodSelector.tsx` was deleted as genuinely dead code. **Not verified against a live backend** — no real Node capacity reservation or Paystack redirect has been exercised this session (see `docs/HANDOFF.md`). |
 | GET | `/payments/intents/:id` | Consumer polls payment status after the Paystack redirect | ✅ | `PaymentCallbackScreen` (`/orders/payment-callback`) | `deliveryService.getPaymentIntent` via `usePaymentIntentStatus` | **New 2026-08-12.** Polls every 2.5s (capped at ~90s) while `status: "pending"`; on `"paid"` looks up the resulting Order via `GET /orders` (no dedicated "order by intent id" route exists) and forwards to the success screen; `"failed"`/`"expired"`/timeout each get a distinct retry state. The intent id is recovered from `sessionStorage` (set right before the Paystack redirect), not the callback URL's query string — `API.md` doesn't document what Paystack appends there. **Not verified against a live backend.** |
 | POST | `/payments/webhooks/paystack` | Paystack → backend payment confirmation | ⚪ | n/a | n/a | Server-to-server only per `API.md` ("your frontend never does" this) — correctly has no frontend call site. Listed here for completeness, not a gap. |
+| GET | `/payments/banks` | Bank list, for a payout-account bank picker | ✅ | `PayoutAccountCard`'s bank `<select>`, used by both `RiderVerificationScreen` and `NodeSetupScreen` | `riderService.getPayoutBanks` / `nodeService.getPayoutBanks` (same endpoint, one method per domain service — matches this file's "no cross-domain service" convention rather than introducing a shared one for a single GET) via `useRiderVerification` / `useNodeSetup` | None — new 2026-08-26. Not paginated per `API.md`; fetched once (`staleTime: Infinity`, `QUERY_KEYS.payoutBanks`, shared cache key across both roles) since it's a static reference list. |
 
 ## Admin Diagnostics
 
@@ -201,16 +221,17 @@ New 2026-08-24. `GET /admin/capacity-audit` — no prior frontend integration at
 
 ## Summary
 
-**48** endpoints documented in `API.md` as of 2026-08-24 (up from 47 at
-the 2026-08-20 audit — `GET /admin/capacity-audit` is new;
-`destinationFeeNaira` on `admin/pricing` and `destination_node` on the
-revenue-split `partyType` enum are field/enum additions to already-
-documented endpoints, not new rows). **Every one has a row in this
-file** (verified by a 1:1 diff of every `### METHOD /api/v1/...` header
-in `API.md` against every table row here — no gaps either direction).
-**45 ✅ Fully Integrated**, **2 🟡 Partially Integrated**
-(`/auth/verify-email`, `PATCH /nodes/:id`), **0 ❌ Not Integrated**,
-**1 ⚪ No UI Required Yet**.
+**51** endpoints documented in `API.md` as of 2026-08-26 (up from 48 at
+the 2026-08-24 audit — `GET /payments/banks`, `PATCH
+/riders/me/payout-account`, `PATCH /node-operators/me/payout-account`
+are new rows; the `payoutAccount*` fields on `GET
+/riders/me`/`/node-operators/me`/`/admin/revenue-split/entries` are
+field additions to already-documented endpoints, not new rows).
+**Every one has a row in this file** (verified by a 1:1 diff of every
+`### METHOD /api/v1/...` header in `API.md` against every table row
+here — no gaps either direction). **48 ✅ Fully Integrated**, **2 🟡
+Partially Integrated** (`/auth/verify-email`, `PATCH /nodes/:id`), **0
+❌ Not Integrated**, **1 ⚪ No UI Required Yet**.
 
 ### Recommended implementation priority
 

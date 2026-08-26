@@ -3,16 +3,17 @@
 import Link from "next/link";
 import { TopBar } from "@/components/layout";
 import { Card, Button } from "@/components/ui";
-import { PhoneIcon, MailIcon, MapPinIcon, ChevronRightIcon } from "@/components/icons";
+import { PhoneIcon, MailIcon, MapPinIcon, ChevronRightIcon, WalletIcon } from "@/components/icons";
 import { ROUTES } from "@/core/config/constants";
 import { useCurrentUser } from "@/store/auth.store";
 import { useNodeAuth } from "@/modules/node/hooks/use-node-auth";
-import { useNodeProfile } from "@/modules/node/hooks/use-node-profile";
+import { useNodeSetup } from "@/modules/node/hooks/use-node-setup";
 
 /** Node Profile tab — account + managed node details, plus logout. */
 export function NodeProfileScreen() {
   const user = useCurrentUser();
-  const { node } = useNodeProfile();
+  const { profile, isLoadingProfile } = useNodeSetup();
+  const node = profile?.node;
   const { logout, isLoggingOut } = useNodeAuth();
 
   if (!user) return null;
@@ -30,7 +31,7 @@ export function NodeProfileScreen() {
           <p className="font-display font-bold text-[18px] text-text-primary">
             {user.firstName} {user.lastName}
           </p>
-          <p className="text-[13px] text-text-muted">Node Operator</p>
+          <p className="text-[13px] text-text-muted">Pickup Station Operator</p>
         </div>
 
         {node && (
@@ -58,10 +59,51 @@ export function NodeProfileScreen() {
           </Card>
         </Link>
 
+        {/* Payout account — set on the Node Setup screen (the real
+            PATCH .../payout-account route only requires onboarding to
+            be complete, not approval), surfaced here too so it's not
+            missed. */}
+        <Link href={ROUTES.nodeSetup} className="block mt-4">
+          <Card
+            padding="md"
+            interactive
+            className={
+              "flex items-center gap-3 border-l-[3px] " +
+              (profile?.payoutAccountConfigured ? "border-l-status-success" : "border-l-status-warning")
+            }
+          >
+            <span
+              className={
+                "w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0 " +
+                (profile?.payoutAccountConfigured
+                  ? "bg-status-success-bg text-status-success"
+                  : "bg-status-warning-bg text-status-warning")
+              }
+            >
+              <WalletIcon size={16} />
+            </span>
+            <div className="flex-1 min-w-0">
+              <p className="text-[13px] font-semibold text-text-primary">
+                {isLoadingProfile
+                  ? "Checking…"
+                  : profile?.payoutAccountConfigured
+                    ? profile.payoutBankName
+                    : "Add your payout account"}
+              </p>
+              <p className="text-[12px] text-text-muted truncate">
+                {profile?.payoutAccountConfigured
+                  ? `${profile.payoutAccountNumber} - ${profile.payoutAccountName}`
+                  : "Required before Admin can pay you."}
+              </p>
+            </div>
+            <ChevronRightIcon size={16} className="text-text-muted shrink-0" />
+          </Card>
+        </Link>
+
         <Button
           fullWidth
           size="lg"
-          variant="outline"
+          variant="danger"
           className="mt-8"
           isLoading={isLoggingOut}
           onClick={() => logout()}

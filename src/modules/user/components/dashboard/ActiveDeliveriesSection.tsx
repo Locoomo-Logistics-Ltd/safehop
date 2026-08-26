@@ -23,7 +23,7 @@ export function ActiveDeliveriesSection() {
         </h2>
         {active.length > MAX_VISIBLE && (
           <Link
-            href="/track"
+            href={ROUTES.trackList}
             className="flex items-center gap-0.5 text-[13px] font-medium text-brand-blue"
           >
             View All
