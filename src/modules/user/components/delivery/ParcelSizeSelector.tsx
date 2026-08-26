@@ -1,5 +1,7 @@
 "use client";
 
+import type { ComponentType } from "react";
+import { Mail, Backpack, ShoppingBasket, Package } from "lucide-react";
 import { CheckCircleIcon } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import type { ParcelSize } from "@/core/types";
@@ -8,14 +10,14 @@ interface SizeOption {
   value: ParcelSize;
   label: string;
   hint: string;
-  emoji: string;
+  icon: ComponentType<{ size?: number }>;
 }
 
 const SIZE_OPTIONS: SizeOption[] = [
-  { value: "small", label: "Small", hint: "Fits in an envelope", emoji: "✉️" },
-  { value: "medium", label: "Medium", hint: "Fits in a backpack", emoji: "🎒" },
-  { value: "large", label: "Large", hint: "Fits in a basket", emoji: "🧺" },
-  { value: "xl", label: "XL", hint: "Moving box size", emoji: "📦" },
+  { value: "small", label: "Small", hint: "Fits in an envelope", icon: Mail },
+  { value: "medium", label: "Medium", hint: "Fits in a backpack", icon: Backpack },
+  { value: "large", label: "Large", hint: "Fits in a basket", icon: ShoppingBasket },
+  { value: "xl", label: "XL", hint: "Moving box size", icon: Package },
 ];
 
 interface ParcelSizeSelectorProps {
@@ -49,7 +51,7 @@ export function ParcelSizeSelector({ value, onChange }: ParcelSizeSelectorProps)
                 className="absolute top-2.5 right-2.5 text-brand-blue"
               />
             )}
-            <span className="text-[20px]" aria-hidden="true">{option.emoji}</span>
+            <option.icon size={20} />
             <span className="font-semibold text-[14px] text-text-primary">{option.label}</span>
             <span className="text-[11px] text-text-muted leading-tight">{option.hint}</span>
           </button>

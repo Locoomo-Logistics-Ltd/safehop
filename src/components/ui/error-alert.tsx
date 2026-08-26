@@ -1,4 +1,4 @@
-import { AlertCircle, CheckCircle2 } from "lucide-react";
+import { AlertCircle, ArrowRight, CheckCircle2 } from "lucide-react";
 
 
 interface Props {
@@ -54,8 +54,9 @@ success
 
 {
 action &&
-<p className="text-xs mt-2 font-medium text-gray-600">
-👉 {action}
+<p className="text-xs mt-2 font-medium text-gray-600 flex items-center gap-1">
+<ArrowRight className="w-3 h-3 shrink-0" />
+{action}
 </p>
 }
 

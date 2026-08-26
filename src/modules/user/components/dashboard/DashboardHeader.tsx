@@ -20,7 +20,7 @@ export function DashboardHeader() {
   return (
     <div className="px-4 md:px-6 pt-5 md:pt-8">
       <p className="text-[15px] text-text-secondary">
-        {getGreeting()}, <span className="font-semibold text-text-primary">{user?.firstName ?? "there"}</span> 👋
+        {getGreeting()}, <span className="font-semibold text-text-primary">{user?.firstName ?? "there"}</span>
       </p>
       <p className="text-[13px] text-text-muted mt-0.5 mb-5">
         We&apos;re up and ready for you!

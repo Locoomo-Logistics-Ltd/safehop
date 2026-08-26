@@ -139,7 +139,7 @@ not a re-verification of any endpoint's behavior).
 | POST | `/auth/logout` | Logout | ✅ | Profile screens' "Log out" action | `authService.logout` via `useAuth().logout` | None. |
 | POST | `/auth/password-reset/request` | Forgot password | ✅ | `ForgotPasswordScreen` (`/forgot-password`) | `authService.requestPasswordReset` | None functionally. Leftover `console.log`/`console.error` debug statements should be removed before ship. |
 | POST | `/auth/password-reset/confirm` | Reset password | ✅ | `ResetPasswordScreen` (`/reset-password`) | `authService.confirmPasswordReset` | None — reads `token` from query string, correct password rules (12–128 chars, no composition), handles missing-token and success states. |
-| POST | `/auth/verify-email` | Email verification | 🟡 | none | `authService.verifyEmail` | Service method is wired correctly (correct payload/response), but **no `/verify-email` route/screen exists** to read `token` from the emailed link and call it. Dead code until that page is built. |
+| POST | `/auth/verify-email` | Email verification | ✅ | `VerifyEmailScreen` (`/verify-email`) | `authService.verifyEmail` via `useAuth().verifyEmail` | None — new 2026-08-26, closes the standing "build a /verify-email route/screen" item on this file's priority list. Reads `token` from the query string and fires the verify call automatically on mount (no further input needed, unlike the reset/invite equivalents). No "resend" endpoint exists per `docs/API.md`, so an invalid/expired/used token points onward to Login rather than offering a retry; a genuine network/server error does offer "Try Again". |
 | POST | `/users/invite` | Admin invites staff | ✅ | `InviteMemberForm`, Team Management (`/admin/team`) | `adminService.inviteStaff` via `useInviteStaff` | Errors surface via `getErrorMessage(error)` (generic `error.message` toast only) instead of `getFriendlyError(error)` (which extracts per-field `error.details`). A `400 VALIDATION_FAILED` on this form shows "Validation failed" with no indication of which field. |
 | POST | `/auth/invite/confirm` | Accept invite | ✅ | `AcceptInviteScreen` (`/accept-invite`) | `authService.confirmInvite` via `useAuth().confirmInvite` | None — handles `VALIDATION_FAILED` (field messages), `INVALID_INVITE_TOKEN`, and `RATE_LIMITED`. |
 
@@ -229,9 +229,10 @@ are new rows; the `payoutAccount*` fields on `GET
 field additions to already-documented endpoints, not new rows).
 **Every one has a row in this file** (verified by a 1:1 diff of every
 `### METHOD /api/v1/...` header in `API.md` against every table row
-here — no gaps either direction). **48 ✅ Fully Integrated**, **2 🟡
-Partially Integrated** (`/auth/verify-email`, `PATCH /nodes/:id`), **0
-❌ Not Integrated**, **1 ⚪ No UI Required Yet**.
+here — no gaps either direction). **49 ✅ Fully Integrated** (up from
+48 — `/auth/verify-email` closed 2026-08-26, see its row above), **1 🟡
+Partially Integrated** (`PATCH /nodes/:id`), **0 ❌ Not Integrated**,
+**1 ⚪ No UI Required Yet**.
 
 ### Recommended implementation priority
 
@@ -260,9 +261,9 @@ Partially Integrated** (`/auth/verify-email`, `PATCH /nodes/:id`), **0
    `useNodeOperatorApprovals`/`useRiderApprovals`) so `400
    VALIDATION_FAILED`'s per-field `error.details` actually reach the
    user instead of a generic toast. Still open.
-6. **Build a `/verify-email` route/screen** to actually call the
-   already-wired `authService.verifyEmail` — currently dead code. Still
-   open, unrelated to the 2026-08-12 pass.
+6. ~~**Build a `/verify-email` route/screen** to actually call the
+   already-wired `authService.verifyEmail` — currently dead code.~~
+   **Done (2026-08-26).** `VerifyEmailScreen` at `/verify-email`.
 7. Lower priority, still open: expose `name`/`address`/`capacity`/etc.
    editing on `PATCH /nodes/:id`'s "Manage" panel (only `status` is
    exercised today); add pagination to `GET /nodes` once the network

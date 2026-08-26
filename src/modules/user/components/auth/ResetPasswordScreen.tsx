@@ -7,7 +7,7 @@ import { Button, Input } from "@/components/ui";
 import { ErrorAlert } from "@/components/ui/error-alert";
 import { getFriendlyError } from "@/core/api/errors";
 import { ROUTES } from "@/core/config/constants";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, Link2, CheckCircle2, Check, Circle } from "lucide-react";
 import { useAuth } from "../../hooks/use-auth";
 
 /**
@@ -56,7 +56,9 @@ export function ResetPasswordScreen() {
     return (
       <div className="min-h-screen flex flex-col bg-bg-canvas">
         <div className="flex-1 px-6 py-10 max-w-105 w-full mx-auto text-center mt-10">
-          <span className="text-[40px] mb-4 block" aria-hidden="true">🔗</span>
+          <span className="w-14 h-14 rounded-full bg-status-warning-bg text-status-warning flex items-center justify-center mx-auto mb-4">
+            <Link2 size={24} />
+          </span>
           <h1 className="font-display text-[22px] font-bold text-text-primary mb-2">
             Link is missing or invalid
           </h1>
@@ -79,7 +81,9 @@ export function ResetPasswordScreen() {
     return (
       <div className="min-h-screen flex flex-col bg-bg-canvas">
         <div className="flex-1 px-6 py-10 max-w-105 w-full mx-auto text-center mt-10">
-          <span className="text-[40px] mb-4 block" aria-hidden="true">✅</span>
+          <span className="w-14 h-14 rounded-full bg-status-success-bg text-status-success flex items-center justify-center mx-auto mb-4">
+            <CheckCircle2 size={24} />
+          </span>
           <h1 className="font-display text-[22px] font-bold text-text-primary mb-2">
             Password updated
           </h1>
@@ -159,17 +163,20 @@ export function ResetPasswordScreen() {
             <div className="text-[13px] space-y-1 mt-2">
               <p
                 className={
-                  passwordChecks.length ? "text-green-600" : "text-status-danger"
+                  "flex items-center gap-1.5 " +
+                  (passwordChecks.length ? "text-green-600" : "text-status-danger")
                 }
               >
-                {passwordChecks.length ? "✓" : "○"} Between 12 and 128 characters
+                {passwordChecks.length ? <Check size={14} /> : <Circle size={14} />} Between 12 and
+                128 characters
               </p>
               <p
                 className={
-                  passwordChecks.match ? "text-green-600" : "text-status-danger"
+                  "flex items-center gap-1.5 " +
+                  (passwordChecks.match ? "text-green-600" : "text-status-danger")
                 }
               >
-                {passwordChecks.match ? "✓" : "○"} Passwords match
+                {passwordChecks.match ? <Check size={14} /> : <Circle size={14} />} Passwords match
               </p>
             </div>
           )}

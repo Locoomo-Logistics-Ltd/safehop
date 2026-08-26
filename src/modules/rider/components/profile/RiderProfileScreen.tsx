@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Bike } from "lucide-react";
 import { Card, Button } from "@/components/ui";
 import { TopBar } from "@/components/layout";
 import {
@@ -103,8 +104,8 @@ export function RiderProfileScreen() {
             (verification?.status === "active" ? "border-l-status-success" : "border-l-border-default")
           }
         >
-          <span className="w-9 h-9 rounded-[10px] bg-bg-subtle text-text-secondary flex items-center justify-center shrink-0 text-[16px]">
-            🛵
+          <span className="w-9 h-9 rounded-[10px] bg-bg-subtle text-text-secondary flex items-center justify-center shrink-0">
+            <Bike size={16} />
           </span>
           <div className="flex-1 min-w-0">
             <p className="text-[10px] text-text-muted">License Number</p>

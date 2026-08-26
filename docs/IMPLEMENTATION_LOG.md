@@ -4708,3 +4708,110 @@ after `kill`), unlike the possible cause of this session's earlier
 flakiness. **Not verified**: no interactive browser session was
 available (Claude in Chrome not connected), so the redesigned info card
 and form layout haven't been seen rendered.
+
+---
+
+## 2026-08-26 (most recent — Verify Email screen + a global Not Found page, then an app-wide emoji → lucide-icon sweep)
+
+**Feature 1**: closes a standing gap this file's own priority list has
+tracked since the 2026-08-12 audit — `authService.verifyEmail`
+(`POST /auth/verify-email`) was wired but had no route/screen to
+actually call it, so the `{FRONTEND_URL}/verify-email?token=...` link
+`docs/API.md` says every registration email contains led nowhere. New
+`VerifyEmailScreen` (`/verify-email`), modeled on the same "lone
+token-bearing link" family as `ResetPasswordScreen`/`AcceptInviteScreen`
+— missing-token, success, and invalid-token states all follow that
+established shape. The one real difference: verifying needs no further
+input from the person (just the token), so the verify call fires
+automatically on mount via a `useRef`-guarded `useEffect` (not a
+`setState`-in-effect pattern — the guard is a ref, and `mutate()` is an
+imperative network call, exactly what effects are for) instead of
+waiting on a form submit. `docs/API.md` confirms this is purely
+informational (`emailVerifiedAt` gates nothing) and that there's no
+resend endpoint — the invalid-token state points onward to Login rather
+than offering a "request a new one" action the API can't back. Added
+`ROUTES.verifyEmail`, the `INVALID_VERIFICATION_TOKEN` case to
+`getFriendlyError` (copy deliberately doesn't mention resending, per
+the above), and `verifyEmailError`/`isEmailVerified` to `useAuth()`'s
+return (the mutation existed but only exposed `mutate`/`isPending`).
+
+**Feature 2**: `src/app/not-found.tsx` — App Router's special file,
+renders for any unmatched URL at any depth. Branded (logo, a
+package-with-question-mark badge), and role-aware: "Go to Dashboard"
+resolves each logged-in role's real home route (`ROLE_HOME` map,
+simpler than `use-auth.ts`'s async NodeOperator-approval-check login
+redirect, since a 404's fallback doesn't need that precision — an
+unapproved NodeOperator landing on `nodeHome` still gets a correct
+waiting-for-approval view from that screen itself), falls back to
+`ROUTES.roleSelect` when logged out. Plus a "Go Back" action
+(`router.back()`).
+
+**Feature 3 (user-flagged mid-session)**: "I see you have a lot of
+emojis, can we change it to lucide icon all through the app." Surveyed
+first rather than guessing scope: `grep`'d every true pictograph emoji
+plus the `✓`/`○` text-symbol checklist bullets across `src/` — 64
+instances across 17 files, all addressed:
+
+- **Redundant decoration, just stripped** (`core/api/errors.ts`'s 25
+  `getFriendlyError` titles, `use-auth.ts`'s 3 and `use-admin-auth.ts`'s
+  2 toast titles, `DashboardHeader.tsx`'s trailing "👋"): `ErrorAlert`
+  already renders a lucide `AlertCircle`/`CheckCircle2` and
+  `Notification` already renders `CheckCircle`/`XCircle` based on
+  type/success — the emoji in the text was pure duplication once that
+  was noticed, not something needing a replacement icon. Bulk-stripped
+  most of these with a `perl` Unicode-aware pass across the three hook/
+  error files (verified nothing else in those files matched the emoji
+  ranges), fixed three stragglers by hand where the emoji used an
+  invisible variation-selector suffix (✍️/⚠️/⚙️ — base char + U+FE0F)
+  that the first regex pass didn't account for. `DashboardHeader.tsx`'s
+  wave was dropped outright, not replaced — no lucide icon reads as a
+  hand-wave inline in a greeting sentence, and forcing a mismatched one
+  in would be worse than no icon.
+- **Swapped for this app's own icon library** (`components/icons/`,
+  already the dominant icon source across every screen touched this
+  session) where an equivalent already existed: `MapPinIcon`
+  (`MapUnavailable.tsx`'s 🗺️, `SelectNodesScreen.tsx`'s and
+  `TrackingTimeline.tsx`'s 📍), `CameraIcon` (`QrScannerView.tsx`'s
+  📷), `MailIcon` (`ForgotPasswordScreen.tsx`'s ✉️).
+- **Imported directly from `lucide-react`** (already a project
+  dependency, already used this way in several auth screens for
+  `Eye`/`EyeOff`) where the custom set had no equivalent: `Link2`
+  (missing/invalid-link hero icon — `ResetPasswordScreen`,
+  `AcceptInviteScreen`, `VerifyEmailScreen`), `AlertTriangle`
+  (`AcceptInviteScreen`'s invalid-token state, `VerifyEmailScreen`'s),
+  `CheckCircle2` (success states), `Construction`
+  (`VerifyEmailScreen`'s generic-error state, replacing 🚧), `Bike`
+  (`RiderHomeScreen.tsx`'s offline card, `RiderProfileScreen.tsx`'s
+  Vehicle Details row — no bike icon exists in the custom set),
+  `ArrowRight` (`error-alert.tsx`'s "👉 {action}" line), `Check`/`Circle`
+  (the `{cond ? "✓" : "○"}` password-checklist pattern, identical
+  across `CreateAccountScreen`/`ResetPasswordScreen`/
+  `AcceptInviteScreen` — 3 files, 6 lines), `Mail`/`Backpack`/
+  `ShoppingBasket`/`Package` (`ParcelSizeSelector.tsx`'s four size
+  tiles — `SizeOption`'s `emoji: string` field became `icon:
+  ComponentType`).
+- **Deliberately not touched**: plain typographic arrow characters used
+  as button-label decoration (e.g. "Next step →") — an earlier, broader
+  regex pass briefly flagged ~30 more files matching those before this
+  scope was narrowed back to true emoji + the checklist symbols; those
+  aren't what "too many emojis" was describing, and swapping every "→"
+  for an `ArrowRight` icon everywhere would have been a much larger,
+  more disruptive, not-clearly-requested change.
+
+**Verified**: a repo-wide `grep` for the full emoji/variation-selector
+range plus `✓`/`○` returns nothing (confirmed clean, not just
+spot-checked). `npx tsc --noEmit` clean, `npx eslint src` clean (0
+errors, same 6 pre-existing unrelated warnings as every prior entry
+this session). A cleared-`.next` `npx next build` succeeds on the first
+try (51 routes + 1 — `/verify-email` and the special `/_not-found`
+both present). Dev-server smoke test: `/verify-email` (bare and with
+`?token=`), `/login`, `/forgot-password`, `/reset-password`,
+`/accept-invite`, `/create-account`, `/dashboard`, `/delivery/new`,
+`/rider/home`, `/rider/profile` all `200`; a deliberately bogus path
+returns `404` and renders the new not-found page; dev log grepped
+clean. Process hygiene explicitly re-checked this time (`ps aux`
+before and after each dev-server smoke test) — no stray `next dev`
+survived, so this session's build had no repeat of the flakiness the
+last two sessions' entries flagged. **Not verified**: no interactive
+browser session was available (Claude in Chrome not connected) — none
+of this session's three features have been seen actually rendered.

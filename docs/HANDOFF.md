@@ -6,7 +6,44 @@
 
 ## Current objective
 
-**Latest session (2026-08-26, most recent — Node Setup form
+**Latest session (2026-08-26, most recent — Verify Email screen + a
+Not Found page, then an app-wide emoji → lucide-icon sweep):** two
+explicit asks, then a third raised mid-session. (1) `VerifyEmailScreen`
+at `/verify-email` — closes a gap `docs/API_INTEGRATION_STATUS.md` has
+tracked since 2026-08-12 (`authService.verifyEmail` was wired, no
+screen ever called it). Same "lone token-bearing link" shape as
+`ResetPasswordScreen`/`AcceptInviteScreen`, but verifies automatically
+on mount since no further input is needed. No resend endpoint exists
+per `docs/API.md`, so an invalid token points onward to Login, not at a
+retry. (2) `src/app/not-found.tsx` — branded, role-aware ("Go to
+Dashboard" resolves the logged-in user's real home route; falls back
+to role-select when logged out), plus "Go Back". (3) "I see you have a
+lot of emojis, can we change it to lucide icon all through the app" —
+surveyed first (64 true-emoji/checklist-symbol instances across 17
+files), then fixed all of them: pure redundant decoration next to an
+already-icon-bearing `ErrorAlert`/`Notification` was stripped outright
+(`errors.ts`'s 25 titles, both auth hooks' toast titles); everything
+else became either this app's own `components/icons/` set where an
+equivalent existed, or a direct `lucide-react` import (already used
+this way in several files) where it didn't — `Link2`, `AlertTriangle`,
+`CheckCircle2`, `Construction`, `Bike`, `ArrowRight`, `Check`/`Circle`,
+and four parcel-size icons. Deliberately left plain "→" arrow
+characters in button labels alone — not what the ask was about, and a
+much bigger, undirected change.
+
+**Verified**: a repo-wide emoji grep now returns nothing. `tsc`/`eslint`
+clean, a cleared-`.next` build succeeds on the first try, dev-server
+smoke test across ten touched routes plus a deliberately bogus path
+(returns `404`, renders the new page) all pass, clean log. Process
+hygiene was explicitly re-checked this time (`ps aux` before/after) —
+no stray dev server, no repeat of the last two sessions' build
+flakiness. **Not verified**: no browser session was available (Claude
+in Chrome not connected) — nothing in this session has actually been
+seen rendered. Full detail in `docs/IMPLEMENTATION_LOG.md`'s matching
+entry; `docs/API_INTEGRATION_STATUS.md` updated (`/auth/verify-email`
+row now ✅, summary counts now 49 ✅ / 1 🟡).
+
+**Previous session (2026-08-26, later — Node Setup form
 beautified; `AddressGeocodeButton` explained for first-time users):**
 explicit ask — beautify Node Setup, and give the "Find Coordinates from
 Address" button real context since a first-time user has no way to

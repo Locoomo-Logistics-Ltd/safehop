@@ -29,7 +29,7 @@ export function useAuth() {
     onSuccess: () => {
       showNotification({
         type: "success",
-        title: "Account created 🎉",
+        title: "Account created",
         message: "Your Locoomo account is ready. Please log in.",
       });
       router.push(ROUTES.login);
@@ -45,7 +45,7 @@ export function useAuth() {
       queryClient.setQueryData(QUERY_KEYS.session, session);
       showNotification({
   type: "success",
-  title: `Welcome back, ${session.user.firstName}! 👋`,
+  title: `Welcome back, ${session.user.firstName}!`,
   message:
     "You are successfully logged in. Let's get your delivery moving.",
 });
@@ -92,7 +92,7 @@ export function useAuth() {
     onError: (error) => {
     showNotification({
       type: "error",
-      title: "Login failed 🔐",
+      title: "Login failed",
       message: getErrorMessage(error),
     });
   },
@@ -151,6 +151,8 @@ const confirmInviteMutation = useMutation({
     
     verifyEmail:verifyEmailMutation.mutate,
     isVerifyingEmail:verifyEmailMutation.isPending,
+    verifyEmailError:verifyEmailMutation.error,
+    isEmailVerified:verifyEmailMutation.isSuccess,
 
     confirmInvite: confirmInviteMutation.mutate,
     isConfirmingInvite: confirmInviteMutation.isPending,

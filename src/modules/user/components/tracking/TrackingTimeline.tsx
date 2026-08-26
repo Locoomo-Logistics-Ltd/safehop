@@ -1,5 +1,6 @@
 import { cn } from "@/lib/utils";
 import { formatRelativeDateTime } from "@/lib/format";
+import { MapPinIcon } from "@/components/icons";
 import type { TrackingEvent } from "@/core/types";
 
 interface TrackingTimelineProps {
@@ -54,7 +55,10 @@ export function TrackingTimeline({ events }: TrackingTimelineProps) {
                 {event.description}
               </p>
               {event.location && (
-                <p className="text-[12px] text-text-muted mt-1">📍 {event.location}</p>
+                <p className="flex items-center gap-1 text-[12px] text-text-muted mt-1">
+                  <MapPinIcon size={11} className="shrink-0" />
+                  {event.location}
+                </p>
               )}
             </div>
           </div>

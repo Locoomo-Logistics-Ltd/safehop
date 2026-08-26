@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { MapPinIcon } from "@/components/icons";
 
 interface MapUnavailableProps {
   /** Kept selectable/announced for screen readers and keyboard users even without a visual map. */
@@ -24,8 +25,8 @@ export function MapUnavailable({ children, className }: MapUnavailableProps) {
         "w-full h-full rounded-[18px] border border-dashed border-border-strong bg-bg-subtle flex flex-col items-center justify-center px-6 text-center gap-2"
       }
     >
-      <span className="text-[22px]" aria-hidden="true">
-        🗺️
+      <span className="w-10 h-10 rounded-full bg-bg-card text-text-muted flex items-center justify-center">
+        <MapPinIcon size={18} />
       </span>
       <p className="text-[13px] font-semibold text-text-secondary">Map unavailable</p>
       <p className="text-[12px] text-text-muted max-w-[280px] leading-[1.5]">

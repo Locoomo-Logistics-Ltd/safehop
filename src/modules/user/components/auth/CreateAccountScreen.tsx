@@ -8,7 +8,7 @@ import { Button, Input } from "@/components/ui";
 import { useAuth } from "@/modules/user/hooks/use-auth";
 import { getFriendlyError } from "@/core/api/errors";
 import { ROUTES } from "@/core/config/constants";
-import { Eye, EyeOff, User, Bike, Building2 } from "lucide-react";
+import { Eye, EyeOff, User, Bike, Building2, Check, Circle } from "lucide-react";
 import { ErrorAlert } from "@/components/ui/error-alert";
 import type { UserRole } from "@/core/types";
 import { OnboardingLayout } from "./OnboardingLayout";
@@ -241,11 +241,11 @@ const isPasswordValid = passwordChecks.length && passwordChecks.match;
    
      {password.length > 0 && (
       <div className="text-[13px] space-y-1 mt-2">
-  <p className={passwordChecks.length ? "text-green-600" : "text-status-danger"}>
-    {passwordChecks.length ? "✓" : "○"} At least 12 characters
+  <p className={"flex items-center gap-1.5 " + (passwordChecks.length ? "text-green-600" : "text-status-danger")}>
+    {passwordChecks.length ? <Check size={14} /> : <Circle size={14} />} At least 12 characters
   </p>
-  <p className={passwordChecks.match ? "text-green-600" : "text-status-danger"}>
-    {passwordChecks.match ? "✓" : "○"} Passwords match
+  <p className={"flex items-center gap-1.5 " + (passwordChecks.match ? "text-green-600" : "text-status-danger")}>
+    {passwordChecks.match ? <Check size={14} /> : <Circle size={14} />} Passwords match
   </p>
 </div>
      )}

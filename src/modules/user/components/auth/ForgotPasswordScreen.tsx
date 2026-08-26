@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { Button, Input } from "@/components/ui";
 import { ErrorAlert } from "@/components/ui/error-alert";
+import { MailIcon } from "@/components/icons";
 import { getFriendlyError } from "@/core/api/errors";
 import { ROUTES } from "@/core/config/constants";
 import { useAuth } from "../../hooks/use-auth";
@@ -50,7 +51,9 @@ const handleRequestReset = () => {
     return (
       <div className="min-h-screen flex flex-col bg-bg-canvas">
         <div className="flex-1 px-6 py-10 max-w-105 w-full mx-auto text-center mt-10">
-          <span className="text-[40px] mb-4 block" aria-hidden="true">✉️</span>
+          <span className="w-14 h-14 rounded-full bg-status-info-bg text-brand-blue flex items-center justify-center mx-auto mb-4">
+            <MailIcon size={24} />
+          </span>
           <h1 className="font-display text-[22px] font-bold text-text-primary mb-2">Check your email</h1>
           <p className="text-[14px] text-text-secondary mb-6 leading-relaxed">
             If <strong>{email}</strong> is registered, we&apos;ve sent a password reset link. 

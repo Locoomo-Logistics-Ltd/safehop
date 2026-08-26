@@ -8,6 +8,8 @@ export const ROUTES = {
   forgotPassword: "/forgot-password",
   resetPassword: "/reset-password",
   acceptInvite: "/accept-invite",
+  /** Where the emailed verification link lands — `?token=...`, `POST /auth/verify-email`. Informational only per docs/API.md; nothing is gated on it. */
+  verifyEmail: "/verify-email",
   terms: "/terms",
   privacy: "/privacy",
 

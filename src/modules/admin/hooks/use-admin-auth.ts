@@ -23,7 +23,7 @@ export function useAdminAuth() {
       queryClient.setQueryData(QUERY_KEYS.session, session);
       showNotification({
         type: "success",
-        title: `Welcome back, ${session.user.firstName} 👋`,
+        title: `Welcome back, ${session.user.firstName}`,
         message: "You're signed in to the admin console.",
       });
       router.push(ROUTES.adminDashboard);
@@ -31,7 +31,7 @@ export function useAdminAuth() {
     onError: (error) => {
       showNotification({
         type: "error",
-        title: "Login failed 🔐",
+        title: "Login failed",
         message: getErrorMessage(error),
       });
     },

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button, ProgressSteps } from "@/components/ui";
 import { ErrorAlert } from "@/components/ui/error-alert";
 import { TopBar } from "@/components/layout";
+import { MapPinIcon } from "@/components/icons";
 import { useNodes } from "@/modules/user/hooks/use-nodes";
 import { useGeolocation } from "@/hooks/use-geolocation";
 import { useDeliveryDraftStore } from "@/store/delivery-draft.store";
@@ -164,8 +165,9 @@ export function SelectNodesScreen() {
         />
 
         {permissionGranted === false && (
-          <p className="text-[11px] text-text-muted mt-2">
-            📍 Location access denied; showing Lagos by default. Distances may be approximate.
+          <p className="flex items-start gap-1 text-[11px] text-text-muted mt-2">
+            <MapPinIcon size={12} className="shrink-0 mt-0.5" />
+            Location access denied; showing Lagos by default. Distances may be approximate.
           </p>
         )}
 

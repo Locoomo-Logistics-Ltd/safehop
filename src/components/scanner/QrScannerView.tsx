@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Scanner, type IDetectedBarcode } from "@yudiel/react-qr-scanner";
+import { CameraIcon } from "@/components/icons";
 import { cn } from "@/lib/utils";
 
 interface QrScannerViewProps {
@@ -26,7 +27,9 @@ export function QrScannerView({ onScan, isPaused }: QrScannerViewProps) {
   if (cameraError) {
     return (
       <div className="absolute inset-0 flex flex-col items-center justify-center px-8 text-center gap-3">
-        <span className="text-[32px]" aria-hidden="true">📷</span>
+        <span className="w-14 h-14 rounded-full bg-white/10 text-white flex items-center justify-center">
+          <CameraIcon size={26} />
+        </span>
         <p className="text-white font-semibold text-[15px]">Camera unavailable</p>
         <p className="text-white/60 text-[13px] leading-[1.6] max-w-[280px]">{cameraError}</p>
       </div>

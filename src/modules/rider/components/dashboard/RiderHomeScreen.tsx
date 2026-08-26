@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { Bike } from "lucide-react";
 import { RootTopBar } from "@/components/layout";
 import { Card } from "@/components/ui";
 import { BriefcaseIcon } from "@/components/icons";
@@ -83,7 +84,9 @@ export function RiderHomeScreen() {
         {/* If offline, show a prompt to go online */}
         {availability === "offline" && (
           <Card padding="md" className="text-center py-6">
-            <p className="text-[28px] mb-2" aria-hidden="true">🛵</p>
+            <span className="w-11 h-11 rounded-full bg-bg-subtle text-text-muted inline-flex items-center justify-center mb-2">
+              <Bike size={20} />
+            </span>
             <p className="font-semibold text-[14px] text-text-primary mb-1">
               You&apos;re offline
             </p>
