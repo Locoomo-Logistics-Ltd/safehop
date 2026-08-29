@@ -13,7 +13,8 @@ export interface User {
   firstName: string;
   lastName: string;
   email: string;
-  phone: string;
+  /** `null` until set via `PATCH /users/me` — registration (password or Google) never collects it. See docs/API.md. */
+  phone: string | null;
   role: UserRole;
   status?: string;
   emailVerifiedAt?: string | null;
@@ -50,12 +51,17 @@ export interface InviteConfirmPayload {
  * Shared self-registration payload for `POST /auth/register` — one
  * endpoint for Consumer, Rider, and NodeOperator per docs/API.md,
  * differing only in `role` (optional, defaults to `consumer`).
+ * `phone` is deliberately absent — per the current docs/API.md the
+ * backend no longer reads it on this route at all (dropped from both
+ * the request schema and the response, which now always comes back
+ * `phone: null`). The only route that sets `User.phone` is
+ * `PATCH /users/me` (`UpdateProfilePayload` below) — see
+ * `CompleteProfileScreen`, shown post-login whenever it's still null.
  */
 export interface RegisterConsumerPayload {
   firstName: string;
   lastName: string;
   email: string;
-  phone: string;
   password: string;
   passwordConfirmation: string;
   consentAccepted: boolean;
@@ -65,6 +71,26 @@ export interface RegisterConsumerPayload {
 export interface LoginConsumerPayload {
  email: string;
   password: string;
+}
+
+/**
+ * `POST /auth/google` per docs/API.md — one endpoint for both signup
+ * and login, distinguished server-side by whether the verified Google
+ * account is already linked to a user. `role`/`consentAccepted` only
+ * matter when this turns out to create a new account; both are
+ * ignored on a plain login (existing `googleId`).
+ */
+export interface GoogleAuthPayload {
+  /** Raw ID token from Google Identity Services — never a client-asserted email/name. */
+  idToken: string;
+  role?: Extract<UserRole, "consumer" | "node_operator" | "rider">;
+  /** Required `true` only when this creates a new account; omit/false when expecting a login. */
+  consentAccepted?: boolean;
+}
+
+/** `PATCH /users/me` per docs/API.md — the one thing registration (password or Google) never collects. */
+export interface UpdateProfilePayload {
+  phone: string;
 }
 
 // Rider and NodeOperator self-registration now go through the same

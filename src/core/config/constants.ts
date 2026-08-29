@@ -8,6 +8,8 @@ export const ROUTES = {
   forgotPassword: "/forgot-password",
   resetPassword: "/reset-password",
   acceptInvite: "/accept-invite",
+  /** Shown post-login (password or Google) whenever `phone` is still `null` — `PATCH /users/me`. See docs/API.md. */
+  completeProfile: "/complete-profile",
   /** Where the emailed verification link lands — `?token=...`, `POST /auth/verify-email`. Informational only per docs/API.md; nothing is gated on it. */
   verifyEmail: "/verify-email",
   terms: "/terms",

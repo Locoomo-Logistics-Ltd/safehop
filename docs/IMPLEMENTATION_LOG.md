@@ -4815,3 +4815,214 @@ survived, so this session's build had no repeat of the flakiness the
 last two sessions' entries flagged. **Not verified**: no interactive
 browser session was available (Claude in Chrome not connected) — none
 of this session's three features have been seen actually rendered.
+
+---
+
+## 2026-08-28
+
+**Feature**: Google Authentication (`POST /auth/google`) — signup and
+login, plus the `PATCH /users/me` phone-completion step it (and now
+plain email registration too) requires, since `docs/API.md` dropped
+`phone` from `POST /auth/register` entirely in this same update.
+
+**APIs integrated**:
+- `POST /auth/google` — `authService.loginWithGoogle(payload)`. Sets
+  session cookies immediately (unlike `registerConsumer`, this logs the
+  user in on first signup too) and persists the returned session the
+  same way `loginConsumer` does.
+- `GET /users/me` — `usersService.getMe()`. Wired for completeness per
+  `docs/API.md` documenting it alongside `PATCH` below, but nothing
+  calls it yet (see `docs/API_INTEGRATION_STATUS.md`'s row for why this
+  isn't treated as a screenless-integration violation).
+- `PATCH /users/me` — `usersService.updateMe({ phone })`, via
+  `useCompleteProfile()`.
+
+**Files created**:
+- `src/core/api/session-storage.ts` — `persistSession`/
+  `readPersistedSession`/`clearPersistedSession`, pulled out of
+  `auth.service.ts` so `use-complete-profile.ts` can update the cached
+  session's `phone` too without a circular import back into the auth
+  service.
+- `src/core/api/services/users.service.ts` — `usersService`
+  (`getMe`/`updateMe`).
+- `src/modules/user/lib/auth-routing.ts` — `resolvePostAuthRoute(user)`,
+  the role → destination redirect map extracted from `use-auth.ts`'s
+  `loginMutation.onSuccess` so `loginWithGoogle` and
+  `CompleteProfileScreen` don't each duplicate the NodeOperator
+  approval-status lookup.
+- `src/modules/user/hooks/use-complete-profile.ts` — wraps
+  `usersService.updateMe`, updates the Zustand store + localStorage +
+  TanStack Query cache on success, then routes via
+  `resolvePostAuthRoute`.
+- `src/modules/user/components/auth/GoogleAuthButton.tsx` — loads
+  Google Identity Services' script (`https://accounts.google.com/gsi/client`)
+  and renders Google's own button via `google.accounts.id.renderButton`;
+  hands the raw `credential` (signed ID token) to a caller-supplied
+  `onCredential(idToken)`. Degrades to a disabled "unavailable" button
+  when `NEXT_PUBLIC_GOOGLE_CLIENT_ID` is unset, matching this app's
+  existing Geoapify/Google Maps key-degradation pattern.
+- `src/modules/user/components/auth/CompleteProfileScreen.tsx` +
+  `src/app/complete-profile/page.tsx` (`/complete-profile`) — single
+  phone-number field, `OnboardingLayout` shell, redirects to `/login` if
+  there's no session (only reachable right after a login/signup already
+  populated one).
+- `src/lib/phone.ts` — `formatNigerianPhone`/`isValidPhone`, moved out
+  of `CreateAccountScreen.tsx`'s local copy so `CompleteProfileScreen`
+  doesn't duplicate it.
+
+**Files changed**:
+- `src/core/types/user.types.ts` — `User.phone` is now `string | null`
+  (was `string`); `RegisterConsumerPayload` no longer has `phone` (the
+  backend stopped reading it on `POST /auth/register`, per the same
+  `docs/API.md` update — every account now starts `phone: null`
+  regardless of role or auth method); added `GoogleAuthPayload`
+  (`idToken`, optional `role`/`consentAccepted`) and
+  `UpdateProfilePayload` (`phone`).
+- `src/core/api/endpoints.ts` — added `auth.google` and `users.me`.
+- `src/core/api/services/auth.service.ts` — `loginWithGoogle` replaced
+  a `NOT_IMPLEMENTED` stub that pointed at "the NextAuth Google sign-in
+  flow" (never built — see Decisions below) with the real
+  `POST /auth/google` call; `persistSession`/`readPersistedSession`/
+  `clearPersistedSession` now imported from the new
+  `core/api/session-storage.ts` instead of being defined locally.
+- `src/core/api/services/index.ts` — exports `usersService`.
+- `src/core/api/errors.ts` — three new `getFriendlyError` cases:
+  `INVALID_GOOGLE_TOKEN`, `CONSENT_REQUIRED`, `PROFILE_INCOMPLETE`.
+- `src/core/config/env.ts` / `.env.example` / `.env.local` — added
+  `NEXT_PUBLIC_GOOGLE_CLIENT_ID` (`env.googleSignInClientId`) — a
+  public client ID for the GIS ID-token flow, distinct from the
+  existing (unused) `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` NextAuth
+  vars, which needed a server-side secret this flow never uses.
+- `src/core/config/constants.ts` — added `ROUTES.completeProfile`.
+- `src/modules/user/hooks/use-auth.ts` — `loginMutation.onSuccess`
+  now checks `session.user.phone` first (routes to
+  `ROUTES.completeProfile` if `null`) before calling the extracted
+  `resolvePostAuthRoute`; added `loginWithGoogleMutation` with the same
+  phone gate.
+- `src/modules/user/components/auth/RoleSelectScreen.tsx` — the single
+  "Continue →" button is now `GoogleAuthButton` (`text="signup_with"`,
+  `consentAccepted: true` — this is the signup surface) + the required
+  "By continuing with Google, you agree to our Terms of Service and
+  Privacy Policy" text + a divider + "Continue with Email" (the old
+  button, renamed, same `handleContinue`).
+- `src/modules/user/components/auth/LoginScreen.tsx` — added
+  `GoogleAuthButton` (`text="signin_with"`, no consent/role) above a
+  divider, ahead of the existing email/password fields.
+  `CONSENT_REQUIRED` (Google identity has no linked account yet) gets a
+  tailored inline message + "Sign up with Google instead" link, instead
+  of the generic `getFriendlyError` copy alone.
+- `src/modules/user/components/auth/CreateAccountScreen.tsx` — removed
+  the `phone` field, its local `formatNigerianPhone` copy, and `phone`
+  from the `registerConsumer(...)` call — `POST /auth/register` no
+  longer reads it (see the type-file entry above); the disabled-button
+  condition no longer checks it either.
+- `ProfileScreen.tsx` / `NodeProfileScreen.tsx` /
+  `RiderProfileScreen.tsx` / `AdminProfileScreen.tsx` — each `Row`'s
+  `value` prop widened from `string` to `React.ReactNode`; the Phone row
+  now renders an "Add phone number" link to `/complete-profile` when
+  `user.phone` is `null` instead of rendering nothing/`null` as text.
+
+**Decisions**:
+- **Google Identity Services, not `next-auth`.** `package.json` already
+  had `next-auth` as a dependency and `env.ts` already had
+  `nextAuthUrl`/`googleClientId`/`googleClientSecret` fields, but no
+  `[...nextauth]` route, `auth.ts` config, or `SessionProvider` existed
+  anywhere — confirmed by grep before writing any code. `docs/API.md`
+  is explicit that the frontend's job is only to obtain a signed ID
+  token via Google Identity Services client-side and hand it to
+  `POST /auth/google`; the backend does its own verification against
+  Google's keys. Building a NextAuth server-side OAuth exchange would
+  have introduced a second, parallel session system this app's cookie-
+  based architecture doesn't need and `docs/API.md` doesn't call for —
+  so the existing NextAuth vars/dependency are left as-is (unused
+  scaffolding, not touched) and a new public-only var,
+  `NEXT_PUBLIC_GOOGLE_CLIENT_ID`, backs the GIS flow instead.
+- **The phone-completion gate is universal, not Google-only.** The
+  `docs/API.md` update that added `POST /auth/google` also removed
+  `phone` from `POST /auth/register` — every account, password or
+  Google, now starts `phone: null`. `CompleteProfileScreen` and the
+  `session.user.phone` check in `use-auth.ts` therefore apply to both
+  `loginMutation` and `loginWithGoogleMutation`, not a Google-specific
+  branch — one screen, one gate, matching what the backend contract
+  actually does rather than only what this task's Google-specific
+  framing described.
+- **Google's own rendered button, not a custom-styled one.**
+  `GoogleIcon.tsx` already existed (unused, pre-dating this session) as
+  if for a custom button, but Google Identity Services' ID-token flow
+  only ever hands back a credential through its own button/One Tap UI
+  — there's no "call this function and get a token" API for a fully
+  custom trigger. `GoogleAuthButton` uses `renderButton`'s own styling
+  options (`theme:"outline"`, `shape:"pill"`, sized to its container)
+  to fit in reasonably rather than building a fake button that
+  forwards a synthetic click to a hidden real one.
+- **`consentAccepted` is always `true` from `RoleSelectScreen`, always
+  omitted from `LoginScreen`.** Per `docs/API.md`, it's only read when
+  the call turns out to create a new account, and is ignored on a
+  login. `RoleSelectScreen` is the signup surface — the ToS/Privacy
+  text sits directly under the button — so it can safely always send
+  `true` without knowing ahead of time whether the Google account is
+  actually new. `LoginScreen` never shows that consent copy, so it
+  never asserts consent on the caller's behalf; a first-time Google
+  identity there correctly surfaces `400 CONSENT_REQUIRED` and points
+  the user at signup instead.
+- **`PATCH /nodes/... `-style deep-linking from `PROFILE_INCOMPLETE`
+  was deliberately not built.** `getFriendlyError` has a case for it
+  (points at completing the profile), but `NodeSetupScreen`/
+  `RiderVerificationScreen`'s onboarding submit handlers don't
+  specifically detect that code and link to `/complete-profile` — they
+  render the same generic `ErrorAlert` every other error code does.
+  Flagged as a known limitation, not fixed, to keep this session
+  scoped to the Google-auth task rather than touching two onboarding
+  screens that were already working.
+
+**Security considerations**:
+- The frontend never sees a Google client secret — only the public
+  `NEXT_PUBLIC_GOOGLE_CLIENT_ID` ships to the browser, same trust level
+  as the existing Geoapify/Google Maps keys. Token verification (
+  signature, audience, expiry, email-verified) happens entirely
+  server-side per `docs/API.md`; this app just relays the raw
+  `credential` string unmodified.
+- No new client-side storage was introduced — the cached session in
+  `localStorage["locoomo_session"]` still holds only the same `User`
+  shape it always has (id/role/email/phone/etc.), never a token; actual
+  auth remains the existing httpOnly session cookies, unchanged.
+- Classic OAuth "state" CSRF protection doesn't map cleanly onto this
+  flow shape: GIS's ID-token flow isn't a redirect-based authorization-
+  code exchange, so there's no client-held `state` parameter to
+  validate. What actually prevents a forged/replayed credential is that
+  Google's ID token is signed with a key this app never has access to,
+  and the backend independently re-verifies that signature — the
+  client could not construct a valid credential even if it tried.
+  Documented here as a deliberate design read of the flow, rather than
+  left for a future reviewer to flag as a missing CSRF control.
+- Same cookie/session architecture as every other auth route
+  (`credentials:"include"`, `skipAuth:true` on the initial call) —
+  nothing new needed for CSRF, since `POST /auth/google` goes through
+  the identical `httpClient` every other auth call already uses.
+
+**Verified**: `npx tsc --noEmit` clean. `npx eslint` on every touched
+file clean (0 errors; the one pre-existing `GoogleAuthButton.tsx`
+`eslint-disable` comment was removed after confirming the rule it
+guarded against wasn't actually firing). A cleared-`.next`
+`npx next build` succeeds on the first try — 54 routes including the
+new `/complete-profile`. Dev-server smoke test: `/role-select`,
+`/login`, `/complete-profile`, `/create-account` all `200`; response
+HTML confirms both auth screens render the Google button's disabled
+"unavailable" fallback correctly (no `NEXT_PUBLIC_GOOGLE_CLIENT_ID` set
+in this sandbox's `.env.local`) alongside "Continue with Email" /
+"or continue with email", and `RoleSelectScreen`'s consent text
+renders. Dev log grepped clean, dev server stopped afterward (process
+hygiene checked).
+
+**Not verified**: no interactive browser session was available (Claude
+in Chrome not connected in this session) — the actual Google OAuth
+popup flow, a real ID token round-tripping to a real backend, the
+`CONSENT_REQUIRED`/`INVALID_GOOGLE_TOKEN` error paths, and
+`CompleteProfileScreen`'s phone-submit round trip have **not** been
+exercised end-to-end against a live backend or a real Google Cloud
+OAuth client. This requires: a real Google Cloud OAuth 2.0 Client ID
+(Web application type, with this app's origin(s) in "Authorized
+JavaScript origins") in `NEXT_PUBLIC_GOOGLE_CLIENT_ID`, and a live
+backend implementing `POST /auth/google`/`GET`/`PATCH /users/me`
+exactly as `docs/API.md` documents. Same standing caveat as every other
+"not live-verified" entry in this file.

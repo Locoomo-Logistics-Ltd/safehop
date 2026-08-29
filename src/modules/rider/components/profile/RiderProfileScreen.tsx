@@ -85,7 +85,17 @@ export function RiderProfileScreen() {
         <Card padding="none" className="overflow-hidden mb-6">
           <Row icon={<MailIcon size={15} />} label="Full Name" value={`${user.firstName} ${user.lastName}`} />
           <div className="h-px bg-border-default" />
-          <Row icon={<PhoneIcon size={15} />} label="Phone Number" value={user.phone} />
+          <Row
+            icon={<PhoneIcon size={15} />}
+            label="Phone Number"
+            value={
+              user.phone ?? (
+                <Link href={ROUTES.completeProfile} className="text-brand-blue font-semibold">
+                  Add phone number
+                </Link>
+              )
+            }
+          />
           <div className="h-px bg-border-default" />
           <Row icon={<MailIcon size={15} />} label="Email Address" value={user.email} />
         </Card>
@@ -252,7 +262,7 @@ export function RiderProfileScreen() {
   );
 }
 
-function Row({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+function Row({ icon, label, value }: { icon: React.ReactNode; label: string; value: React.ReactNode }) {
   return (
     <div className="flex items-center gap-3 p-3.5">
       <span className="w-8 h-8 rounded-[9px] bg-bg-subtle text-text-muted flex items-center justify-center shrink-0">

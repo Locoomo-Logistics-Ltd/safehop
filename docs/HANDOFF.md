@@ -6,7 +6,100 @@
 
 ## Current objective
 
-**Latest session (2026-08-26, most recent — Verify Email screen + a
+**Latest session (2026-08-28 — Google Authentication):** explicit ask
+— integrate `docs/API.md`'s new `POST /auth/google` (Google Identity
+Services sign-in/signup) end-to-end: Role Select gets "Continue with
+Google" / "Continue with Email" side by side, Login gets its own
+"Continue with Google", a Google signup logs the user in immediately
+(no separate login step), and — since the same `docs/API.md` update
+also dropped `phone` from `POST /auth/register` for *every* account,
+not just Google's — a new `/complete-profile` screen (`PATCH
+/users/me`) is what any login (password or Google) with `phone: null`
+hits before continuing to its normal destination. Full technical
+writeup in `docs/IMPLEMENTATION_LOG.md`'s matching entry; this section
+covers what the next engineer actually needs to know.
+
+**What's done**: `GoogleAuthButton` (wraps Google Identity Services'
+own rendered button — this flow only ever returns an ID token through
+GIS's own UI, not a function call a custom button could trigger) on
+`RoleSelectScreen` (`consentAccepted: true`, since that's the signup
+surface with the ToS/Privacy text right under it) and `LoginScreen`
+(no consent/role sent — a first-time Google identity there correctly
+gets `400 CONSENT_REQUIRED` and a "Sign up with Google instead" link,
+not a silent auto-signup). `authService.loginWithGoogle` replaces the
+old `NOT_IMPLEMENTED` stub that pointed at "the NextAuth Google sign-in
+flow" — that flow was never built (see "Important implementation
+decisions" below for why GIS was used instead of the `next-auth`
+dependency already sitting unused in `package.json`). `usersService`
+(`getMe`/`updateMe`) wraps the new `GET`/`PATCH /users/me`;
+`CompleteProfileScreen` (`/complete-profile`) is the one screen that
+calls `updateMe`, reached via a `session.user.phone === null` check
+added to both `loginMutation.onSuccess` and the new
+`loginWithGoogleMutation.onSuccess` in `use-auth.ts`. Both mutations'
+non-phone-gate redirect logic was extracted into a shared
+`resolvePostAuthRoute(user)` (`modules/user/lib/auth-routing.ts`) so
+the NodeOperator-approval-status lookup isn't duplicated a third time.
+All four roles' Profile screens now show "Add phone number" (links to
+`/complete-profile`) instead of a blank value when `phone` is `null`.
+`CreateAccountScreen`'s phone field is gone — `POST /auth/register` no
+longer reads it per the updated `docs/API.md`.
+
+**What remains**: **Not exercised against a live backend or a real
+Google Cloud OAuth client at all** — no real `NEXT_PUBLIC_GOOGLE_CLIENT_ID`
+was available this session (left empty in `.env`/`.env.local`, same
+degrade-gracefully posture as the Geoapify/Google Maps keys — the
+button renders a disabled "unavailable" state instead of crashing).
+Before treating any of this as production-ready: (1) create a real
+Google Cloud OAuth 2.0 Client ID (Web application type; add this app's
+actual origin(s), including the dev-proxy origin from `.env.local`'s
+`API_PROXY_TARGET` setup, under "Authorized JavaScript origins" — no
+redirect URI needed, GIS's popup flow doesn't use one), set it as
+`NEXT_PUBLIC_GOOGLE_CLIENT_ID`; (2) confirm a live backend actually
+implements `POST /auth/google` and `GET`/`PATCH /users/me` exactly as
+`docs/API.md` documents (response shape, cookie-setting-on-signup
+behavior, the three new error codes); (3) do a full interactive browser
+pass — Claude in Chrome wasn't connected this session, so **nothing in
+this feature has been seen actually rendered or clicked**, only
+curl'd/grepped. `NodeSetupScreen`/`RiderVerificationScreen` don't
+specifically deep-link to `/complete-profile` when their onboarding
+submit hits `400 PROFILE_INCOMPLETE` (generic `getFriendlyError` copy
+only) — a reasonable follow-up, deliberately left out to keep this
+session scoped to the Google-auth task.
+
+**Backend dependencies**: `POST /auth/google` (ID-token verification
+against Google's own keys, `role`/`consentAccepted` handling exactly as
+documented, session cookies set even on first signup), `GET`/`PATCH
+/users/me` (phone validation: `+` optional, 7–15 digits, per the
+existing `docs/API.md` rule reused from the old register-payload
+table). None of these were assumed beyond what `docs/API.md` states —
+if the real backend's `POST /auth/google` response shape differs (e.g.
+a different field for the ID token, or a nested response envelope),
+`mapSessionResponse` in `auth.service.ts` is the first place to check,
+same as every other auth call.
+
+**API limitations / design notes worth knowing**: `consentAccepted` is
+read only when the call turns out to create a new account and is
+silently ignored on a login — this app leans on that by always sending
+`true` from the signup surface without knowing ahead of time which
+outcome it'll be. There's no way to detect client-side whether a given
+Google identity will result in a signup vs. a login before calling the
+endpoint — the UI (button copy, consent text placement) is the only
+signal given to the user, matching what `docs/API.md` itself
+describes as one endpoint for both outcomes. `EMAIL_ALREADY_REGISTERED`
+on this route means "this email belongs to a different, non-Google
+account — there is no auto-link" per `docs/API.md`; the existing
+generic copy ("try logging in instead") already covers this correctly,
+no Google-specific message was added.
+
+**Verified**: `tsc`/`eslint` clean (0 errors), a cleared-`.next` build
+succeeds (54 routes, `/complete-profile` present), dev-server `curl`
+smoke test across `/role-select`/`/login`/`/complete-profile`/
+`/create-account` all `200` with the expected fallback copy in the
+response HTML. **Not verified**: see "What remains" above — this is
+entirely unverified against a live Google OAuth client or a live
+backend, and unverified in an actual browser.
+
+**Previous session (2026-08-26, most recent — Verify Email screen + a
 Not Found page, then an app-wide emoji → lucide-icon sweep):** two
 explicit asks, then a third raised mid-session. (1) `VerifyEmailScreen`
 at `/verify-email` — closes a gap `docs/API_INTEGRATION_STATUS.md` has
@@ -2301,6 +2394,12 @@ concept at all, so it may have no real equivalent.
 | File | Why it matters |
 |---|---|
 | `docs/API.md` | Source of truth for the real backend contract — read this before trusting `core/api/endpoints.ts` for anything Admin-related |
+| `src/modules/user/components/auth/GoogleAuthButton.tsx` | New 2026-08-28 — wraps Google Identity Services' own rendered button (`accounts.id.renderButton`); degrades to a disabled state without `NEXT_PUBLIC_GOOGLE_CLIENT_ID`. Read this before touching either auth screen's Google entry point |
+| `src/core/api/services/auth.service.ts` | `loginWithGoogle` (new 2026-08-28, real `POST /auth/google`) replaces a stub that pointed at an unbuilt NextAuth flow; `loginAdmin` — the one Admin auth method that exists |
+| `src/modules/user/lib/auth-routing.ts` | New 2026-08-28 — `resolvePostAuthRoute(user)`, the shared role→destination redirect map used by password login, Google login/signup, and `CompleteProfileScreen` alike |
+| `src/modules/user/components/auth/CompleteProfileScreen.tsx`, `src/app/complete-profile/page.tsx` | New 2026-08-28 — `PATCH /users/me`'s only UI trigger; reached whenever a just-logged-in session's `phone` is `null` (password or Google, since `POST /auth/register` no longer collects it either) |
+| `src/core/api/session-storage.ts` | New 2026-08-28 — `persistSession`/`readPersistedSession`/`clearPersistedSession`, pulled out of `auth.service.ts` so `use-complete-profile.ts` can update the cached session without a circular import |
+| `src/components/layout/AuthGuard.tsx` | Now supports `allowedRoles`; `(admin)/layout.tsx` is the only current caller that passes it |
 | `src/core/api/services/admin.service.ts` | Read this first for any Admin data question — its header comment lists real vs. `NOT_IMPLEMENTED`. `elevateSuperAdmin` (unconfirmed route) removed 2026-08-20; `createRevenueSplitRatio`/`getRevenueSplitRatios`/`getRevenueSplitEntries`/`markRevenueSplitEntryPaid` (all real, confirmed) added the same day |
 | `src/core/api/services/auth.service.ts` | `loginAdmin` — the one Admin auth method that exists, added this session |
 | `src/components/layout/AuthGuard.tsx` | Now supports `allowedRoles`; `(admin)/layout.tsx` is the only current caller that passes it |

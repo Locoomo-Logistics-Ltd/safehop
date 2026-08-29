@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
 import { TopBar } from "@/components/layout";
@@ -51,7 +52,17 @@ export function AdminProfileScreen() {
         <Card padding="none" className="overflow-hidden">
           <Row icon={<MailIcon size={17} />} label="Email" value={user.email} />
           <div className="h-px bg-border-default" />
-          <Row icon={<PhoneIcon size={17} />} label="Phone" value={user.phone} />
+          <Row
+            icon={<PhoneIcon size={17} />}
+            label="Phone"
+            value={
+              user.phone ?? (
+                <Link href={ROUTES.completeProfile} className="text-brand-blue font-semibold">
+                  Add phone number
+                </Link>
+              )
+            }
+          />
         </Card>
 
         <Button
@@ -69,7 +80,7 @@ export function AdminProfileScreen() {
   );
 }
 
-function Row({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+function Row({ icon, label, value }: { icon: React.ReactNode; label: string; value: React.ReactNode }) {
   return (
     <div className="flex items-center gap-3 p-4">
       <span className="w-9 h-9 rounded-[10px] bg-bg-subtle text-text-muted flex items-center justify-center shrink-0">

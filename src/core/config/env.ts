@@ -26,10 +26,20 @@ export const env = {
   /** Simulated network latency (ms) for mock services — set to 0 to disable. */
   mockLatencyMs: Number(process.env.NEXT_PUBLIC_MOCK_LATENCY_MS ?? 600),
 
-  /** NextAuth */
+  /** NextAuth — currently unused scaffolding, no [...nextauth] route exists. */
   nextAuthUrl: process.env.NEXTAUTH_URL ?? "http://localhost:3000",
   googleClientId: process.env.GOOGLE_CLIENT_ID ?? "",
   googleClientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
+
+  /**
+   * Google Identity Services client ID — powers `GoogleAuthButton`
+   * (`POST /auth/google`, docs/API.md). This is the public client-side
+   * ID token flow, distinct from the NextAuth vars above: no secret
+   * needed here since the raw ID token is verified server-side by the
+   * backend, never exchanged by this app. Left empty, the button
+   * degrades to a disabled state rather than crashing.
+   */
+  googleSignInClientId: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? "",
 
   /**
    * Which provider backs maps + geocoding. `"geoapify"` today (free

@@ -2,11 +2,16 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { Mail } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui";
+import { ErrorAlert } from "@/components/ui/error-alert";
 import { ROLE_OPTIONS } from "@/modules/user/constants/roles";
 import { ROUTES } from "@/core/config/constants";
+import { useAuth } from "@/modules/user/hooks/use-auth";
+import { getFriendlyError } from "@/core/api/errors";
 import type { UserRole } from "@/core/types";
+import { GoogleAuthButton } from "./GoogleAuthButton";
 import { OnboardingLayout } from "./OnboardingLayout";
 
 /**
@@ -20,6 +25,7 @@ import { OnboardingLayout } from "./OnboardingLayout";
 export function RoleSelectScreen() {
   const router = useRouter();
   const [selectedRole, setSelectedRole] = useState<UserRole>("consumer");
+  const { loginWithGoogle, isLoggingInWithGoogle, loginWithGoogleError } = useAuth();
 
   const handleContinue = () => {
     // Consumer, Rider, and NodeOperator all self-register through the
@@ -34,6 +40,21 @@ export function RoleSelectScreen() {
       router.push(`${ROUTES.createAccount}?role=rider`);
     }
     // Admin: no-op for now — the module doesn't exist yet.
+  };
+
+  // This is the signup surface — a Google sign-in from here always
+  // means "create an account if one doesn't exist yet" for whichever
+  // role is currently selected, so consentAccepted is always true
+  // (the ToS/Privacy text right below the button is what that consent
+  // refers to). Per docs/API.md both fields are simply ignored if the
+  // Google account turns out to already be linked to an existing user
+  // (a login, not a signup).
+  const handleGoogleCredential = (idToken: string) => {
+    // Unreachable in practice — the "admin" radio option is disabled,
+    // so selectedRole can never actually be "admin" here. Narrows the
+    // type for the call below rather than casting.
+    if (selectedRole === "admin") return;
+    loginWithGoogle({ idToken, role: selectedRole, consentAccepted: true });
   };
 
   return (
@@ -106,9 +127,52 @@ export function RoleSelectScreen() {
         })}
       </div>
 
-      <Button fullWidth size="lg" className="mt-7" onClick={handleContinue}>
-        Continue →
-      </Button>
+      <div className="mt-7 flex flex-col gap-3">
+        <GoogleAuthButton
+          text="signup_with"
+          disabled={isLoggingInWithGoogle}
+          onCredential={handleGoogleCredential}
+        />
+        {isLoggingInWithGoogle && (
+          <p className="flex items-center justify-center gap-2 text-[13px] text-text-secondary">
+            <span className="w-3.5 h-3.5 rounded-full border-2 border-border-default border-t-brand-blue animate-spin" />
+            Signing you in with Google…
+          </p>
+        )}
+        <p className="text-center text-[12px] text-text-muted leading-[1.5]">
+          By continuing with Google, you agree to our{" "}
+          <a href={ROUTES.terms} target="_blank" rel="noopener noreferrer" className="text-brand-blue underline">
+            Terms of Service
+          </a>{" "}
+          and{" "}
+          <a href={ROUTES.privacy} target="_blank" rel="noopener noreferrer" className="text-brand-blue underline">
+            Privacy Policy
+          </a>
+          .
+        </p>
+
+        {loginWithGoogleError && (() => {
+          const error = getFriendlyError(loginWithGoogleError);
+          return <ErrorAlert title={error.title} message={error.message} action={error.action} />;
+        })()}
+
+        <div className="flex items-center gap-3 my-1" aria-hidden="true">
+          <span className="h-px flex-1 bg-border-default" />
+          <span className="text-[12px] text-text-muted">or</span>
+          <span className="h-px flex-1 bg-border-default" />
+        </div>
+
+        <Button
+          fullWidth
+          size="lg"
+          variant="outline"
+          leftIcon={<Mail size={17} />}
+          disabled={isLoggingInWithGoogle}
+          onClick={handleContinue}
+        >
+          Continue with Email
+        </Button>
+      </div>
     </OnboardingLayout>
   );
 }

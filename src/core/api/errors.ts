@@ -156,6 +156,41 @@ export function getFriendlyError(error: unknown) {
       };
 
 
+    // ── Google auth (docs/API.md, POST /auth/google) ──────────────
+
+    case "INVALID_GOOGLE_TOKEN":
+      return {
+        title: "Google sign-in didn't go through",
+        message:
+          "We couldn't verify that with Google.",
+        action:
+          "Please try continuing with Google again.",
+        type: "error",
+      };
+
+
+    case "CONSENT_REQUIRED":
+      return {
+        title: "No account found",
+        message:
+          "We couldn't find a Locoomo account for that Google sign-in.",
+        action:
+          "Sign up first — Google sign-in will work right away afterward.",
+        type: "warning",
+      };
+
+
+    case "PROFILE_INCOMPLETE":
+      return {
+        title: "Add your phone number first",
+        message:
+          "We need a phone number on file before this can go through.",
+        action:
+          "Complete your profile, then try again.",
+        type: "warning",
+      };
+
+
     case "INVALID_OTP":
       return {
         title: "That code didn't work",

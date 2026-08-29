@@ -75,38 +75,10 @@ const [lastName, setLastName] = useState("");
 const [email, setEmail] = useState("");
 const [password, setPassword] = useState("");
 const [confirmPassword, setConfirmPassword] = useState("");
-const [phone, setPhone] = useState("");
 const [consentAccepted, setConsentAccepted] = useState(false);
 
 const [showPassword, setShowPassword] = useState(false);
 const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-
-const formatNigerianPhone = (value: string) => {
-  // Remove everything except digits and +
-  const phone = value.replace(/[^\d+]/g, "");
-
-  // Already correct
-  if (phone.startsWith("+234")) {
-    return phone;
-  }
-
-  // Starts with 234
-  if (phone.startsWith("234")) {
-    return `+${phone}`;
-  }
-
-  // Starts with 0
-  if (phone.startsWith("0")) {
-    return `+234${phone.slice(1)}`;
-  }
-
-  // Starts with local number (e.g. 817...)
-  if (/^\d{10}$/.test(phone)) {
-    return `+234${phone}`;
-  }
-
-  return phone;
-};
 
 // Password rules per docs/API.md: 12–128 chars, no composition rules
 // beyond length — a strength meter checking uppercase/number/symbol
@@ -126,7 +98,6 @@ const isPasswordValid = passwordChecks.length && passwordChecks.match;
     firstName,
     lastName,
     email,
-    phone,
     password,
     passwordConfirmation: confirmPassword,
     consentAccepted,
@@ -177,17 +148,6 @@ const isPasswordValid = passwordChecks.length && passwordChecks.match;
       value={email}
       onChange={(e) => setEmail(e.target.value)}
     />
-
-   <Input
-  label="Phone Number"
-  type="tel"
-  inputMode="tel"
-  autoComplete="tel"
-  placeholder="08173456789"
-  value={phone}
-  onChange={(e) => setPhone(e.target.value)}
-  onBlur={() => setPhone(formatNigerianPhone(phone))}
-/>
 
     <div className="relative">
       <Input
@@ -290,7 +250,6 @@ const isPasswordValid = passwordChecks.length && passwordChecks.match;
   !firstName.trim() ||
   !lastName.trim() ||
   !email.trim() ||
-  !phone.trim() ||
   !isPasswordValid ||
   !consentAccepted
 }

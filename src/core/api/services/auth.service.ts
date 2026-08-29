@@ -2,10 +2,11 @@
 import { httpClient } from "@/core/api/client";
 import { ENDPOINTS } from "@/core/api/endpoints";
 import { ApiError } from "@/core/api/errors";
-import { STORAGE_KEYS } from "@/core/config/constants";
+import { persistSession, readPersistedSession, clearPersistedSession } from "@/core/api/session-storage";
 
 import type {
   AuthSession,
+  GoogleAuthPayload,
   LoginAdminPayload,
   LoginConsumerPayload,
   RegisterConsumerPayload,
@@ -55,31 +56,6 @@ function mapSessionResponse(raw: unknown): AuthSession {
   };
 }
 
-function persistSession(session: AuthSession) {
-  if (typeof window === "undefined") return;
-
-  window.localStorage.setItem(
-    STORAGE_KEYS.session,
-    JSON.stringify(session)
-  );
-}
-
-function readPersistedSession(): AuthSession | null {
-  if (typeof window === "undefined") return null;
-  const raw = window.localStorage.getItem(STORAGE_KEYS.session);
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as AuthSession;
-  } catch {
-    return null;
-  }
-}
-
-function clearPersistedSession() {
-  if (typeof window === "undefined") return;
-  window.localStorage.removeItem(STORAGE_KEYS.session);
-}
-
 // ── Real implementation ──────────────────────────────────────────
 
 const realAuthService = {
@@ -91,8 +67,27 @@ const realAuthService = {
   async login(): Promise<AuthSession> {
     throw new ApiError({ message: "Use loginConsumer instead.", code: "NOT_IMPLEMENTED" });
   },
-  async loginWithGoogle(): Promise<AuthSession> {
-    throw new ApiError({ message: "Use the NextAuth Google sign-in flow.", code: "NOT_IMPLEMENTED" });
+  /**
+   * `POST /auth/google` per docs/API.md — one endpoint for both signup
+   * and login, distinguished server-side by whether the verified
+   * Google account is already linked to a user. The frontend only ever
+   * hands over the signed ID token from Google Identity Services
+   * (`GoogleAuthButton`); the backend independently re-verifies it
+   * against Google's own keys, it never trusts a client-asserted
+   * email/name. Unlike `registerConsumer`, this **does** log the user
+   * in immediately — session cookies are set on the response, since a
+   * Google-created account has no password to log in with afterward.
+   */
+  async loginWithGoogle(payload: GoogleAuthPayload): Promise<AuthSession> {
+    const raw = await httpClient.post<User>(ENDPOINTS.auth.google, payload, {
+      skipAuth: true,
+      credentials: "include",
+    });
+
+    const session = mapSessionResponse(raw);
+    persistSession(session);
+
+    return session;
   },
 
   /**

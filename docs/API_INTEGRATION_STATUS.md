@@ -12,6 +12,27 @@
 > never edit it from a frontend session.** This file is the one that
 > gets edited here, to track the frontend's side of the contract.
 
+**2026-08-28 update**: `docs/API.md` picked up `POST /auth/google`
+(Google Identity Services sign-in/signup, one endpoint for both
+outcomes) and `GET`/`PATCH /users/me` (self-service profile read/update
+— the only way to set `phone`, which registration — password or
+Google — no longer collects at all). All three are now wired: a new
+`GoogleAuthButton` (Google's own rendered button, wraps the GIS
+`accounts.id` client-side script) on `RoleSelectScreen` (signup,
+`consentAccepted: true`) and `LoginScreen` (login, no consent/role
+sent); a new `usersService`/`CompleteProfileScreen`
+(`/complete-profile`) that any login — password or Google — routes to
+first whenever the returned `phone` is `null`, before continuing to the
+same role-based destination login already used
+(`resolvePostAuthRoute`, extracted from `use-auth.ts` so
+`loginWithGoogle`/`CompleteProfileScreen` share it instead of
+duplicating the NodeOperator-approval-status lookup). See the Auth
+section below and `docs/HANDOFF.md`/`docs/IMPLEMENTATION_LOG.md` for
+full detail, including why this is Google Identity Services rather than
+the `next-auth` dependency already sitting in `package.json` (dead
+scaffolding, no `[...nextauth]` route ever existed). Summary counts now
+cover **54** documented endpoints, not 51.
+
 **2026-08-26 update**: `docs/API.md` picked up three payout-account
 routes with zero prior frontend integration — `GET /payments/banks`,
 `PATCH /riders/me/payout-account`, `PATCH /node-operators/me/payout-account`
@@ -133,8 +154,11 @@ not a re-verification of any endpoint's behavior).
 
 | Method | Endpoint | Feature/Module | Status | Related page(s)/component(s) | Service/hook | Missing work |
 |---|---|---|---|---|---|---|
-| POST | `/auth/register` | Consumer + Rider + NodeOperator self-registration | ✅ | `RoleSelectScreen` (`/role-select`) → `CreateAccountScreen` (`/create-account?role=`) | `authService.registerConsumer` via `useAuth().register` | None. **2026-08-07**: `RoleSelectScreen`'s Rider/NodeOperator options now route to `/create-account?role=rider` / `?role=node_operator` (previously routed to now-deleted undocumented-flow screens); `CreateAccountScreen` reads `?role=` and includes it in the payload — all three self-registerable roles now reachable through this one documented endpoint, exactly as `API.md` describes ("This is the same endpoint for all three allowed roles"). Also fixed the client-side password strength meter (uppercase/lowercase/number/special) that contradicted `API.md`'s explicit "don't build a strength meter" guidance — now length-only (≥12 chars), matching `ResetPasswordScreen`. Also fixed a bug where a successful registration was incorrectly treated as a login (`setSession()` called with no server-side cookie ever issued) — `API.md` states registration does not log the user in; the hook now just routes to `/login`. |
-| POST | `/auth/login` | Consumer + Rider + NodeOperator + Admin login | ✅ | `LoginScreen`, `AdminLoginScreen` (`/admin-login`) | `authService.loginConsumer` / `loginAdmin` via `useAuth().login` | None — role-agnostic per `API.md`, all four roles correctly share the one real route with `credentials:"include"`. **2026-08-07**: post-login redirect is role-aware (`session.user.role`) — NodeOperator → `/node/setup` (route renamed 2026-08-20, was `/vendor/node-setup`), Consumer → `/dashboard` — previously hardcoded to `/dashboard` for every role, and unreachable by Rider/NodeOperator anyway since they didn't go through this endpoint yet. **2026-08-07 (later, gating pass)**: Rider → `/rider/home` (changed from `/rider/verification`) — a not-yet-verified Rider now lands on Home with a dismissible verification reminder instead of being forced straight into the verification form; see the Riders section below and `docs/HANDOFF.md` for the product reasoning. |
+| POST | `/auth/register` | Consumer + Rider + NodeOperator self-registration | ✅ | `RoleSelectScreen` (`/role-select`) → `CreateAccountScreen` (`/create-account?role=`) | `authService.registerConsumer` via `useAuth().register` | None. **2026-08-07**: `RoleSelectScreen`'s Rider/NodeOperator options now route to `/create-account?role=rider` / `?role=node_operator` (previously routed to now-deleted undocumented-flow screens); `CreateAccountScreen` reads `?role=` and includes it in the payload — all three self-registerable roles now reachable through this one documented endpoint, exactly as `API.md` describes ("This is the same endpoint for all three allowed roles"). Also fixed the client-side password strength meter (uppercase/lowercase/number/special) that contradicted `API.md`'s explicit "don't build a strength meter" guidance — now length-only (≥12 chars), matching `ResetPasswordScreen`. Also fixed a bug where a successful registration was incorrectly treated as a login (`setSession()` called with no server-side cookie ever issued) — `API.md` states registration does not log the user in; the hook now just routes to `/login`. **2026-08-28**: `phone` removed from the request payload — `API.md` dropped it from this route entirely (every account now starts `phone: null` regardless), so `RegisterConsumerPayload` no longer has the field and `CreateAccountScreen`'s phone input is gone; see the new `/users/me` rows below for where it's actually set. |
+| POST | `/auth/login` | Consumer + Rider + NodeOperator + Admin login | ✅ | `LoginScreen`, `AdminLoginScreen` (`/admin-login`) | `authService.loginConsumer` / `loginAdmin` via `useAuth().login` | None — role-agnostic per `API.md`, all four roles correctly share the one real route with `credentials:"include"`. **2026-08-07**: post-login redirect is role-aware (`session.user.role`) — NodeOperator → `/node/setup` (route renamed 2026-08-20, was `/vendor/node-setup`), Consumer → `/dashboard` — previously hardcoded to `/dashboard` for every role, and unreachable by Rider/NodeOperator anyway since they didn't go through this endpoint yet. **2026-08-07 (later, gating pass)**: Rider → `/rider/home` (changed from `/rider/verification`) — a not-yet-verified Rider now lands on Home with a dismissible verification reminder instead of being forced straight into the verification form; see the Riders section below and `docs/HANDOFF.md` for the product reasoning. **2026-08-28**: the redirect logic moved into a shared `resolvePostAuthRoute(user)` helper (`modules/user/lib/auth-routing.ts`) so `POST /auth/google` below can reuse the exact same role map instead of duplicating it; `loginMutation.onSuccess` now also checks `session.user.phone` first and routes to `/complete-profile` when it's `null` before ever reaching that helper. |
+| POST | `/auth/google` | Google sign-in/signup (one endpoint, both outcomes) | ✅ | `RoleSelectScreen` (`/role-select`, signup — `consentAccepted: true`), `LoginScreen` (`/login`, login — no consent/role sent) | `authService.loginWithGoogle` via `useAuth().loginWithGoogle` | **New 2026-08-28.** `GoogleAuthButton` (`modules/user/components/auth/`) loads Google Identity Services' own script client-side (`https://accounts.google.com/gsi/client`) and renders Google's own button — the ID-token flow this route documents only hands back a credential through GIS's own UI, so this isn't a custom-styled button. Requires `NEXT_PUBLIC_GOOGLE_CLIENT_ID`; left unset (as in this repo's `.env`/`.env.local`), the button renders a disabled "unavailable" state rather than crashing, same degrade pattern as the Geoapify/Google Maps keys. **Not exercised against a live backend or a real Google Cloud OAuth client** — no real `NEXT_PUBLIC_GOOGLE_CLIENT_ID` was available this session. `CONSENT_REQUIRED` (login attempted with no existing account) gets a tailored inline message + "Sign up with Google instead" link on `LoginScreen`, not just the generic `getFriendlyError` copy. |
+| GET | `/users/me` | Self-service profile read | ⚪ | none directly — see `PATCH` row below | `usersService.getMe` | **New 2026-08-28, wired but not called anywhere.** The app currently only ever needs the cached session's `phone` (already present on every `AuthSession`), so nothing calls this yet — a future "refresh my profile" action would use it. Not a screenless-integration violation in the same sense as other rows flagged that way elsewhere in this file: the service method exists for completeness with `PATCH` below, per docs/API.md documenting both together, but has no dedicated UI trigger of its own. |
+| PATCH | `/users/me` | Set/update phone number | ✅ | `CompleteProfileScreen` (`/complete-profile`) | `usersService.updateMe` via `useCompleteProfile` | **New 2026-08-28.** Shown after *any* successful login (password or Google) whose `session.user.phone` is `null` — registration no longer collects it at all per `API.md`. Also linked as "Add phone number" from the Phone row on all four roles' Profile screens (`ProfileScreen`/`NodeProfileScreen`/`RiderProfileScreen`/`AdminProfileScreen`) whenever it's still unset, so a user isn't limited to the one moment right after login to fill it in. **Known gap**: NodeOperator/Rider onboarding (`POST /node-operators/onboarding`/`POST /riders/onboarding`) now returns `400 PROFILE_INCOMPLETE` until phone is set — `getFriendlyError` has a case for it, but neither onboarding screen deep-links to `/complete-profile` from that specific error, just shows the generic copy+action text. |
 | POST | `/auth/refresh` | Session refresh | ✅ | none directly (interceptor, not screen-driven) | `authService.refreshSession`, called internally by `core/api/client.ts` | **Fixed 2026-08-12 (later — live debugging session).** `httpClient`'s `request()` now catches any `401 UNAUTHENTICATED` (except on `/auth/*` routes and `skipAuth` calls), fires one refresh attempt, and retries the original call once. Concurrent 401s share one in-flight refresh (`refreshPromise`) so a second caller doesn't independently trigger `401 INVALID_REFRESH_TOKEN` against the now-rotated, single-use token. A failed refresh clears the session (`useAuthStore` + `localStorage`) and hard-redirects to `/login`, per `API.md`'s "treat as a hard sign-out" instruction. This was surfaced by a real user report: `GET /nodes/nearby` returning `401` for a logged-in Consumer testing the Select Nodes screen — an expired, never-refreshed 15-minute access token. |
 | POST | `/auth/logout` | Logout | ✅ | Profile screens' "Log out" action | `authService.logout` via `useAuth().logout` | None. |
 | POST | `/auth/password-reset/request` | Forgot password | ✅ | `ForgotPasswordScreen` (`/forgot-password`) | `authService.requestPasswordReset` | None functionally. Leftover `console.log`/`console.error` debug statements should be removed before ship. |
@@ -221,18 +245,16 @@ New 2026-08-24. `GET /admin/capacity-audit` — no prior frontend integration at
 
 ## Summary
 
-**51** endpoints documented in `API.md` as of 2026-08-26 (up from 48 at
-the 2026-08-24 audit — `GET /payments/banks`, `PATCH
-/riders/me/payout-account`, `PATCH /node-operators/me/payout-account`
-are new rows; the `payoutAccount*` fields on `GET
-/riders/me`/`/node-operators/me`/`/admin/revenue-split/entries` are
-field additions to already-documented endpoints, not new rows).
-**Every one has a row in this file** (verified by a 1:1 diff of every
+**54** endpoints documented in `API.md` as of 2026-08-28 (up from 51 at
+the 2026-08-26 audit — `POST /auth/google` and `GET`/`PATCH /users/me`
+are new rows; see the 2026-08-28 update note above). **Every one has a
+row in this file** (verified by a 1:1 diff of every
 `### METHOD /api/v1/...` header in `API.md` against every table row
-here — no gaps either direction). **49 ✅ Fully Integrated** (up from
-48 — `/auth/verify-email` closed 2026-08-26, see its row above), **1 🟡
-Partially Integrated** (`PATCH /nodes/:id`), **0 ❌ Not Integrated**,
-**1 ⚪ No UI Required Yet**.
+here — no gaps either direction). **51 ✅ Fully Integrated** (up from
+49 — `/auth/google` and `PATCH /users/me` closed 2026-08-28, see their
+rows above), **1 🟡 Partially Integrated** (`PATCH /nodes/:id`), **0 ❌
+Not Integrated**, **2 ⚪ No UI Required Yet** (`GET /users/me` joins
+the pre-existing one below).
 
 ### Recommended implementation priority
 

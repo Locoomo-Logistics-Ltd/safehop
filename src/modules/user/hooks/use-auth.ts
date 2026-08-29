@@ -2,12 +2,13 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { authService, nodeService } from "@/core/api/services";
+import { authService } from "@/core/api/services";
 import { QUERY_KEYS, ROUTES } from "@/core/config/constants";
 import { useAuthStore } from "@/store/auth.store";
-import type { InviteConfirmPayload, LoginConsumerPayload, PasswordResetConfirmPayload, PasswordResetRequestPayload, RegisterConsumerPayload, User, VerifyEmailPayload} from "@/core/types";
+import type { GoogleAuthPayload, InviteConfirmPayload, LoginConsumerPayload, PasswordResetConfirmPayload, PasswordResetRequestPayload, RegisterConsumerPayload, User, VerifyEmailPayload} from "@/core/types";
 import { useNotificationStore } from "@/store/notification.store";
 import { getErrorMessage } from "@/core/api/errors";
+import { resolvePostAuthRoute } from "@/modules/user/lib/auth-routing";
 
 
 
@@ -50,44 +51,20 @@ export function useAuth() {
     "You are successfully logged in. Let's get your delivery moving.",
 });
       // POST /auth/login is role-agnostic (docs/API.md) — route each
-      // role to its own post-login destination. Rider lands on Home
-      // (not forced into verification) — RiderHomeScreen nudges an
-      // unverified Rider with a dismissible reminder instead, and
-      // AvailableJobsScreen blocks the one feature that actually
-      // requires approval.
-      //
-      // NodeOperator is the one role whose destination depends on a
-      // second fetch: an approved (`status: "active"`) Node lands
-      // straight on its real dashboard (`nodeHome`) instead of being
-      // routed through Setup every time, per explicit product
-      // direction 2026-08-21 — a Node that's already up and running
-      // shouldn't see its onboarding screen first on every login. Not
-      // yet approved (`pending`) or not onboarded at all (`GET
-      // /node-operators/me` 404s) still lands on `nodeSetup`, which
-      // already renders the correct state (onboarding form or
-      // "waiting for approval") either way.
-      if (session.user.role === "node_operator") {
-        try {
-          const { node } = await nodeService.getMyNodeOperatorProfile();
-          router.push(node.status === "active" ? ROUTES.nodeHome : ROUTES.nodeSetup);
-        } catch {
-          router.push(ROUTES.nodeSetup);
-        }
+      // role to its own post-login destination via the shared
+      // resolvePostAuthRoute (Rider lands on Home, not forced into
+      // verification — RiderHomeScreen nudges an unverified Rider with
+      // a dismissible reminder instead, and AvailableJobsScreen blocks
+      // the one feature that actually requires approval; NodeOperator's
+      // destination depends on a second fetch — see that helper's
+      // header comment). Registration no longer collects `phone` at
+      // all (docs/API.md) — any account still missing one is sent to
+      // complete it first, same gate `loginWithGoogle` uses below.
+      if (!session.user.phone) {
+        router.push(ROUTES.completeProfile);
         return;
       }
-
-      // `admin` isn't a real key here — authService.loginConsumer()
-      // now rejects an Admin account's credentials outright (see its
-      // own header comment) rather than ever resolving with that role,
-      // so `UserRole` still includes it structurally but this branch
-      // can't actually be reached. `Partial` (not `Record`) reflects
-      // that honestly instead of listing a redirect that would never
-      // fire.
-      const roleRedirect: Partial<Record<typeof session.user.role, string>> = {
-        consumer: ROUTES.dashboard,
-        rider: ROUTES.riderHome,
-      };
-      router.push(roleRedirect[session.user.role] ?? ROUTES.dashboard);
+      router.push(await resolvePostAuthRoute(session.user));
     },
     onError: (error) => {
     showNotification({
@@ -96,6 +73,41 @@ export function useAuth() {
       message: getErrorMessage(error),
     });
   },
+  });
+
+  // ── Log in / sign up with Google ──────────────────────────────
+  // `POST /auth/google` (docs/API.md) — one endpoint for both signup
+  // and login, distinguished server-side by whether the verified
+  // Google account is already linked to a user. Unlike registerConsumer,
+  // this logs the user in immediately (session cookies set even on a
+  // brand-new account), so there's no separate "now go log in" step.
+  const loginWithGoogleMutation = useMutation({
+    mutationFn: (payload: GoogleAuthPayload) => authService.loginWithGoogle(payload),
+    onSuccess: async (session) => {
+      setSession(session);
+      queryClient.setQueryData(QUERY_KEYS.session, session);
+      showNotification({
+        type: "success",
+        title: `Welcome, ${session.user.firstName}!`,
+        message: "You're signed in with Google.",
+      });
+
+      // Google never supplies a phone number — every fresh account
+      // comes back `phone: null` (docs/API.md) — so this is the
+      // expected path on first-ever Google signup, not just a gap.
+      if (!session.user.phone) {
+        router.push(ROUTES.completeProfile);
+        return;
+      }
+      router.push(await resolvePostAuthRoute(session.user));
+    },
+    onError: (error) => {
+      showNotification({
+        type: "error",
+        title: "Google sign-in failed",
+        message: getErrorMessage(error),
+      });
+    },
   });
 
   // ── Log out (shared) ─────────────────────────────────────────
@@ -136,6 +148,10 @@ const confirmInviteMutation = useMutation({
     login: loginMutation.mutate,
     isLoggingIn: loginMutation.isPending,
     loginError: loginMutation.error,
+
+    loginWithGoogle: loginWithGoogleMutation.mutate,
+    isLoggingInWithGoogle: loginWithGoogleMutation.isPending,
+    loginWithGoogleError: loginWithGoogleMutation.error,
 
     logout: logoutMutation.mutate,
     isLoggingOut: logoutMutation.isPending,

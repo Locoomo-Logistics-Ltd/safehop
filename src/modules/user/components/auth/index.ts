@@ -2,6 +2,8 @@ export { OnboardingLayout } from "./OnboardingLayout";
 export { RoleSelectScreen } from "./RoleSelectScreen";
 export { CreateAccountScreen } from "./CreateAccountScreen";
 export { LoginScreen } from "./LoginScreen";
+export { GoogleAuthButton } from "./GoogleAuthButton";
+export { CompleteProfileScreen } from "./CompleteProfileScreen";
 export { ForgotPasswordScreen } from "./ForgotPasswordScreen"
 export { ResetPasswordScreen } from "./ResetPasswordScreen"
 export { AcceptInviteScreen } from "./AcceptInviteScreen"

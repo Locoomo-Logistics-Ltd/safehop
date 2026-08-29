@@ -9,6 +9,10 @@ export const ENDPOINTS = {
     // Shared login for every role (Consumer, Rider, NodeOperator,
     // Admin) — POST /auth/login is role-agnostic per docs/API.md.
     consumerLogin: "/auth/login",
+    // Signup or login with Google — one endpoint, both outcomes,
+    // distinguished server-side by whether the verified Google account
+    // is already linked to a user. Real, confirmed route per docs/API.md.
+    google: "/auth/google",
 
     // Session (shared across all roles)
     sessionRefresh: "/auth/refresh",
@@ -24,6 +28,10 @@ export const ENDPOINTS = {
     // Real, confirmed route per docs/API.md — Admin-only, invites a
     // node_operator/rider/admin account (never `consumer`).
     invite: "/users/invite",
+    // Real, confirmed routes per docs/API.md — any authenticated role.
+    // GET returns the caller's own account; PATCH sets `phone`, the one
+    // field registration (password or Google) never collects.
+    me: "/users/me",
   },
 
   // ── Nodes Infrastructure Module ───────────────────────────────
