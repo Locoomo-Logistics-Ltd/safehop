@@ -5,20 +5,35 @@ import { useNodeProfile } from "./use-node-profile";
 import {
   isAwaitingPickup,
   isAwaitingArrival,
+  isExpectedAtOrigin,
+  myNodeId,
   needsIntake,
   isReadyForCollection,
   useMyNodeOrders,
 } from "./use-my-node-orders";
 
-export type DashboardFilterTab = "awaiting_pickup" | "awaiting_arrival" | "ready_for_collection";
+export type DashboardFilterTab =
+  | "expected"
+  | "awaiting_pickup"
+  | "awaiting_arrival"
+  | "ready_for_collection";
 
 /** Matches the 60% threshold the old mock Node dashboard used for its "High Full" warning. */
 const HIGH_FULL_THRESHOLD = 0.6;
 
 /**
  * Drives the Node Dashboard (`NodeHomeScreen`) — Node identity +
- * capacity from `GET /node-operators/me`, on-site parcel snapshot
- * derived from `GET /handoffs/my-node/orders`.
+ * capacity from `GET /node-operators/me/nodes` (scoped to the active
+ * Node, see `use-my-nodes.ts`), on-site parcel snapshot derived from
+ * `GET /handoffs/my-node/orders`.
+ *
+ * **Multi-Node (2026-09-02):** that orders endpoint now returns every
+ * Node the caller is a member of, mixed together, so everything below
+ * is filtered to the active Node first — an operator standing at one
+ * counter must never see another branch's parcels in their pick-lists,
+ * and a capacity bar summing two Nodes' contents against one Node's
+ * capacity would be actively wrong. `myNodeId()` resolves each order's
+ * Node from its own `myRole`.
  *
  * As of 2026-08-17 this also backs the three tabs that used to live on
  * the standalone Inventory screen: **Awaiting Pickup** (origin side,
@@ -30,7 +45,8 @@ const HIGH_FULL_THRESHOLD = 0.6;
  * it's a record of everything, not a Home-page summary section.
  *
  * Neither real endpoint returns an "occupied" figure —
- * `node-operators/me` only has the self-reported max (`capacity`), and
+ * `node-operators/me/nodes` only has the self-reported max
+ * (`capacity`) per Node, and
  * `my-node/orders` has no concept of a shelf/slot count. "Occupied" is
  * derived here instead, as every order currently physically sitting at
  * THIS Node, on either side of the custody chain:
@@ -47,13 +63,28 @@ export function useNodeDashboard() {
   const {
     node,
     payoutAccountConfigured,
+    isOwnerOfActiveNode,
+    isPubliclyVisible,
+    isStaff,
     isLoading: isNodeLoading,
     notOnboarded,
+    hasNoStationsYet,
     error: nodeError,
   } = useNodeProfile();
-  const { orders, isLoading: isOrdersLoading } = useMyNodeOrders();
+  const { orders: allOrders, isLoading: isOrdersLoading } = useMyNodeOrders();
   const [activeTab, setActiveTab] = useState<DashboardFilterTab>("awaiting_pickup");
 
+  // Scope to the counter this member is actually standing at. Owners
+  // and staff alike resolve a real active station now (see
+  // `use-my-nodes.ts`), so this filter applies to both — a staff member
+  // invited to two stations sees one counter at a time, exactly like an
+  // owner running two.
+  const orders = useMemo(() => {
+    if (!node) return allOrders;
+    return allOrders.filter((order) => myNodeId(order) === node.id);
+  }, [allOrders, node]);
+
+  const expected = useMemo(() => orders.filter(isExpectedAtOrigin), [orders]);
   const awaitingPickup = useMemo(() => orders.filter(isAwaitingPickup), [orders]);
   const awaitingArrival = useMemo(() => orders.filter(isAwaitingArrival), [orders]);
   const needsIntakeOrders = useMemo(() => orders.filter(needsIntake), [orders]);
@@ -71,8 +102,12 @@ export function useNodeDashboard() {
   return {
     node,
     payoutAccountConfigured,
+    isOwnerOfActiveNode,
+    isPubliclyVisible,
+    isStaff,
     isNodeActive: node?.status === "active",
     notOnboarded,
+    hasNoStationsYet,
     nodeError,
     isLoading: isNodeLoading || isOrdersLoading,
     total,
@@ -80,6 +115,7 @@ export function useNodeDashboard() {
     isHighFull,
     activeTab,
     setActiveTab,
+    expected,
     awaitingPickup,
     awaitingArrival,
     needsIntakeOrders,

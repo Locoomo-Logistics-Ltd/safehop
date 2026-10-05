@@ -4,8 +4,21 @@
  * regardless of role. Role-specific profile data extends this base.
  */
 
-/** Matches the real backend's role enum exactly — see docs/API.md's `POST /auth/register`. */
-export type UserRole = "consumer" | "node_operator" | "rider" | "admin";
+/**
+ * Matches the real backend's role enum exactly — see docs/API.md's
+ * `POST /auth/register`.
+ *
+ * Only the first three are self-registerable (`SelfRegisterableRole`
+ * below). `admin` is provisioned by `POST /users/invite`; `node_staff`
+ * by `POST /node-operators/nodes/:nodeId/staff/invite` (docs/API.md,
+ * 2026-09-02) — a Node owner invites someone to work their counter.
+ * Both confirm through the same `POST /auth/invite/confirm`, and
+ * neither can ever arrive via `POST /auth/register`.
+ */
+export type UserRole = "consumer" | "node_operator" | "rider" | "admin" | "node_staff";
+
+/** The three roles `POST /auth/register` / `POST /auth/google` accept — the rest are invite-only. */
+export type SelfRegisterableRole = Extract<UserRole, "consumer" | "node_operator" | "rider">;
 
 export interface User {
 
@@ -65,7 +78,7 @@ export interface RegisterConsumerPayload {
   password: string;
   passwordConfirmation: string;
   consentAccepted: boolean;
-  role?: Extract<UserRole, "consumer" | "node_operator" | "rider">;
+  role?: SelfRegisterableRole;
 }
 
 export interface LoginConsumerPayload {
@@ -83,7 +96,7 @@ export interface LoginConsumerPayload {
 export interface GoogleAuthPayload {
   /** Raw ID token from Google Identity Services — never a client-asserted email/name. */
   idToken: string;
-  role?: Extract<UserRole, "consumer" | "node_operator" | "rider">;
+  role?: SelfRegisterableRole;
   /** Required `true` only when this creates a new account; omit/false when expecting a login. */
   consentAccepted?: boolean;
 }

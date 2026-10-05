@@ -5,7 +5,9 @@ import { EmptyState } from "@/components/ui";
 import { ROUTES } from "@/core/config/constants";
 import { ActivityIcon } from "@/components/icons";
 import { getHandoffStatusLabel } from "@/modules/node/components/handoff/HandoffStatusPill";
-import { useMyNodeOrders } from "@/modules/node/hooks/use-my-node-orders";
+import { myNodeId, useMyNodeOrders } from "@/modules/node/hooks/use-my-node-orders";
+import { useNodeProfile } from "@/modules/node/hooks/use-node-profile";
+import { NodeSwitcher } from "@/modules/node/components/nodes";
 import { HANDOFF_STATUS } from "@/core/types";
 import type { ActivityEventType, ActivityLogEntry, NodeOrderSummary } from "@/core/types";
 import { ActivityLogItem } from "./ActivityLogItem";
@@ -65,6 +67,13 @@ function mapOrderToActivityEntry(order: NodeOrderSummary): ActivityLogEntry {
  * `GET /handoffs/my-node/orders` (every order that's ever touched this
  * Node, either side), rendered with `ActivityLogItem`.
  *
+ * Scoped to the active station (2026-09-02), the same way Home is:
+ * that endpoint now returns every Node the caller is a member of, and
+ * one merged timeline across several counters would be a worse
+ * history, not a richer one — an operator asking "what happened here"
+ * means one counter. The `NodeSwitcher` at the top is the same control
+ * Home uses, reading the same selection.
+ *
  * The API returns the list newest-first, and nothing here re-sorts it —
  * the most recent order is always the first row, right at the top of
  * the screen. The hardcoded `RiderHandoffToast` demo card ("LC-482TX",
@@ -84,7 +93,12 @@ function mapOrderToActivityEntry(order: NodeOrderSummary): ActivityLogEntry {
  * removal here.
  */
 export function ActivityScreen() {
-  const { orders, isLoading } = useMyNodeOrders();
+  const { orders: allOrders, isLoading } = useMyNodeOrders();
+  const { node } = useNodeProfile();
+
+  // Scoped to the active station for owners and staff alike — both
+  // resolve a real one, and both are standing at one counter.
+  const orders = node ? allOrders.filter((order) => myNodeId(order) === node.id) : allOrders;
 
   return (
     <div className="min-h-screen bg-bg-canvas">
@@ -94,6 +108,10 @@ export function ActivityScreen() {
         <h1 className="font-display text-[18px] md:text-[22px] font-bold text-text-primary mb-4 md:mb-6">
           Activity
         </h1>
+
+        <div className="mb-5">
+          <NodeSwitcher />
+        </div>
 
         <h2 className="font-semibold text-[14px] text-text-primary mb-3">Activity Log</h2>
 

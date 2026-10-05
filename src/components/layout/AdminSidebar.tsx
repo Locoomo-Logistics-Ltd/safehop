@@ -35,14 +35,14 @@ export function AdminSidebar() {
   const isItemActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
 
   return (
-    <aside className="hidden md:flex md:flex-col w-[260px] shrink-0 h-screen sticky top-0 bg-brand-navy text-white">
+    <aside className="hidden md:flex md:flex-col w-65 shrink-0 h-screen sticky top-0 bg-brand-navy text-white">
       {/* Logo */}
-      <div className="flex flex-col gap-0.5 px-6 h-[var(--top-bar-height)] justify-center border-b border-white/10">
+      <div className="flex flex-col gap-0.5 px-6 h-(--top-bar-height) justify-center border-b border-white/10">
         <div className="flex items-center gap-2.5">
           <LogoMark size={24} />
           <span className="font-display font-bold text-[16px] tracking-tight">LOCOOMO</span>
         </div>
-        <span className="text-[11px] text-white/45 pl-[34px]">Admin Console</span>
+        <span className="text-[11px] text-white/45 pl-8.5">Admin Console</span>
       </div>
 
       {/* Nav items */}
@@ -62,7 +62,7 @@ export function AdminSidebar() {
               aria-current={isActive ? "page" : undefined}
             >
               {isActive && (
-                <span className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-full bg-admin-accent" />
+                <span className="absolute left-0 top-1.5 bottom-1.5 w-0.75 rounded-full bg-admin-accent" />
               )}
               <Icon size={19} filled={isActive} />
               {item.label}

@@ -10,11 +10,18 @@ import { getFriendlyError } from "@/core/api/errors";
 import { ROUTES } from "@/core/config/constants";
 import { Eye, EyeOff, User, Bike, Building2, Check, Circle } from "lucide-react";
 import { ErrorAlert } from "@/components/ui/error-alert";
-import type { UserRole } from "@/core/types";
+import type { SelfRegisterableRole } from "@/core/types";
 import { OnboardingLayout } from "./OnboardingLayout";
 
-/** Only these three roles can self-register — Admin is provisioned via POST /users/invite. */
-type RegistrableRole = Extract<UserRole, "consumer" | "node_operator" | "rider">;
+/**
+ * Only these three roles can self-register. Admin is provisioned via
+ * `POST /users/invite`, and `node_staff` via a Node owner's
+ * `POST /node-operators/nodes/:nodeId/staff/invite` — both confirm
+ * through `/accept-invite`, never this screen. Now the shared
+ * `SelfRegisterableRole` (core/types) rather than a local `Extract`,
+ * so the register/Google payloads and this form can't drift.
+ */
+type RegistrableRole = SelfRegisterableRole;
 
 const ROLE_COPY: Record<
   RegistrableRole,

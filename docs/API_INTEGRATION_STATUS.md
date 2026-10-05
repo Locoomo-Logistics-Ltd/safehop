@@ -12,6 +12,54 @@
 > never edit it from a frontend session.** This file is the one that
 > gets edited here, to track the frontend's side of the contract.
 
+**2026-09-03 update (node visibility, staff management, dispatch)**:
+`docs/API.md` added four endpoints and one field on every Node.
+
+- **`PATCH /node-operators/nodes/:nodeId/visibility`** — an owner
+  toggles `isPubliclyVisible` (new on the Node shape, default `true`).
+  **This is not a deactivation**, and the UI is worded to avoid saying
+  it is: `false` hides the Node from `GET /nodes`/`/nodes/nearby` for
+  non-Admins and makes a Consumer-initiated `POST /payments/intents`
+  naming it — as origin *or* destination — answer `404`. Handoffs,
+  earnings, staff, and receiving another operator's dispatched parcels
+  all keep working. Genuine deactivation (`status: inactive`) remains
+  Admin-only via `PATCH /nodes/:id`, which explicitly does **not**
+  accept `isPubliclyVisible`.
+- **`GET /node-operators/nodes/:nodeId/staff`** and **`DELETE
+  .../staff/:userId`** — the roster and removal. Closes the "no way to
+  see or revoke staff" gap this file flagged on 2026-09-02.
+- **`POST /node-operators/nodes/:nodeId/dispatch`** — the operator's
+  own outbound parcel, origin fixed to the URL's Node. Open to
+  NodeStaff as well as owners.
+
+Two new error codes: `CANNOT_REMOVE_OWNER_MEMBERSHIP` (400),
+and `NODE_NOT_ACTIVE` (403) now also covers visibility and dispatch.
+All four are wired — see the Node Operators section below. Summary
+counts now cover **60** documented endpoints, not 56.
+
+**2026-09-02 update (multi-Node)**: `docs/API.md` turned a Node
+Operator from *one account, one Node* into *one account, many Nodes*,
+and added a second role that works at a Node. Concretely: the singular
+`GET /node-operators/me` is **gone**, replaced by `GET
+/node-operators/me/nodes` (an array, `[]` rather than `404` when not
+onboarded, each item tagged `roleAtNode: "owner" | "staff"`);
+`PATCH /node-operators/me/payout-account` became the per-Node
+`PATCH /node-operators/nodes/:nodeId/payout-account`; and two wholly
+new routes landed — `POST /node-operators/nodes` (add a 2nd/3rd
+location) and `POST /node-operators/nodes/:nodeId/staff/invite` (the
+first non-Admin invite path in the API, minting `node_staff`
+accounts). All eight `/handoffs/*` operator routes now accept a
+**NodeStaff** session as well, and scope to *any* Node the caller is a
+member of rather than one. Two new error codes:
+`NODE_OPERATOR_NOT_ONBOARDED` (400), `NODE_NOT_ACTIVE` (403). Admin's
+`/node-operators/pending` + `/:id/approve` are unchanged in shape but
+now mean "approve **one Node**" — an already-active operator's next
+location still queues for its own review.
+
+All of it is now wired — see the rewritten Node Operators section
+below, plus the Handoffs and Earnings sections. Summary counts now
+cover **56** documented endpoints, not 54 (one removed, three added).
+
 **2026-08-28 update**: `docs/API.md` picked up `POST /auth/google`
 (Google Identity Services sign-in/signup, one endpoint for both
 outcomes) and `GET`/`PATCH /users/me` (self-service profile read/update
@@ -179,13 +227,34 @@ not a re-verification of any endpoint's behavior).
 
 ## Node Operators
 
+Rewritten 2026-09-02 for multi-Node, extended 2026-09-03. The
+account↔Node relationship is a *membership*, not a profile:
+`roleAtNode` (`owner`/`staff`) decides what a session can do at a given
+Node; approval, payout accounts, public visibility and staff are all
+per-Node; and `node_staff` is a real role in `UserRole` admitted to the
+`(node)` route group alongside `node_operator`.
+
+Owner-only vs. membership-only is worth stating once, because the split
+isn't intuitive: **owner** gets payout account, visibility, and staff
+management (all three answer `404` — not `403` — for a staff
+membership, so the UI hides them rather than rendering a form that can
+only fail). **Any member, owner or staff**, gets every handoff route
+*and* dispatch — that's counter work, and the API says so explicitly.
+
 | Method | Endpoint | Feature/Module | Status | Related page(s)/component(s) | Service/hook | Missing work |
 |---|---|---|---|---|---|---|
-| POST | `/node-operators/onboarding` | Node Operator self-service Node setup | ✅ | `NodeSetupScreen` (`/node/setup`) | `nodeService.onboardNode` via `useNodeSetup` | None. Fields match the real required body exactly. |
-| GET | `/node-operators/me` | Node Operator checks Node approval status | ✅ | Same screen, reachable from Node Profile's "Node Setup" row; also `NodeHomeScreen` (`/node/home`) and `NodeProfileScreen` (Node identity/address), both since 2026-08-17 follow-up 2 | `nodeService.getMyNodeOperatorProfile` via `useNodeSetup` (Node Setup, Profile), `useNodeProfile` (Home) | None. Drives all three states correctly (`404`→onboarding form, `pending`→waiting view, `active`→dashboard link), field-level errors via `getFriendlyError`. Same query key (`QUERY_KEYS.nodeOperatorProfile`) across all three call sites, so TanStack Query dedupes them. |
-| PATCH | `/node-operators/me/payout-account` | Node Operator sets/replaces payout bank account | ✅ | `PayoutAccountCard` (shared component) embedded in `NodeSetupScreen` (both pending and active states) — reused verbatim, not rebuilt, from the Rider Verification screen's payout section | `nodeService.setPayoutAccount` via `useNodeSetup` | None — new 2026-08-26. Bank picker sourced from `GET /payments/banks` (`getPayoutBanks`), same `useNodeSetup` hook. `NodeHomeScreen` and `NodeProfileScreen` both surface a "not set up yet" nudge off `payoutAccountConfigured` (from the same query, deduped) until this is called once. |
-| GET | `/node-operators/pending` | Admin's NodeOperator review queue | ✅ | `ApprovalsScreen` (`/admin/approvals`, "Node Operators" tab) | `adminService.getPendingNodeOperators` via `useNodeOperatorApprovals` | None — new 2026-08-12. `/admin/approvals` has no home in the original 8-frame design; placed as a new nav item after "Team" (see `nav-config.ts`'s comment). |
-| PATCH | `/node-operators/:id/approve` | Admin approves a NodeOperator | ✅ | Same screen, "Approve" button per row | `adminService.approveNodeOperator` via `useNodeOperatorApprovals` | None — new 2026-08-12. Closes the gap this row used to describe: an Admin can now approve a self-registered NodeOperator through the UI. |
+| POST | `/node-operators/onboarding` | Node Operator sets up their **first** Node | ✅ | `MyNodesScreen` (`/node/setup`) — its empty state is the onboarding form, unchanged from the pre-multi-Node first-run experience | `nodeService.onboardNode` via `useNodeSetup().createNode` | None. `createNode` picks between this and `POST /node-operators/nodes` on whether the fetched list is empty, so no form has to encode that server-side rule; if the list is stale the API's `409`/`400` both map to copy pointing at the other path. |
+| POST | `/node-operators/nodes` | Node Operator adds a 2nd/3rd location | ✅ | `AddNodeScreen` (`/node/nodes/new`), reached from My Nodes' "Add Another Station" and the `NodeSwitcher`'s "Manage stations" | `nodeService.addNode` via the same `useNodeSetup().createNode` | None — new 2026-09-02. Same `NodeOnboardingForm` as first-time onboarding (extracted from the old `NodeSetupScreen` so the two can't drift), `variant` changing copy only. On success it selects the new station and routes to its detail page. |
+| GET | `/node-operators/me/nodes` | Every Node this account **owns** a membership at | ✅ | `MyNodesScreen`, `NodeDetailScreen` (`/node/nodes/[nodeId]`), `NodeSwitcher` (Home + Activity headers), `NodeHomeScreen`, `NodeProfileScreen`, and `resolvePostAuthRoute`'s post-login redirect | `nodeService.getMyNodes` via `useMyNodes` (owner path only) | Replaced the removed singular `GET /node-operators/me`. Not-onboarded is now an empty array, not a `404`, and every caller checks that instead. **Owner-only, confirmed live 2026-09-09** — a `node_staff` session gets a plain `403 FORBIDDEN` here. ~~"Called for every session in the Node app, staff included" (corrected 2026-09-08)~~ — **that correction was wrong and is itself retracted 2026-09-09**: the reasoning ("`roleAtNode`'s own `"staff"` value implies a list an owner alone could call would never need it") was a plausible theory this backend doesn't honor. Never call this route for a `node_staff` session; `useMyNodes` now reconstructs a staff session's stations from `GET /handoffs/my-node/orders` + `GET /nodes/:id` instead (both confirmed staff-accessible) — see that hook's header and the new row below. `roleAtNode` still gates only what a member may *change* (payout, visibility, team — all three `404` for staff even on the owner path), never whether they can see their own station; that principle survived the correction, only the "one endpoint for both roles" mechanism didn't. |
+| GET | `/nodes/:id` (staff fallback path) | Enriches a `node_staff` session's discovered station id(s) into real Node records | ✅ | Same call sites as above, for a staff session specifically | `nodeService.getNodeById` via `useMyNodes`'s staff branch, `useQueries` (one call per discovered id, in parallel) | None — new 2026-09-09, added specifically to fix the `403` above. This route was already used elsewhere (`nodesService.getById`, Consumer-facing, narrower `PickupNode` shape) but not for the full `NodeOperatorNode` shape (`status`/`isPubliclyVisible` included) a Node-module screen needs; `getNodeById` is that fuller fetch. A `404` here (a discovered station later suspended by Admin — this route's own documented non-Admin behavior) is treated as "this station silently drops from the list," not a hook-level error, so one suspended station doesn't take down a staff member's others. |
+| PATCH | `/node-operators/nodes/:nodeId/payout-account` | Node Operator sets/replaces **one Node's** payout bank account | ✅ | `PayoutAccountCard` (shared component) embedded in `NodeDetailScreen`, per station — moved off the account-wide setup screen, since payout accounts are per-Node now | `nodeService.setPayoutAccount(nodeId, payload)` via `useNodeSetup` | None. The mutation is shared across stations, so its in-flight/saved/error state is scoped by `payoutAccountNodeId` — saving station A's account can't flash state onto station B's card. Owner-only (the route `404`s for a staff membership), so the card isn't rendered for one. `NodeHomeScreen`'s nudge now links to the active station's own page; `NodeProfileScreen`'s row counts how many stations still need one. |
+| POST | `/node-operators/nodes/:nodeId/staff/invite` | Node owner invites counter staff | ✅ | `NodeStaffCard` on `NodeDetailScreen` | `nodeService.inviteNodeStaff` via `useNodeStaff` | None. Goes through the same invite-email → `POST /auth/invite/confirm` mechanism as Admin's `/users/invite`, so `AcceptInviteScreen` needed no changes. Hidden on a non-`active` Node (the route's `403 NODE_NOT_ACTIVE`). **2026-09-03**: moved from the invite-only `NodeStaffInviteCard` into `NodeStaffCard` alongside the roster below; the success copy says the invitee appears "once they accept", because the roster lists *active* memberships and an invite isn't one yet. |
+| GET | `/node-operators/nodes/:nodeId/staff` | This station's active staff roster | ✅ | `NodeStaffCard`'s roster on `NodeDetailScreen` | `nodeService.getNodeStaff` via `useNodeStaff` | None — new 2026-09-03. Closes the gap the row above used to carry. Owner-only, so it's only queried for an `owner` membership. This is the only place a staff member's `userId` exists after the one-time invite response, so the remove action below is fed exclusively from these rows. |
+| DELETE | `/node-operators/nodes/:nodeId/staff/:userId` | Node owner revokes a staff member | ✅ | Per-row "Remove" in `NodeStaffCard`, with inline second-tap confirmation (`components/ui` has no modal primitive, and revoking access shouldn't be a one-tap accident) | `nodeService.removeNodeStaff` via `useNodeStaff` | None — new 2026-09-03. **First `204 No Content` route in the API**: `core/api/client.ts`'s `rawRequest` previously threw on an empty body, and now returns `undefined` for an empty *successful* response (the malformed-response guard is unchanged and still throws). `400 CANNOT_REMOVE_OWNER_MEMBERSHIP` is unreachable from this UI — the roster never lists owners — but is mapped in `getFriendlyError` anyway. |
+| PATCH | `/node-operators/nodes/:nodeId/visibility` | Owner opens/closes a station to public drop-offs | ✅ | `NodeVisibilityCard` on `NodeDetailScreen`; the resulting state also shows on `NodeHomeScreen` (a standing banner), `MyNodesScreen`, `NodeSwitcher`, `NodeProfileScreen`, and Admin's `NodeStatusCard` | `nodeService.setNodeVisibility` via `useNodeVisibility` | None — new 2026-09-03. **Labelled "Public drop-offs", never "Deactivate"** — see this file's 2026-09-03 header note for why that distinction is load-bearing rather than cosmetic; every piece of copy states what keeps working. Disabled (not hidden) on a non-`active` Node with the reason shown, since the route answers `403 NODE_NOT_ACTIVE` and the owner can only wait. No optimistic update: an operator reads this state back to decide whether they're taking walk-ins. |
+| POST | `/node-operators/nodes/:nodeId/dispatch` | Station sends its own parcel | ✅ | `DispatchScreen` (`/node/dispatch`), reached from a new "Send" nav tab in **both** `NODE_NAV_ITEMS` and `NODE_STAFF_NAV_ITEMS` | `nodeService.dispatchParcel` via `useDispatchParcel` | None — new 2026-09-03. Membership-gated, not owner-gated, per the route's own wording. One screen rather than the Consumer's four-step wizard (no origin to pick, no method step). Destination picker is `GET /nodes/nearby` centred on the **origin station's own coordinates**, so it needs no geolocation permission and sorts by distance from the counter; the origin itself is filtered out client-side. Ends in the same Paystack redirect as Checkout. See "Inconsistencies" for the two backend gaps this exposed. |
+| GET | `/node-operators/pending` | Admin's **Node** review queue | ✅ | `ApprovalsScreen` (`/admin/approvals`, "Nodes" tab) | `adminService.getPendingNodeOperators` via `useNodeOperatorApprovals` | None. **2026-09-02**: queues Nodes, not operators — the same `userEmail` legitimately appears more than once, one row per pending Node, and the tab/copy were reworded accordingly. |
+| PATCH | `/node-operators/:id/approve` | Admin approves **one Node** | ✅ | Same screen, "Approve" button per row | `adminService.approveNodeOperator` via `useNodeOperatorApprovals` | None. **2026-09-02**: return type corrected to `NodeMembership` (the route answers with the approved membership, not the queue row), and the toast reworded from "Node operator approved" to name the station. |
 
 ## Riders
 
@@ -245,16 +314,20 @@ New 2026-08-24. `GET /admin/capacity-audit` — no prior frontend integration at
 
 ## Summary
 
-**54** endpoints documented in `API.md` as of 2026-08-28 (up from 51 at
-the 2026-08-26 audit — `POST /auth/google` and `GET`/`PATCH /users/me`
-are new rows; see the 2026-08-28 update note above). **Every one has a
-row in this file** (verified by a 1:1 diff of every
+**60** endpoints documented in `API.md` as of 2026-09-03 (up from 54 at
+the 2026-08-28 audit — multi-Node turned the Node Operators group from
+5 routes into 8, plus visibility/staff-management/dispatch added 4
+more; see the 2026-09-02 and 2026-09-03 update notes above). **Every
+one has a row in this file** (verified by a 1:1 diff of every
 `### METHOD /api/v1/...` header in `API.md` against every table row
-here — no gaps either direction). **51 ✅ Fully Integrated** (up from
-49 — `/auth/google` and `PATCH /users/me` closed 2026-08-28, see their
-rows above), **1 🟡 Partially Integrated** (`PATCH /nodes/:id`), **0 ❌
-Not Integrated**, **2 ⚪ No UI Required Yet** (`GET /users/me` joins
-the pre-existing one below).
+here — no gaps either direction; the table's `GET /nodes/:id` appears
+twice on purpose, once for its original Node-detail use and once for
+the staff-fallback path `useMyNodes` added, both the same documented
+endpoint). **57 ✅ Fully Integrated** (up from 51 — the seven
+multi-Node/staff/visibility/dispatch rows added 2026-09-02/09-03, see
+their rows above), **1 🟡 Partially Integrated** (`PATCH /nodes/:id`),
+**0 ❌ Not Integrated**, **2 ⚪ No UI Required Yet** (`GET /users/me`
+joins the pre-existing one below).
 
 ### Recommended implementation priority
 
@@ -334,6 +407,63 @@ the pre-existing one below).
    revisited — confirm the decision still stands before touching it.
 
 ### Inconsistencies and other issues found
+
+- **`GET /node-operators/me/nodes` really does `403` a `node_staff`
+  session.** (2026-09-09, backend.) Confirmed live, not theoretical —
+  the response shape's own `roleAtNode` field can be `"staff"`, which
+  reads as if a staff session should be able to call this and see its
+  own rows, but the deployed backend rejects the call outright before
+  it ever gets that far. Worked around client-side: `useMyNodes`
+  reconstructs a staff session's station(s) from `GET
+  /handoffs/my-node/orders` (confirmed open to `NodeStaff`) plus `GET
+  /nodes/:id` (open to any authenticated role) per discovered id. This
+  closes the functional gap but leaves one case genuinely unsolvable
+  from the client: **a brand-new staff invite whose station has never
+  processed a single order has no id to discover by this method at
+  all** — there is no endpoint that would surface it. **Ask**: either
+  open this route to `NodeStaff` (the schema already implies that was
+  the intent), or add a route that answers "which Nodes am I staff
+  at" directly regardless of order history.
+- **A dispatching operator can't watch their own payment settle.**
+  (2026-09-03, backend.) `POST /node-operators/nodes/:nodeId/dispatch`
+  returns an ordinary `PaymentIntent` and redirects to Paystack, which
+  redirects back to the fixed `{FRONTEND_URL}/orders/payment-callback`
+  — but `GET /payments/intents/:id` and `GET /orders` are both
+  **Consumer-only**, so the poll that screen runs for a Consumer
+  booking would only collect `403`s on an operator's session. Handled
+  rather than papered over: a `pendingDispatch` session flag makes
+  `PaymentCallbackScreen` skip polling entirely for that flow and tell
+  the operator where the parcel will appear instead — `GET
+  /handoffs/my-node/orders` *does* admit them, and the dashboard's new
+  "Expected" tab reads it, so the claim is checkable. **Ask**: admit a
+  NodeOperator/NodeStaff session to `GET /payments/intents/:id` for an
+  intent created by their own dispatch.
+  - Related: that callback route had to move **out of** the `(user)`
+    route group (`allowedRoles={["consumer"]}`) into `app/orders/
+    payment-callback`, or an operator returning from Paystack was
+    redirected to `/login` before the screen rendered at all. URL
+    unchanged — `(user)` is a route group, not a path segment.
+- **A private Node can't be discovered as a dispatch destination.**
+  (2026-09-03, backend.) `POST .../dispatch` explicitly *accepts* any
+  `active` destination regardless of its `isPubliclyVisible`
+  ("dispatching to another private Node… is legitimate"), but the only
+  listing endpoints — `GET /nodes` and `GET /nodes/nearby` — filter
+  private Nodes out for non-Admin callers. So the API permits something
+  the picker structurally cannot offer, and an operator would need the
+  destination's raw uuid. **Ask**: either return private Nodes to a
+  NodeOperator session on those listings, or add a way to resolve a
+  partner station by code.
+- **A dispatched order's `awaiting_drop_off` state had nowhere to
+  live.** (2026-09-03, frontend — fixed here, noted because it changed
+  an existing screen.) A dispatch starts at `awaiting_drop_off` exactly
+  like a Consumer's order, and none of the Node dashboard's three tabs
+  matched that status, so an operator could pay for a dispatch and then
+  have no way to reach it and confirm the drop-off that releases it to
+  riders. Home gained an **"Expected"** tab
+  (`isExpectedAtOrigin`, origin-side + `awaiting_drop_off`) whose rows
+  link to the existing drop-off preview. Deliberately excluded from the
+  capacity bar's "occupied" count — the parcel isn't on the shelf until
+  `POST .../drop-off` says so.
 
 - ~~**Rider and Vendor auth do not go through the documented endpoints
   at all.**~~ **Resolved 2026-08-07.** `RiderLoginScreen`/`VendorSetupScreen`

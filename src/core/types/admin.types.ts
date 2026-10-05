@@ -96,6 +96,14 @@ export interface AdminNodeRecord {
   status: NodeLifecycleStatus;
   onboardingType: string;
   operatingHours: string | null;
+  /**
+   * Owner-toggled public discoverability (docs/API.md, 2026-09-03) —
+   * `PATCH /nodes/:id` deliberately doesn't accept it, but Admin does
+   * see the current value here. Read-only from Admin's side; optional
+   * for the same forward-compatibility reason as
+   * `NodeOperatorNode.isPubliclyVisible`, and `undefined` means `true`.
+   */
+  isPubliclyVisible?: boolean;
   createdAt: string;
 }
 
@@ -107,6 +115,8 @@ export interface AdminNodeStatus {
   country: string;
   onboardingType: string;
   status: NodeLifecycleStatus;
+  /** Owner-toggled public discoverability; read-only for Admin. Resolved from the raw record's optional field, so this one is always a definite boolean. */
+  isPubliclyVisible: boolean;
   capacity: number;
   operatingHoursLabel: string;
   createdAtLabel: string;

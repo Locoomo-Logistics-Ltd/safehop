@@ -8,11 +8,17 @@ import { formatCurrency, formatDate } from "@/lib/format";
 import { useNodeEarnings } from "@/modules/node/hooks/use-node-earnings";
 
 /**
- * "Earnings" — this Node's own revenue-split entries, `GET
- * /earnings/my-node`. Only appears for orders where this Node was the
- * *origin* (the full Node share always goes to the origin Node, never
- * split with the destination) — read-only, same as the Rider/Admin
- * views; the actual payout stays off-system.
+ * "Earnings" — this account's Node revenue-split entries, `GET
+ * /earnings/my-node`. Read-only, same as the Rider/Admin views; the
+ * actual payout stays off-system.
+ *
+ * **One combined ledger, not one per station.** The endpoint carries
+ * no node id on its rows, so a multi-Node operator's stations can't be
+ * separated here even though everything else about them is per-Node —
+ * this is the one Node screen the `NodeSwitcher` deliberately doesn't
+ * appear on, since it would imply a filter that can't be applied.
+ * Owner-only: a `node_staff` session gets `403 FORBIDDEN`, which is
+ * why the tab isn't in their nav (`NODE_STAFF_NAV_ITEMS`).
  *
  * Promoted from a Node Profile row to its own `NODE_NAV_ITEMS` tab
  * 2026-08-21 — same route (`ROUTES.nodeEarnings`), now reached in one
@@ -61,7 +67,7 @@ export function NodeEarningsScreen() {
           <EmptyState
             icon={<WalletIcon size={24} />}
             title="No earnings yet"
-            description="Your Node's share of completed deliveries — where this Node was the drop-off point — will show up here."
+            description="Your share of completed deliveries — across every station you run, as a drop-off point and as a destination — will show up here."
           />
         ) : (
           <div className="flex flex-col gap-2.5">

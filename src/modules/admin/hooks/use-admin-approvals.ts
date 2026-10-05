@@ -6,7 +6,14 @@ import { QUERY_KEYS } from "@/core/config/constants";
 import { useNotificationStore } from "@/store/notification.store";
 import { getErrorMessage } from "@/core/api/errors";
 
-/** GET /node-operators/pending + PATCH /node-operators/:id/approve — real, confirmed routes per docs/API.md. */
+/**
+ * GET /node-operators/pending + PATCH /node-operators/:id/approve —
+ * real, confirmed routes per docs/API.md.
+ *
+ * Approves **one Node**, not an operator (2026-09-02): the queue lists
+ * Nodes, an already-active operator's next location still queues, and
+ * the `profileId` these take is the membership's, not the user's.
+ */
 export function useNodeOperatorApprovals() {
   const queryClient = useQueryClient();
   const showNotification = useNotificationStore((s) => s.showNotification);
@@ -22,14 +29,14 @@ export function useNodeOperatorApprovals() {
     onSuccess: (approved) => {
       showNotification({
         type: "success",
-        title: "Node operator approved",
-        message: `${approved.node.name} is now active.`,
+        title: "Station approved",
+        message: `${approved.node.name} is now active and visible on the network.`,
       });
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.adminNodeOperatorsPending });
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.adminNodes });
     },
     onError: (error) => {
-      showNotification({ type: "error", title: "Couldn't approve node operator", message: getErrorMessage(error) });
+      showNotification({ type: "error", title: "Couldn't approve station", message: getErrorMessage(error) });
     },
   });
 

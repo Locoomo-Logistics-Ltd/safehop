@@ -18,11 +18,16 @@ export type PayoutStatus = "pending" | "paid";
 
 // ── Payout accounts (Rider / NodeOperator) ──────────────────────
 // `GET /payments/banks`, `PATCH /riders/me/payout-account`,
-// `PATCH /node-operators/me/payout-account` — the bank account Admin
-// disburses a Rider's or Node's earned revenue-split entries to.
-// Verified against the real bank via Paystack at submission time; the
-// account holder name is resolved server-side, never typed by the
-// caller.
+// `PATCH /node-operators/nodes/:nodeId/payout-account` — the bank
+// account Admin disburses a Rider's or Node's earned revenue-split
+// entries to. Verified against the real bank via Paystack at
+// submission time; the account holder name is resolved server-side,
+// never typed by the caller.
+//
+// The rider's is one per account; a Node's is one **per Node**
+// (2026-09-02) and owner-only, which is why only the Node route takes
+// a path param. The payload and the five response fields below are
+// identical either way.
 
 /** One row from `GET /payments/banks` — used to populate a bank picker. */
 export interface BankOption {
@@ -30,7 +35,7 @@ export interface BankOption {
   name: string;
 }
 
-/** `PATCH /riders/me/payout-account` / `PATCH /node-operators/me/payout-account` request body. */
+/** `PATCH /riders/me/payout-account` / `PATCH /node-operators/nodes/:nodeId/payout-account` request body. */
 export interface PayoutAccountPayload {
   bankCode: string;
   bankName: string;
@@ -40,9 +45,9 @@ export interface PayoutAccountPayload {
 
 /**
  * The five payout fields present on both `RiderVerificationProfile`
- * and `NodeOperatorProfile` (onboarding/`me`/payout-account responses
- * all share this shape) — `payoutAccountName` is always whatever
- * Paystack resolved, never what the caller sent.
+ * and `NodeMembership` (onboarding / me-nodes / payout-account
+ * responses all share this shape) — `payoutAccountName` is always
+ * whatever Paystack resolved, never what the caller sent.
  */
 export interface PayoutAccountFields {
   payoutAccountConfigured: boolean;

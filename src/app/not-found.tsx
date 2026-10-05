@@ -13,6 +13,9 @@ const ROLE_HOME: Record<UserRole, string> = {
   consumer: ROUTES.dashboard,
   rider: ROUTES.riderHome,
   node_operator: ROUTES.nodeHome,
+  // Node staff share the operator's dashboard — same route group, same
+  // counter screens, just fewer of them (see `(node)/layout.tsx`).
+  node_staff: ROUTES.nodeHome,
   admin: ROUTES.adminDashboard,
 };
 

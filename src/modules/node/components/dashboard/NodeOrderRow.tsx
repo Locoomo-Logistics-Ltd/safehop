@@ -10,20 +10,28 @@ import { HandoffStatusPill } from "@/modules/node/components/handoff/HandoffStat
 
 interface NodeOrderRowProps {
   order: NodeOrderSummary;
+  /**
+   * Where the row navigates. Defaults to `HandoffDetailScreen`, which
+   * is right for the two rider-code tabs. The "Expected" tab overrides
+   * it with the drop-off preview (`/node/drop-off/[trackingCode]`)
+   * instead — those parcels haven't been received yet, so the action
+   * they need is "confirm it arrived," not "enter a rider's code."
+   */
+  href?: string;
 }
 
 /**
- * One order row on Home's Awaiting Pickup / Awaiting Arrival tabs —
- * tracking code, status, and which side of the trip it's on (outgoing
- * to a destination, or incoming from an origin). Home is a summary: the
- * row itself carries no action, it only navigates to
- * `HandoffDetailScreen` (`ROUTES.nodeHandoffDetail`), which has the
- * full order info and the rider-code entry. Ready for Collection has
- * its own row shape (`CollectionSummaryList`) since it needs its two
- * sub-states (needs check-in vs. ready) and links to the existing
- * collect screen instead.
+ * One order row on Home's Expected / Awaiting Pickup / Awaiting Arrival
+ * tabs — tracking code, status, and which side of the trip it's on
+ * (outgoing to a destination, or incoming from an origin). Home is a
+ * summary: the row itself carries no action, it only navigates —
+ * by default to `HandoffDetailScreen` (`ROUTES.nodeHandoffDetail`),
+ * which has the full order info and the rider-code entry. Ready for
+ * Collection has its own row shape (`CollectionSummaryList`) since it
+ * needs its two sub-states (needs check-in vs. ready) and links to the
+ * existing collect screen instead.
  */
-export function NodeOrderRow({ order }: NodeOrderRowProps) {
+export function NodeOrderRow({ order, href }: NodeOrderRowProps) {
   const isOutgoing = order.myRole === "origin";
 
   return (
@@ -56,7 +64,7 @@ export function NodeOrderRow({ order }: NodeOrderRowProps) {
     //   </Card>
     // </Link>
 
-  <Link href={ROUTES.nodeHandoffDetail(order.id)}>
+  <Link href={href ?? ROUTES.nodeHandoffDetail(order.id)}>
   <Card
     interactive
     padding="md"

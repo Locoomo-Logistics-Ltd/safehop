@@ -30,11 +30,19 @@ interface PayoutAccountCardProps {
 }
 
 /**
- * Shared by Rider Verification and Node Setup — sets the bank account
- * Admin disburses this rider's/Node's earned revenue-split entries to
- * (`PATCH /riders/me/payout-account` / `PATCH /node-operators/me/payout-account`,
- * both real, confirmed routes per docs/API.md). The account holder
- * name is always resolved server-side via Paystack, never typed here.
+ * Shared by Rider Verification and a station's detail page — sets the
+ * bank account Admin disburses that rider's/Node's earned
+ * revenue-split entries to (`PATCH /riders/me/payout-account` /
+ * `PATCH /node-operators/nodes/:nodeId/payout-account`, both real,
+ * confirmed routes per docs/API.md). The account holder name is always
+ * resolved server-side via Paystack, never typed here.
+ *
+ * The rider's is per-account; the Node's is **per-Node** (2026-09-02) —
+ * an operator running three stations sets three, one on each station's
+ * page. This component is unchanged by that: it only ever renders one
+ * account's state, and the embedding screen decides whose. See
+ * `NodeDetailScreen` for how the shared mutation's in-flight/error
+ * state is scoped to the right card.
  *
  * Both real endpoints only require onboarding to be complete, not
  * Admin approval — so this renders in both the "pending review" and

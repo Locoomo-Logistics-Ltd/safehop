@@ -112,13 +112,70 @@ export function getFriendlyError(error: unknown) {
 
 
     case "RIDER_ALREADY_ONBOARDED":
-    case "NODE_OPERATOR_ALREADY_ONBOARDED":
       return {
         title: "Already submitted",
         message:
           "You've already completed this step — it's either awaiting approval or already active.",
         action:
           "Check your approval status below.",
+        type: "warning",
+      };
+
+
+    // Multi-Node (docs/API.md, 2026-09-02). These two are the mirror
+    // image of each other, and both mean the *other* create route was
+    // the right one: `onboarding` is first-Node-only, `nodes` is
+    // every-Node-after-the-first-only. `useNodeSetup` picks between
+    // them on the current list being empty, so seeing either of these
+    // means that list was stale — refetching is the fix, not a
+    // different form.
+    case "NODE_OPERATOR_ALREADY_ONBOARDED":
+      return {
+        title: "You're already set up",
+        message:
+          "This account has already completed its first Pickup station.",
+        action:
+          "Use \"Add Node\" on My Nodes to add another location.",
+        type: "warning",
+      };
+
+
+    case "NODE_OPERATOR_NOT_ONBOARDED":
+      return {
+        title: "Set up your first station first",
+        message:
+          "You can only add more locations once your first Pickup station is submitted.",
+        action:
+          "Set up your first station, then come back to add another.",
+        type: "warning",
+      };
+
+
+    // Covers staff invites, the visibility toggle, and dispatch — all
+    // three need an Admin-approved Node, and in every case the only
+    // available next step is the same: wait for approval.
+    case "NODE_NOT_ACTIVE":
+      return {
+        title: "This station isn't live yet",
+        message:
+          "It's still waiting on admin approval, so this isn't available yet.",
+        action:
+          "We'll email you once it's approved — everything unlocks right after.",
+        type: "warning",
+      };
+
+
+    // Unreachable through the UI: the remove action is only ever fed
+    // from `GET .../staff`, which never lists owners. Mapped anyway so
+    // that if it ever does surface, it reads as an explanation rather
+    // than the generic "we hit a small delay."
+    case "CANNOT_REMOVE_OWNER_MEMBERSHIP":
+      return {
+        title: "You can't remove the owner",
+        message:
+          "That person owns this station — only staff members can be removed.",
+        action:
+          "Nothing was changed.",
         type: "warning",
       };
 

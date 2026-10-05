@@ -40,9 +40,16 @@ Below `{children}`, each route group supplies its own layout:
 
 ```
 app/(user)/layout.tsx    → AuthGuard → AppShell(navItems=USER_NAV_ITEMS)   → page content
-app/(node)/layout.tsx    → AuthGuard → AppShell(navItems=NODE_NAV_ITEMS)   → page content
+app/(node)/layout.tsx    → AuthGuard → AppShell(navItems=NODE_NAV_ITEMS    → page content
+                                                     | NODE_STAFF_NAV_ITEMS)
 app/(rider)/layout.tsx   → AuthGuard → AppShell(navItems=RIDER_NAV_ITEMS)  → page content
 ```
+
+`(node)` is the one group admitting **two** roles (2026-09-03):
+`node_operator` and the `node_staff` its owners invite. Both work the
+same counter screens — every `/handoffs/*` route accepts either — so
+the difference is which nav list the layout picks and which owner-only
+sections each screen renders, not what the guard lets through.
 
 `(node)` was `(vendor)` until 2026-08-20 — renamed throughout (route
 group, `/vendor/*` URLs, `modules/vendor/`, `vendor.service.ts`,
@@ -85,32 +92,94 @@ role-select → create-account (?role=user) → login
   → delivery/[id]/success → delivery/[id]/track  (or /track for the list view)
 ```
 
-### Node Operator
+### Node Operator (and Node Staff)
 
-Rewritten 2026-08-20 for the Vendor→Node rename (paths only — every
-`/vendor/*` URL below became `/node/*`, `modules/vendor/` became
-`modules/node/`) and the new Earnings screen. The immediately preceding
-history: 2026-08-17 (later — Inventory retired into Home + Activity),
-2026-08-17 (earlier the same day, standalone tabbed Inventory screen —
-no longer exists), 2026-08-15 (scan/shelf/release supersession
-cleanup).
+Rewritten 2026-09-03 for **multi-Node**: one account now runs many
+Nodes (`docs/API.md`, 2026-09-02), and a second role — `node_staff`,
+invited by a Node's owner — shares this same route group. The
+immediately preceding history: 2026-08-20 (Vendor→Node rename, paths
+only, plus the Earnings screen), 2026-08-17 (later — Inventory retired
+into Home + Activity), 2026-08-17 (earlier the same day, standalone
+tabbed Inventory screen — no longer exists), 2026-08-15
+(scan/shelf/release supersession cleanup).
+
+**The one concept to hold onto:** the account↔Node relationship is a
+*membership*, not a profile — each carries a `roleAtNode`
+(`owner`/`staff`), and everything Node-scoped keys off `node.id`:
+approval, payout accounts, visibility, and staff are all per-Node.
+`useMyNodes` (`modules/node/hooks/use-my-nodes.ts`) is the single
+source for that list plus which Node the counter screens are currently
+scoped to — `useNodeProfile`, `useNodeSetup` and `useNodeDashboard` are
+all wrappers over it. The active selection lives in
+`store/active-node.store.ts` (Zustand, manual localStorage persist) and
+is changed by `NodeSwitcher`.
+
+**It is not one endpoint for both roles**, despite how uniform the
+result looks to every consumer above. `GET /node-operators/me/nodes`
+is owner-only — confirmed `403` for `node_staff` on the live backend
+(2026-09-09) — so `useMyNodes` reconstructs a staff session's list from
+`GET /handoffs/my-node/orders` (the only place a staff session's Node
+id(s) appear anywhere in this API) plus `GET /nodes/:id` per discovered
+id (open to any role). See that hook's own header for the full story,
+including the one real gap this leaves: a brand-new staff invite whose
+station has never processed an order has no id to discover at all.
 
 ```
 role-select → create-account (?role=node_operator) → login
-  (post-login redirect, 2026-08-21: fetches GET /node-operators/me
-   before deciding — status "active" → node/home directly; pending, or
-   a 404 meaning onboarding was never completed, → node/setup, same as
-   before. Previously always node/setup regardless of approval status.)
-  → node/setup (self-service Node onboarding + approval status)
-  → node/home (Node Dashboard — the operator's one summary screen.
-                 Node identity/capacity: GET /node-operators/me.
+  (post-login redirect: fetches GET /node-operators/me/nodes before
+   deciding — any Node "active" → node/home directly; all pending, or
+   an empty array meaning onboarding was never completed, → node/setup.
+   `node_staff` goes straight to node/home with no lookup — they're
+   invited to an already-active Node by definition, so there's no
+   approval state to branch on. The Nodes list still loads on that
+   screen like it does for an owner; skipping it here is a redirect
+   shortcut, not an access limit.)
+  → node/setup ("My Stations" — the list of every Node this account
+                 has a membership at, each with its own approval status
+                 and payout state; staff see the ones they were invited
+                 to, read-only, with no "Add Another Station". An
+                 OWNER's empty list → the first-Node onboarding form,
+                 unchanged; a STAFF empty list → "waiting on an invite",
+                 never that form. Keeps the /node/setup path because
+                 Profile, the dashboard's empty states, and the switcher
+                 all link to it.)
+  → node/nodes/new (add a 2nd/3rd station — POST /node-operators/nodes.
+                 Same NodeOnboardingForm as first-time onboarding;
+                 useNodeSetup picks the endpoint off the list being
+                 empty, so neither form encodes that rule.)
+  → node/nodes/[nodeId] (one station: approval status; whether it takes
+                 public drop-offs — PATCH /node-operators/nodes/
+                 :nodeId/visibility; its OWN payout account — PATCH
+                 .../payout-account; and its team — GET/POST/DELETE
+                 .../staff... All owner-only, and all answer 404 rather
+                 than 403 for a staff membership, so none of those
+                 sections render for one.)
+  → node/dispatch (send a parcel FROM the active station — POST
+                 /node-operators/nodes/:nodeId/dispatch. Open to staff
+                 as well as owners: membership-gated, not owner-gated,
+                 because it's counter work. One screen, not the
+                 Consumer's four-step wizard — no origin to pick, no
+                 method step. Destination picker is GET /nodes/nearby
+                 centred on the ORIGIN STATION's coordinates, so it
+                 needs no geolocation permission. Ends in the same
+                 Paystack redirect Checkout uses.)
+  → node/home (Node Dashboard — the operator's one summary screen,
+                 scoped to the station named in the NodeSwitcher at the
+                 top. Node identity/capacity: GET
+                 /node-operators/me/nodes.
                  "occupied" is derived client-side (see
                  use-node-dashboard.ts) since neither real endpoint
                  returns one. Gates on Node onboarding/approval state
                  before showing the dashboard. Three tabs, all sliced
                  from one GET /handoffs/my-node/orders query
-                 (use-my-node-orders.ts) — every row is a pure summary,
+                 (use-my-node-orders.ts) — which now returns EVERY Node
+                 you're a member of, so the dashboard filters to the
+                 active one first via myNodeId(). Four tabs since
+                 2026-09-04 ("Expected" was added with dispatch — see
+                 the note below the flow). Every row is a pure summary,
                  tap-through only, nothing actionable inline:
+                   Expected             — origin side, paid but not yet
+                                          handed in at the counter
                    Awaiting Pickup      — origin side, awaiting a rider
                    Awaiting Arrival     — destination side, rider en route
                    Ready for Collection — arrived: needs check-in, or
@@ -139,7 +208,8 @@ role-select → create-account (?role=node_operator) → login
                       POST .../collection-code/resend. Supersedes the
                       old node/rider-handoff + node/awaiting-collection
                       split from 2026-08-15 — both already deleted.)
-  → node/activity (Activity Log — a single list, one card style
+  → node/activity (scoped to the active station too, same NodeSwitcher
+                      — Activity Log, a single list, one card style
                       (`ActivityLogItem`), sourced from
                       GET /handoffs/my-node/orders, unfiltered, newest
                       first (2026-08-17, later still) — this *is* the
@@ -149,14 +219,86 @@ role-select → create-account (?role=node_operator) → login
                       (`listActivity()`/`useActivityLog`) is no longer
                       called from here — left in place, unused, not
                       deleted, pending a product decision on it.)
-  → node/earnings (this Node's revenue-split entries — GET
-                      /earnings/my-node, only present for orders where
-                      this Node was the origin. New 2026-08-20, reached
-                      from a Profile row at first, no nav-bar slot —
-                      all four were already spoken for; promoted to its
-                      own NODE_NAV_ITEMS tab 2026-08-21, same route.)
-  → node/profile
+  → node/earnings (this account's Node revenue-split entries — GET
+                      /earnings/my-node. New 2026-08-20, reached from a
+                      Profile row at first, no nav-bar slot — all four
+                      were already spoken for; promoted to its own
+                      NODE_NAV_ITEMS tab 2026-08-21, same route. The one
+                      Node screen with NO switcher, deliberately: the
+                      endpoint's rows carry no node id, so a per-station
+                      filter can't be applied and offering one would
+                      lie. Owner-only — a node_staff session gets 403,
+                      which is why the tab is absent from
+                      NODE_STAFF_NAV_ITEMS.)
+  → node/profile (account rows + the list of stations this account
+                      works at; the payout row is a per-station
+                      "N of M still need one" summary now that payout
+                      accounts are per-Node.)
 ```
+
+**"Public drop-offs" is not a deactivation** (2026-09-04). A station
+whose owner has switched `isPubliclyVisible` off disappears from
+customer listings and can't be targeted by a Consumer booking — and
+nothing else changes: it keeps running handoffs, keeps earning, keeps
+its staff, and can still both dispatch parcels and receive ones another
+operator dispatched to it. Genuine deactivation (`status: inactive`) is
+Admin-only. The UI never uses the word "deactivate" for this, and its
+off-state copy always names what keeps working, because an operator who
+believes their station is off will stop checking a counter that parcels
+keep arriving at.
+
+**Why Home has an "Expected" tab** (2026-09-04). A dispatched order
+starts at `awaiting_drop_off`, exactly like a Consumer's, and none of
+the three original tabs matched that status — so before this tab
+existed an operator could pay for a dispatch and then have no route to
+the drop-off confirmation that releases it to riders. Its rows link to
+the existing `node/drop-off/[trackingCode]` preview, and it's excluded
+from the capacity bar's "occupied" count: the parcel isn't on the shelf
+until `POST .../drop-off` says it is.
+
+**An invited staff member takes charge of the station they were
+invited to** (2026-09-08). This is the rule to hold onto, because
+getting it wrong is subtle and the app got it wrong once: someone
+invited to "Yaba Node" opens the app and sees *Yaba Node* — its name,
+its capacity, its parcels, its activity. They do not get a second,
+empty station of their own, and they are never shown the "set up your
+first station" form (creating a Node needs the `node_operator` role).
+
+**How `useMyNodes` actually gets there matters, and got revised once
+already** (2026-09-09). The first fix made it call `GET
+/node-operators/me/nodes` for every session, reasoning from the
+response shape: every item carries `roleAtNode`, whose only two values
+are `owner` and `staff`, so a list only an owner could call would seem
+to never need the second one. That reasoning was wrong for the actual
+deployed backend — the route `403`s a `node_staff` session outright,
+confirmed live. The reliable signal was elsewhere the whole time: this
+API says "NodeOperator **or** NodeStaff" explicitly on every route that
+truly admits both (`GET /handoffs/my-node/orders`'s own doc entry does,
+and explains why); `/node-operators/me/nodes` never does. So the
+mechanism is now: never call that route for staff, and instead
+reconstruct their station(s) from `GET /handoffs/my-node/orders` (the
+only place a staff session's Node id ever appears) plus `GET
+/nodes/:id` per discovered id (open to any role) — see
+`use-my-nodes.ts`'s header for the full mechanism, including the one
+real gap it can't close (a station with zero order history has no id
+to discover). The *outcome* two paragraphs up is what to hold onto and
+not regress; the mechanism underneath it is what changed.
+
+`roleAtNode` gates only what a member may **change**, never what they
+can see or operate:
+
+| Both owner and staff | Owner only |
+|---|---|
+| The station on Home, Activity, the switcher, My Stations, Profile | Its payout account |
+| Every handoff step — scan, drop-off, confirm, intake, collect | Its public-drop-offs toggle |
+| `node/dispatch` (membership-gated, not owner-gated) | Its team (roster, invite, remove) |
+| | Adding a station, and Earnings |
+
+The three owner-only station routes answer `404` — not `403` — for a
+staff membership, so their UI is hidden rather than rendered and
+failing. A staff member with no stations at all is waiting on an
+invite, which is a different empty state from an owner's
+("`hasNoStationsYet`" vs. "`notOnboarded`" in `useMyNodes`).
 
 **The old `vendor/parcels/[parcelId]/flag` (issue reporting) route is
 deleted, not just unreachable** (2026-08-20). It called an undocumented
@@ -254,7 +396,13 @@ Component (screen)
 3. **Envelope** — the backend always responds with
    `{success, data, meta}` or `{success:false, error:{code, message,
    correlationId, details?}}` (`core/api/types.ts`). `httpClient`
-   unwraps this once; nothing downstream ever sees the envelope.
+   unwraps this once; nothing downstream ever sees the envelope. The
+   one exception is a `204 No Content` — `DELETE
+   /node-operators/nodes/:nodeId/staff/:userId` is the only such route
+   today — which has no envelope because it has nothing to return;
+   `rawRequest` returns `undefined` for an empty *successful* body
+   (2026-09-04). An empty or unparseable body on a *failed* response
+   still throws, as before.
 4. **Error normalization** — every failure becomes an `ApiError`
    (`core/api/errors.ts`) with `status`, `code`, `correlationId`,
    optional `details: ValidationDetail[]`. `getFriendlyError(error)`
@@ -322,6 +470,14 @@ Two systems, deliberately scoped to different kinds of state:
   store's durability comes entirely from `authService` manually
   reading/writing `localStorage` (see above), not from Zustand itself.
   - `auth.store.ts` — `{ session, isInitializing }` + `useCurrentUser()` selector helper.
+  - `active-node.store.ts` (2026-09-03) — which of a multi-Node
+    operator's Nodes the counter screens are scoped to. Persisted to
+    `localStorage` manually, same as the session; the read happens in a
+    `hydrate()` action `useMyNodes` calls, **not** the store
+    initializer, since an initializer reading `localStorage` would
+    disagree with SSR's `null` and trip a hydration mismatch. A stale
+    or foreign id is harmless — `useMyNodes` resolves it against the
+    live list and falls back to the first active Node.
   - `delivery-draft.store.ts` — in-progress New Delivery form fields, `reset()` on submit.
   - `notification.store.ts` — single active toast, auto-clears via `setTimeout` after 4s
     (a second toast fired within 4s replaces the first rather than queuing).
@@ -352,10 +508,12 @@ providing `AuthGuard` + `AppShell` with role-specific nav items from
 per README):
 - `/role-select`, `/create-account`, `/login`, `/forgot-password`, `/reset-password`, `/accept-invite` — public onboarding, shared by all three self-registerable roles via a `?role=` query param.
 - `/admin-login` — Admin's separate entry point.
+- `/orders/payment-callback` — where Paystack redirects after **any** checkout. Moved out of `(user)` 2026-09-04: that group is gated `allowedRoles={["consumer"]}`, and a Node dispatch now comes back through the same backend-controlled URL, so an operator was being bounced to `/login` before the screen could render. Keeps an `AuthGuard` with no role list (a session is still required; the screen branches on role itself) and no `AppShell`. The URL didn't change — `(user)` is a route group, not a path segment.
 - `/node-scan` — full-screen camera overlay, chrome would get in the way. (`/rider-scan/[jobId]` was deleted 2026-08-15: nobody scans a rider in the real contract.)
 
 Dynamic segments: `[id]` (delivery), `[orderId]` (handoffs, both
-roles), `[trackingCode]` (drop-off preview), `[jobId]` (rider) — all
+roles), `[trackingCode]` (drop-off preview), `[nodeId]` (a station's
+detail page, 2026-09-03), `[jobId]` (rider) — all
 string route params, no typed route helpers beyond the `ROUTES`
 object's param-taking functions. (`[parcelId]` was the dead Flag Issue
 route's segment — deleted along with it 2026-08-20, see the Node

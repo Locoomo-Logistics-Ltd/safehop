@@ -39,17 +39,67 @@ export const ENDPOINTS = {
     nearby: "/nodes/nearby", // ?latitude&longitude&radiusInMeters
   },
 
-  // ── Node Operators (self-service onboarding) ────────────
+  // ── Node Operators (self-service onboarding, multi-Node) ────────
   // Real, confirmed routes per docs/API.md. Requires an authenticated
   // NodeOperator session.
+  //
+  // **One operator runs many Nodes** (docs/API.md, 2026-09-02). The
+  // singular `GET /node-operators/me` this group used to carry is gone
+  // — `myNodes` below replaces it, returning an array (empty, not 404,
+  // when onboarding hasn't happened) with a `roleAtNode` on each item.
+  // `payoutAccount` and `staffInvite` became per-Node path-param routes
+  // for the same reason.
   nodeOperators: {
+    /** The *first* Node only. A 2nd/3rd goes to `nodes` below — this answers `409 NODE_OPERATOR_ALREADY_ONBOARDED` once onboarded. */
     onboarding: "/node-operators/onboarding",
-    me: "/node-operators/me",
-    // Sets/replaces this Node's payout bank account — real, confirmed
-    // route per docs/API.md. Verified against Paystack at submission
-    // time; requires a `bankCode` from `payments.banks` below.
-    payoutAccount: "/node-operators/me/payout-account",
+    /** Adds a 2nd, 3rd, … Node to an already-onboarded account. Same request/response shape as `onboarding`. `400 NODE_OPERATOR_NOT_ONBOARDED` if the first one was never completed. */
+    nodes: "/node-operators/nodes",
+    /** Every Node this account OWNS, each tagged `roleAtNode`. Empty array — never 404 — when not onboarded. Replaced the singular `/node-operators/me`. Confirmed `403 FORBIDDEN` for a `node_staff` session on the live backend (2026-09-08) despite the response shape's own `roleAtNode: "staff"` value implying otherwise — never call this for staff, see `nodeService.getMyNodes`. */
+    myNodes: "/node-operators/me/nodes",
+    // Sets/replaces one Node's payout bank account — real, confirmed
+    // route per docs/API.md. Per-Node, not per-account: set it
+    // separately for every Node you run. Owner membership only.
+    // Verified against Paystack at submission time; requires a
+    // `bankCode` from `payments.banks` below.
+    payoutAccount: (nodeId: string) => `/node-operators/nodes/${nodeId}/payout-account`,
+    /** Provisions a `node_staff` account at this Node — owner-only, and the Node must already be `active` (`403 NODE_NOT_ACTIVE`). Same invite-email/`POST /auth/invite/confirm` mechanism as `users.invite`. */
+    staffInvite: (nodeId: string) => `/node-operators/nodes/${nodeId}/staff/invite`,
+    /** This Node's currently-active staff — owner-only. The only way to recover a staff member's `userId` after the invite response, which `staffRemove` needs. Removed staff aren't listed. Not paginated. */
+    staff: (nodeId: string) => `/node-operators/nodes/${nodeId}/staff`,
+    /** Revokes one staff member's access to this Node — owner-only, `204` with no body. Soft (the membership flips to `removed`); doesn't touch their account or their other Nodes. `:userId` is a User id, not a membership id. */
+    staffRemove: (nodeId: string, userId: string) =>
+      `/node-operators/nodes/${nodeId}/staff/${userId}`,
+    /**
+     * Toggles whether this Node is publicly discoverable — owner-only,
+     * and the Node must already be `active` (`403 NODE_NOT_ACTIVE`).
+     *
+     * **Not a deactivation.** `isPubliclyVisible: false` hides the Node
+     * from `GET /nodes`/`/nodes/nearby` for non-Admins and blocks a
+     * Consumer targeting it in `POST /payments/intents` (as origin *or*
+     * destination, `404`). Everything else keeps working: handoffs,
+     * earnings, staff, and receiving parcels another operator
+     * dispatches to it. Genuine deactivation is `status: inactive` via
+     * the Admin-only `PATCH /nodes/:id`.
+     */
+    visibility: (nodeId: string) => `/node-operators/nodes/${nodeId}/visibility`,
+    /**
+     * Places an order with this Node as the origin, on behalf of the
+     * operator's own business — no Consumer involved. NodeOperator
+     * **or** NodeStaff with a membership here (operational work, not
+     * owner-gated), Node must be `active`.
+     *
+     * Same body as `payments.intents` minus `originNodeId` (the URL
+     * supplies it, so a dispatcher can never point an order at a Node
+     * they don't run) and the same response, `authorizationUrl`
+     * included. The destination may be any `active` Node regardless of
+     * its own `isPubliclyVisible` — dispatching to a partner's private
+     * station is legitimate.
+     */
+    dispatch: (nodeId: string) => `/node-operators/nodes/${nodeId}/dispatch`,
     // Admin-only review queue — real, confirmed routes per docs/API.md.
+    // Queues *Nodes*, not operators: an already-active operator's 2nd
+    // Node still needs its own review, and `approve` takes the
+    // membership's `profileId`, approving that one Node.
     pending: "/node-operators/pending",
     approve: (profileId: string) => `/node-operators/${profileId}/approve`,
   },
@@ -89,23 +139,23 @@ export const ENDPOINTS = {
     accept: (orderId: string) => `/handoffs/orders/${orderId}/accept`,
     /** Rider. Every order you've ever been assigned, current and past, newest first. Query: page, limit. Real, confirmed per docs/API.md (2026-08-17) — closes the gap store/rider-jobs.store.ts used to paper over. */
     myOrders: "/handoffs/my-orders",
-    /** NodeOperator. Every order that's touched your Node, as origin or destination, current and past, newest first — `myRole` on each item says which side. Query: page, limit. Real, confirmed per docs/API.md (2026-08-17) — closes the gap store/node-outgoing.store.ts and store/node-parcels.store.ts used to paper over. */
+    /** NodeOperator or NodeStaff. Every order that's touched **any** Node you have a membership at, as origin or destination, current and past, newest first — `myRole` on each item says which side. Query: page, limit. Real, confirmed per docs/API.md (2026-08-17; widened to all your Nodes + NodeStaff 2026-09-02) — closes the gap store/node-outgoing.store.ts and store/node-parcels.store.ts used to paper over. */
     myNodeOrders: "/handoffs/my-node/orders",
-    /** NodeOperator. Scoped to orders whose originNodeId is your own Node. */
+    /** NodeOperator or NodeStaff. Scoped to orders whose originNodeId is one of your Nodes. */
     byTrackingCode: (code: string) =>
       `/handoffs/orders/by-tracking-code/${encodeURIComponent(code)}`,
-    /** NodeOperator (origin). Idempotent: awaiting_drop_off → parcel_received_at_origin. */
+    /** NodeOperator or NodeStaff (origin). Idempotent: awaiting_drop_off → parcel_received_at_origin. */
     dropOff: (orderId: string) => `/handoffs/orders/${orderId}/drop-off`,
     /** Rider (assigned to this order). Issues a 6-digit code that expires in 5 minutes. */
     requestCode: (orderId: string) => `/handoffs/orders/${orderId}/request-code`,
-    /** NodeOperator, ownership-scoped to the side matching `type`. Idempotent on a re-used code. */
+    /** NodeOperator or NodeStaff, membership-scoped to the side matching `type`. Idempotent on a re-used code. */
     confirmHandoff: (orderId: string) => `/handoffs/orders/${orderId}/confirm-handoff`,
-    /** NodeOperator (destination). Idempotent: arrived_at_destination → ready_for_collection, and emails the receiver their collection code. */
+    /** NodeOperator or NodeStaff (destination). Idempotent: arrived_at_destination → ready_for_collection, and emails the receiver their collection code. */
     intake: (orderId: string) => `/handoffs/orders/${orderId}/intake`,
-    /** NodeOperator (destination). Mints + re-emails a fresh collection code, superseding the prior one. Rate-limited 5/min — it sends real email. */
+    /** NodeOperator or NodeStaff (destination). Mints + re-emails a fresh collection code, superseding the prior one. Rate-limited 5/min — it sends real email. */
     collectionCodeResend: (orderId: string) =>
       `/handoffs/orders/${orderId}/collection-code/resend`,
-    /** NodeOperator (destination). Final step: ready_for_collection → completed. */
+    /** NodeOperator or NodeStaff (destination). Final step: ready_for_collection → completed. */
     collect: (orderId: string) => `/handoffs/orders/${orderId}/collect`,
   },
 

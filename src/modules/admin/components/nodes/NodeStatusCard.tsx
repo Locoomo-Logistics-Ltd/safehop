@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Card, Button } from "@/components/ui";
+import { EyeOffIcon } from "@/components/icons";
 import { AdminSelect } from "@/modules/admin/components/shared/AdminSelect";
 import { useAdminNodeDetail } from "@/modules/admin/hooks/use-admin-node-detail";
 import { useManageNode } from "@/modules/admin/hooks/use-manage-node";
@@ -38,12 +39,31 @@ export function NodeStatusCard({ node }: NodeStatusCardProps) {
     <Card padding="md">
       <div className="flex items-start justify-between gap-2 mb-1">
         <p className="text-[13px] font-semibold text-text-primary">{node.name}</p>
-        <span
-          className="text-[10px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap"
-          style={{ color: config.color, background: config.bg }}
-        >
-          {config.label}
-        </span>
+        <div className="flex items-center gap-1.5 shrink-0">
+          {/* Owner-closed to the public (docs/API.md, 2026-09-03).
+              Shown only when off, and separate from the status pill on
+              purpose: without it an Admin can't tell a Node missing
+              from customer listings because its owner closed it apart
+              from one missing for a status reason — the two look
+              identical from here, and only one of them is a problem.
+              Read-only: `PATCH /nodes/:id` doesn't accept this field. */}
+          {!node.isPubliclyVisible && (
+            <span
+              className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap"
+              style={{ color: "var(--status-neutral)", background: "var(--status-neutral-bg)" }}
+              title="The owner has closed this node to public drop-offs"
+            >
+              <EyeOffIcon size={10} />
+              Not public
+            </span>
+          )}
+          <span
+            className="text-[10px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap"
+            style={{ color: config.color, background: config.bg }}
+          >
+            {config.label}
+          </span>
+        </div>
       </div>
       <p className="text-[11px] text-text-muted mb-3">{node.area}</p>
 

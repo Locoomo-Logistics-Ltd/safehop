@@ -54,7 +54,7 @@ export function NodeMapView({
 
   if (!env.geoapifyApiKey) {
     return (
-      <div className="w-full h-[280px]">
+      <div className="w-full h-[280px] z-10">
         <MapUnavailable>
           {/* Keeps selection reachable by keyboard and screen reader with no visual map. */}
           <div className="sr-only">

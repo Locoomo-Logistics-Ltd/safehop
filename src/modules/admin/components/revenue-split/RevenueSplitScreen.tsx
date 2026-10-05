@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { RootTopBar } from "@/components/layout";
 import { ROUTES } from "@/core/config/constants";
 import { Card, Button, EmptyState } from "@/components/ui";
@@ -21,9 +21,20 @@ function nairaFromKobo(kobo: number): number {
   return kobo / 100;
 }
 
+/** `YYYY-MM-DD` in the viewer's local timezone — the format `<input type="date">` uses. */
+function localDateKey(date: Date): string {
+  return date.toLocaleDateString("en-CA");
+}
+
+function daysAgoKey(days: number): string {
+  const date = new Date();
+  date.setDate(date.getDate() - days);
+  return localDateKey(date);
+}
+
 const PARTY_LABEL: Record<RevenueSplitPartyType, string> = {
   rider: "Rider",
-  node: "Node",
+  node: "Origin Node",
   destination_node: "Destination Node",
   platform: "Platform",
 };
@@ -43,13 +54,24 @@ export function RevenueSplitScreen() {
   const [showForm, setShowForm] = useState(false);
   const [partyType, setPartyType] = useState<RevenueSplitPartyType | "">("");
   const [payoutStatus, setPayoutStatus] = useState<PayoutStatus | "">("");
+  // `null` means "today" (resolved at render so it stays correct across midnight); "" means all dates.
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
   const { ratios, isLoading: isLoadingRatios } = useRevenueSplitRatios();
-  const { entries, isLoading: isLoadingEntries } = useRevenueSplitEntries({
+  const { entries: allEntries, isLoading: isLoadingEntries } = useRevenueSplitEntries({
     partyType: partyType || undefined,
     payoutStatus: payoutStatus || undefined,
   });
   const { markPaid, isMarkingPaidId } = useMarkRevenueSplitEntryPaid();
+
+  const dateFilter = selectedDate ?? localDateKey(new Date());
+  const entries = useMemo(
+    () =>
+      dateFilter
+        ? allEntries.filter((entry) => localDateKey(new Date(entry.createdAt)) === dateFilter)
+        : allEntries,
+    [allEntries, dateFilter]
+  );
 
   const currentRatio = ratios[0];
 
@@ -106,7 +128,7 @@ export function RevenueSplitScreen() {
           >
             <option value="">All parties</option>
             <option value="rider">Rider</option>
-            <option value="node">Node</option>
+            <option value="node">Origin Node</option>
             <option value="destination_node">Destination Node</option>
             <option value="platform">Platform</option>
           </AdminSelect>
@@ -119,6 +141,20 @@ export function RevenueSplitScreen() {
             <option value="pending">Pending</option>
             <option value="paid">Paid</option>
           </AdminSelect>
+          <input
+            type="date"
+            aria-label="Filter by date"
+            value={dateFilter}
+            max={localDateKey(new Date())}
+            suppressHydrationWarning
+            onChange={(e) => setSelectedDate(e.target.value)}
+            className="h-10 rounded-[10px] border border-border-default bg-bg-card text-text-primary text-[13px] px-3 outline-none focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/15 transition-colors"
+          />
+          <div className="flex items-center gap-2">
+            <DateChip label="Today" active={dateFilter === localDateKey(new Date())} onClick={() => setSelectedDate(null)} />
+            <DateChip label="Yesterday" active={dateFilter === daysAgoKey(1)} onClick={() => setSelectedDate(daysAgoKey(1))} />
+            <DateChip label="All dates" active={dateFilter === ""} onClick={() => setSelectedDate("")} />
+          </div>
         </div>
 
         {isLoadingEntries ? (
@@ -128,7 +164,11 @@ export function RevenueSplitScreen() {
             <EmptyState
               icon={<WalletIcon size={22} />}
               title="Nothing to show"
-              description="Once a delivery reaches Completed, its split entries show up here."
+              description={
+                dateFilter && allEntries.length > 0
+                  ? "No entries on this date. Pick another day or choose All dates."
+                  : "Once a delivery reaches Completed, its split entries show up here."
+              }
             />
           </Card>
         ) : (
@@ -252,6 +292,24 @@ function PayoutAccountCell({ entry }: { entry: AdminRevenueSplitEntry }) {
         <CopyIcon size={13} />
       </button>
     </div>
+  );
+}
+
+function DateChip({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={
+        "h-10 px-3 rounded-[10px] text-[13px] font-medium border transition-colors " +
+        (active
+          ? "bg-admin-accent text-white border-admin-accent"
+          : "bg-bg-card text-text-secondary border-border-default hover:bg-bg-subtle")
+      }
+    >
+      {label}
+    </button>
   );
 }
 

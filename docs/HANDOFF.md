@@ -6,7 +6,314 @@
 
 ## Current objective
 
-**Latest session (2026-08-28 — Google Authentication):** explicit ask
+**Latest session (2026-09-21 — "My Nodes" gets its own tab):** explicit
+ask — `NodeProfileScreen` was showing an owner's stations list inline
+*and* linking out to the same list at `/node/setup`, which read as two
+screens for one thing. UI-only reorganisation, no API change: the list
+moved to its own route, `ROUTES.nodeNodes` (`/node/nodes`), reached
+from a new "My Nodes" nav tab — same promotion pattern the 2026-08-21
+Earnings tab got. Owner-only tab, since everything behind the list
+(payout account, visibility, team) is owner-gated server-side already;
+`/node/setup` is unrenamed and still where a brand-new operator lands
+and where the dashboard's empty states and the switcher link. Profile
+now carries a single "My Stations" row (owners → the new tab's route,
+staff → `/node/setup`, since the tab isn't theirs) and a payout summary
+that reads as an account-level roll-up rather than a duplicate list.
+Full writeup in `docs/IMPLEMENTATION_LOG.md`'s matching entry.
+`tsc`/`eslint` clean, `next build` compiles with `/node/nodes` in the
+route manifest.
+
+---
+
+**Previous session (2026-09-09 — the `/node-operators/me/nodes` 403 for
+staff was real, not theoretical):** a staff account visiting
+`/node/home` hit a raw `403 FORBIDDEN`. This is the exact live-backend
+outcome the 2026-09-08 sessions flagged as unverified and then, in
+their last entry, asserted was fine — that assertion was wrong, and
+this session corrects it rather than layering another guess on top.
+
+**What was actually happening.** `GET /node-operators/me/nodes` really
+does `403` a `node_staff` session on the deployed backend. The
+reasoning that led to calling it unconditionally for staff — "the
+response shape's own `roleAtNode: 'staff'` value implies staff must be
+allowed to call this" — was a plausible theory that turned out false
+for this backend. Re-reading docs/API.md side by side settles which
+reading was right: `GET /handoffs/my-node/orders` spells out
+"**NodeOperator or NodeStaff**" and explains why; `GET
+/node-operators/me/nodes` says only "an authenticated NodeOperator
+session," no such qualifier. That asymmetry — present in every route
+that actually admits staff — was the signal to trust, not the schema's
+field values.
+
+**Fix**: `useMyNodes` never calls that route for a `node_staff` session
+again. But this time staff still get a real dashboard, not the old
+placeholder-heading regression — the hook reconstructs their station(s)
+from two routes confirmed open to them: `GET /handoffs/my-node/orders`
+(the only place a staff session's Node id(s) appear anywhere in the
+API) discovers *which* station(s), then `GET /nodes/:id` (open to any
+authenticated role) fetches each one's real capacity/status/
+`isPubliclyVisible` in parallel via `useQueries`. Nothing is fabricated
+— a station only appears once its detail lookup actually succeeds.
+
+**The one real, remaining gap**: a brand-new staff invite whose station
+has never processed a single order has no id to discover this way —
+`GET /handoffs/my-node/orders` returns nothing to derive a Node id
+from, and there's no other endpoint that would. `hasNoStationsYet`
+covers this with honest copy ("nothing to show yet... check with
+whoever added you") rather than a form or a crash, but it genuinely
+can't be resolved client-side. The actual fix is one of: open `GET
+/node-operators/me/nodes` to NodeStaff (closes the gap outright, since
+the schema already supports it), or ship a dedicated "my staff
+memberships" route. Logged in `docs/API_INTEGRATION_STATUS.md`.
+
+A second-order effect worth knowing: a station discovered via order
+history that Admin later suspends will 404 on the `GET /nodes/:id`
+lookup (correct, documented non-Admin behavior) — that station is
+silently dropped from the list rather than failing the whole hook, so
+a staff member on several stations doesn't lose access to the ones
+still fine because one became unavailable.
+
+`tsc`/`eslint` clean, `next build` compiles.
+
+---
+
+**Latest session (2026-09-08, later — close the last three
+navigation-only staff restrictions):** follow-up on the same-day fix
+above. The principle was already right ("staff can see everything
+about their station, only change what the owner set"), but three spots
+in the code still didn't live up to it — all purely navigational, none
+backed by an API 404/403:
+
+1. `NodeProfileScreen`'s "Business" row (→ My Stations) was hidden for
+   staff entirely, even though `MyNodesScreen` already renders a
+   correct read-only view for them.
+2. `NodeSwitcher`'s "Manage stations" footer link — same thing, hidden
+   rather than relabeled.
+3. Home's "waiting for approval" screen dropped the action button for
+   staff instead of just changing its label.
+
+Fixed by relabeling instead of hiding ("My Stations" / "View stations"
+/ "View Stations" for staff, vs. "My Stations, approval & staff" /
+"Manage stations" / "Manage Stations" for an owner) and removing the
+`isStaff` gates that skipped rendering. The genuinely owner-only
+surfaces are untouched, because those really are 404s for a staff
+membership: a station's payout account, its public-drop-offs toggle,
+its team roster, and "Add Another Station" (creating a Node needs the
+`node_operator` role).
+
+`tsc`/`eslint` clean, `next build` compiles.
+
+---
+
+**Latest session (2026-09-08 — an invited staff member runs the station
+they were invited to):** bug report, and it was mine. When a Node owner
+invited Chima to "Yaba Node", Chima logged in and got a hollow shell —
+a placeholder "Your station" heading, no switcher, no capacity, and a
+My Stations screen saying "managed by the station owner". She was
+supposed to *take charge of Yaba Node*: its name, its capacity, its
+parcels, its activity.
+
+**Root cause.** `useMyNodes` was skipping `GET
+/node-operators/me/nodes` entirely for a `node_staff` session. I'd read
+that route's "**Requires an authenticated NodeOperator session**"
+header as an exclusion when it's the module's loose role wording. The
+endpoint's own response shape says otherwise: every item carries
+`roleAtNode`, whose only two values are `owner` and `staff` — a list an
+owner alone could call would never need the second one. "Every Node you
+have a membership at" includes staff memberships.
+
+**Fix**: delete the role branch, don't add another. One call for every
+session in the `(node)` group. Chima gets
+`[{ roleAtNode: "staff", node: Yaba }]`, and every screen already keyed
+off `activeMembership` starts working — switcher names Yaba, Home shows
+its capacity and parcels, Activity scopes to it, dispatch sends from
+it. `roleAtNode` now gates only what a member may **change**:
+
+| Both owner and staff | Owner only |
+|---|---|
+| The station on Home, Activity, switcher, My Stations, Profile | Its payout account |
+| Every handoff step — scan, drop-off, confirm, intake, collect | Its public-drop-offs toggle |
+| `node/dispatch` (membership-gated, not owner-gated) | Its team (roster, invite, remove) |
+| | Adding a station, and Earnings |
+
+Also fixed alongside it: staff no longer get nagged about a payout
+account they can't have; the "closed to public" banner's *Change* link
+is owner-only (staff won't find that toggle); the pending-approval
+screen no longer sends staff to a stations screen they can't act on;
+and an empty list now means two different things —
+**`notOnboarded`** (an owner who hasn't built a station: show the setup
+form) vs. **`hasNoStationsYet`** (a staff member waiting on an invite:
+never show that form, creating a Node needs the `node_operator` role).
+
+**~~The lesson worth carrying~~ — retracted 2026-09-09, and inverted.**
+This entry said "when a role header and the response shape disagree,
+believe the shape." A live backend proved that backwards for this
+exact route: `GET /node-operators/me/nodes` really does `403` a
+`node_staff` session, exactly the failure mode flagged as "not
+verified" below and then dismissed as an acceptable outcome. The
+correct lesson, from the 2026-09-09 entry at the top of this file: when
+a route's own doc text is silent on a role, treat that silence as
+exclusion, and trust the API's *own* pattern of saying "NodeOperator or
+NodeStaff" explicitly everywhere it actually means both — not what a
+single field's possible values seem to imply. See that entry for the
+real fix (staff stations reconstructed from two routes confirmed open
+to them).
+
+**~~Not verified~~ — verified 2026-09-09, and it was the bad outcome.**
+`tsc`/`eslint` clean, `next build` compiles.
+
+---
+
+**Latest session (2026-09-04 — Node visibility, staff management,
+dispatch):** explicit ask — implement `docs/API.md`'s 2026-09-03
+update, framed as "node owner can deactivate node." Four new endpoints
+and one new field on every Node.
+
+**Read this first, it's the thing to get right.** The API calls it
+visibility and the operator will call it "turning my station off," but
+`isPubliclyVisible: false` **is not a deactivation**. It does exactly
+two things: hides the Node from `GET /nodes`/`/nodes/nearby` for
+non-Admins, and makes a Consumer-initiated `POST /payments/intents`
+naming it — as origin *or* destination — answer `404`. Handoffs,
+earnings, staff, dispatching outward, and receiving parcels another
+operator dispatched in all keep working. Real deactivation is
+`status: inactive`, Admin-only via `PATCH /nodes/:id`, which explicitly
+refuses this field. So the switch is labelled **"Public drop-offs"**,
+its off-state copy always names what keeps working, and Home carries a
+standing banner saying parcels already on their way still arrive. If
+you reword any of that, keep that distinction — an operator who reads
+"deactivated" stops checking a counter parcels keep arriving at.
+
+**What's done**: `NodeVisibilityCard` (the toggle) and `NodeStaffCard`
+(roster + invite + remove, superseding the invite-only
+`NodeStaffInviteCard`) on the station detail page; a "not public" badge
+wherever stations are listed, including Admin's Node Network; and
+`DispatchScreen` at `/node/dispatch` with a new "Send" nav tab for
+owners **and** staff — dispatch is membership-gated, not owner-gated,
+because it's counter work. Home gained an **"Expected"** tab, which
+dispatch needed to function at all: a dispatched order starts at
+`awaiting_drop_off` and no existing tab matched that status, so an
+operator could pay and then have no route to the drop-off confirmation
+that releases the parcel to riders.
+
+**Two things changed outside the Node module, both load-bearing:**
+
+1. `core/api/client.ts` — `rawRequest` now returns `undefined` for an
+   empty *successful* body. `DELETE .../staff/:userId` is the first
+   `204` in this API and would otherwise have thrown "Unexpected
+   response from server (204)". The malformed-body guard is unchanged.
+2. `/orders/payment-callback` moved out of the `(user)` route group
+   (gated `allowedRoles={["consumer"]}`) into `app/orders/
+   payment-callback`, with a role-less `AuthGuard`. An operator
+   returning from Paystack after a dispatch was being bounced to
+   `/login` before the screen rendered. **The URL is unchanged** —
+   `(user)` was a route group, not a path segment — which matters
+   because the backend controls that redirect target.
+
+**Backend gaps** — one from last session is now closed
+(`GET .../staff` exists), two new ones opened:
+
+1. **A dispatching operator can't watch their own payment settle.**
+   `GET /payments/intents/:id` and `GET /orders` are Consumer-only, so
+   the callback screen's poll would only collect `403`s. Worked around
+   with a `pendingDispatch` session flag: that flow skips polling and
+   points at the Expected tab, which is backed by
+   `GET /handoffs/my-node/orders` (which does admit them), so the claim
+   is checkable rather than reassuring noise.
+2. **A private Node can't be discovered as a dispatch destination.**
+   The dispatch route explicitly accepts one; `GET /nodes/nearby`
+   filters private Nodes out for non-Admins. The API permits something
+   the picker structurally can't offer.
+3. Still open from before: `GET /node-operators/me/nodes` doesn't admit
+   `node_staff`, and `GET /earnings/my-node` carries no node id.
+
+**Not verified**: still no live backend, no browser session. Riskiest
+assumptions to check first: `GET .../staff` returns a bare array (not
+the usual paginated envelope); the `204` really has no body; dispatch's
+response is byte-identical to `POST /payments/intents`'s; and Paystack
+redirects a *dispatch* to the same `/orders/payment-callback` URL —
+`docs/API.md` says dispatch "reuses the exact same checkout flow" but
+never states its callback URL explicitly. `tsc`/`eslint` clean,
+`next build` compiles with both new routes present.
+
+---
+
+**Previous session (2026-09-03 — Multi-Node for Node Operators):**
+explicit ask — implement `docs/API.md`'s 2026-09-02 update, which turns
+a Node Operator from *one account, one Node* into *one account, many
+Nodes*, and adds `node_staff`, an invite-only role that works a Node's
+counter. Full technical writeup in `docs/IMPLEMENTATION_LOG.md`'s
+matching entry and a rewritten Node Operators section in
+`docs/API_INTEGRATION_STATUS.md`; this covers what the next engineer
+needs.
+
+**What the API changed**: `GET /node-operators/me` is **gone**, replaced
+by `GET /node-operators/me/nodes` (an array; `[]` instead of `404` when
+not onboarded; each item tagged `roleAtNode: "owner" | "staff"`).
+`PATCH /node-operators/me/payout-account` became the per-Node
+`PATCH /node-operators/nodes/:nodeId/payout-account`. Two new routes:
+`POST /node-operators/nodes` (add a 2nd/3rd station) and
+`POST /node-operators/nodes/:nodeId/staff/invite`. All eight
+`/handoffs/*` operator routes now accept a NodeStaff session and scope
+to *any* Node you're a member of. Two new error codes:
+`NODE_OPERATOR_NOT_ONBOARDED`, `NODE_NOT_ACTIVE`. Admin approval is now
+per-Node — an already-active operator's next station still queues.
+
+**What's done**: all of it. A new `useMyNodes` hook is the single source
+for "my Nodes" plus which one the counter screens are scoped to
+(`store/active-node.store.ts`, localStorage-persisted);
+`useNodeProfile`/`useNodeSetup`/`useNodeDashboard` are wrappers over it,
+so the list is fetched once and the active selection can't disagree
+between screens. `/node/setup` keeps its path but is now **My Stations**
+— a list, dropping into the unchanged first-Node onboarding form when
+it's empty. New `/node/nodes/[nodeId]` is where a station's approval
+status, its **own** payout account, and its staff invites live (all
+three owner-only, hidden for a staff membership since those routes
+`404` rather than `403`). New `/node/nodes/new` adds a station.
+`NodeSwitcher` sits in Home's and Activity's headers and scopes both to
+one station — it renders as plain text when there's only one, so a
+single-station operator sees exactly what they saw before. `node_staff`
+is in `UserRole`, admitted to the `(node)` route group, and gets
+`NODE_STAFF_NAV_ITEMS` (no Earnings — that route is operator-only).
+
+**What remains / three real backend gaps** (each worked around, none
+faked):
+
+1. ~~**`node_staff` can't list its own Nodes.**~~ **Wrong — retracted
+   2026-09-08.** This was never a backend gap; it was a
+   misreading of the route's role header on my part, and the workaround
+   it justified (skipping the request for staff) was the bug behind
+   "an invited staff member gets an empty second account". See the
+   2026-09-08 entry at the top of this file.
+2. **No "list this Node's staff" endpoint** — so `NodeStaffInviteCard`
+   is a send-and-confirm form, not a roster, and there's no way to see
+   who works a station or revoke their access. (Admin's `/users/invite`
+   has had the identical gap since it shipped.)
+3. **`GET /earnings/my-node` carries no node id on its rows**, so a
+   multi-station operator's earnings can't be split per station. That
+   screen deliberately has no switcher — one would imply a filter that
+   can't be applied.
+
+**Also not verified**: no live backend and no interactive browser
+session this session, so nothing here has been exercised against real
+responses — in particular `roleAtNode`'s actual casing, the
+empty-array-not-`404` behaviour, whether the staff-invite route really
+answers with a `UserResponseDto`, and the two new error codes' exact
+strings. `tsc`/`eslint` clean, `next build` compiles with all three new
+routes present.
+
+**One thing to know before touching this code**: `useNodeSetup`'s
+`createNode` picks between `POST /node-operators/onboarding` and
+`POST /node-operators/nodes` based on whether the fetched list is empty
+— the API's two create routes take an identical body and refuse each
+other's case, and putting that branch in the hook keeps it out of both
+forms. If you see `409 NODE_OPERATOR_ALREADY_ONBOARDED` or
+`400 NODE_OPERATOR_NOT_ONBOARDED` in the wild, the list was stale;
+both map to copy pointing at the other path.
+
+---
+
+**Previous session (2026-08-28 — Google Authentication):** explicit ask
 — integrate `docs/API.md`'s new `POST /auth/google` (Google Identity
 Services sign-in/signup) end-to-end: Role Select gets "Continue with
 Google" / "Continue with Email" side by side, Login gets its own

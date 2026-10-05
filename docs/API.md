@@ -109,19 +109,22 @@ backend greps logs for.
 | 401 | `UNAUTHENTICATED` | No valid `access_token` cookie on a protected route — missing, invalid, or expired. Refresh and retry |
 | 403 | `ACCOUNT_SUSPENDED` | Password was correct but the account is suspended |
 | 403 | `FORBIDDEN` | Valid session, but your role can't access this route |
-| 404 | `NOT_FOUND` | Route or resource doesn't exist. Also returned for a Node that exists but isn't `active` when you're not an Admin — visibility is hidden as "not found," not `403`, so a non-Admin can't distinguish "doesn't exist" from "pending approval" |
+| 404 | `NOT_FOUND` | Route or resource doesn't exist. Also returned for a Node that exists but isn't `active` when you're not an Admin — visibility is hidden as "not found," not `403`, so a non-Admin can't distinguish "doesn't exist" from "pending approval." `POST /payments/intents` also returns this for a Node that's `active` but `isPubliclyVisible: false` — same hiding treatment, whether you're the Consumer submitting the request or just probing an id |
 | 401 | `INVALID_WEBHOOK_SIGNATURE` | `POST /payments/webhooks/paystack` signature didn't verify — not a frontend-facing error, listed for completeness |
 | 409 | `EMAIL_ALREADY_REGISTERED` | Registration (password or Google), or an admin invite, attempted with an email already on file. For `POST /auth/google` specifically: the verified email belongs to a different, non-Google account — there is no auto-link, log in with the password instead |
-| 409 | `NODE_OPERATOR_ALREADY_ONBOARDED` | `POST /node-operators/onboarding` called by an account that already has a Node |
+| 409 | `NODE_OPERATOR_ALREADY_ONBOARDED` | `POST /node-operators/onboarding` called by an account that's already completed onboarding — use `POST /node-operators/nodes` for another Node |
+| 400 | `NODE_OPERATOR_NOT_ONBOARDED` | `POST /node-operators/nodes` called by an account that hasn't completed `POST /node-operators/onboarding` yet |
 | 409 | `RIDER_ALREADY_ONBOARDED` | `POST /riders/onboarding` called by an account that already has a rider profile |
+| 400 | `CANNOT_REMOVE_OWNER_MEMBERSHIP` | `DELETE /node-operators/nodes/:nodeId/staff/:userId` — `:userId` refers to that Node's owner membership, not a staff one. Not reachable through the normal flow (`GET .../staff` only ever lists staff), rejected directly if attempted anyway |
 | 409 | `NODE_CAPACITY_UNAVAILABLE` | `POST /payments/intents` — the origin Node filled up between you seeing it in `/nodes/nearby` and this request landing. Show the consumer a "that drop-off point just filled up, try another" message, not a generic error |
 | 403 | `RIDER_NOT_ACTIVE` | `POST /handoffs/orders/:id/accept` — your rider role is valid but your `RiderProfile` isn't `active` yet (still `pending` Admin review, or `suspended`) |
+| 403 | `NODE_NOT_ACTIVE` | `POST /node-operators/nodes/:nodeId/staff/invite`, `PATCH /node-operators/nodes/:nodeId/visibility`, or `POST /node-operators/nodes/:nodeId/dispatch` — the target Node hasn't been Admin-approved yet |
 | 409 | `RIDER_CAPACITY_UNAVAILABLE` | `POST /handoffs/orders/:id/accept` — you already have the maximum number of concurrent active deliveries (3). Finish or hand off one before accepting another |
 | 409 | `ILLEGAL_ORDER_TRANSITION` | A handoff scan/confirm endpoint was called while the order isn't in the state that step expects — either stale client state or someone else already advanced it. Re-fetch the order and refresh the UI rather than retrying blindly |
 | 401 | `INVALID_HANDOFF_CODE` | `POST /handoffs/orders/:id/confirm-handoff` and `POST /handoffs/orders/:id/collect` — the code was missing, expired, already used, locked out after too many wrong guesses, or just wrong. Deliberately identical for all of these, same enumeration-avoidance reasoning as other invalid-token errors; request/resend a fresh code either way |
 | 409 | `ORDER_NOT_READY_FOR_COLLECTION` | `POST /handoffs/orders/:id/collection-code/resend` — called before `POST /handoffs/orders/:id/intake` has run (or after the order's already `completed`). There's no collection code to resend yet |
 | 400 | `INVALID_REVENUE_SPLIT` | `POST /admin/revenue-split` — `riderPercent`/`nodePercent`/`platformPercent` didn't sum to 100 |
-| 400 | `BANK_ACCOUNT_VERIFICATION_FAILED` | `PATCH /riders/me/payout-account` or `PATCH /node-operators/me/payout-account` — Paystack couldn't resolve that `accountNumber` at that `bankCode`. Nothing is saved; a previously-verified payout account on file, if any, is untouched |
+| 400 | `BANK_ACCOUNT_VERIFICATION_FAILED` | `PATCH /riders/me/payout-account` or `PATCH /node-operators/nodes/:nodeId/payout-account` — Paystack couldn't resolve that `accountNumber` at that `bankCode`. Nothing is saved; a previously-verified payout account on file, if any, is untouched |
 | 429 | `RATE_LIMITED` | Too many requests to this route from your IP. `/auth/register` and `/auth/login` allow 5/min; `/payments/intents` allows 5/min; everything else defaults to 100/min |
 | 500 | `INTERNAL_ERROR` | Unexpected server failure — message is always the generic "Something went wrong," never internal detail. Report the `correlationId` to backend |
 | 502 | `PAYMENT_PROVIDER_ERROR` | Paystack's API failed or was unreachable — placing an order, listing banks, or resolving a payout account number. Safe to retry |
@@ -514,9 +517,11 @@ Errors: `401 UNAUTHENTICATED`, `403 FORBIDDEN` (non-Admin), `400 VALIDATION_FAIL
 ### `GET /api/v1/nodes`
 
 Any authenticated role. Lists Nodes, paginated (see above). Non-Admins always see only
-`active` Nodes, regardless of the `status` filter — this is what keeps
-pending/suspended/inactive Nodes out of pickup-station listings. Admins can filter by
-`status`.
+`active` **and** publicly-visible Nodes, regardless of the `status` filter — this is what
+keeps pending/suspended/inactive Nodes, and any Node its owner has opted out of public
+discovery (`isPubliclyVisible: false` — see `PATCH
+/node-operators/nodes/:nodeId/visibility`), out of pickup-station listings. Admins can
+filter by `status` and see every Node regardless of visibility.
 
 Query params: `page`, `limit`, `status` (Admin-only filter — `pending`, `active`,
 `inactive`, or `suspended`; ignored for non-Admins).
@@ -537,15 +542,25 @@ Response `200`, `data.items[]` each:
   "status": "active",
   "onboardingType": "field_recruited",
   "operatingHours": "Mon-Sat 8am-7pm",
+  "isPubliclyVisible": true,
   "createdAt": "2026-07-22T09:14:00.000Z"
 }
 ```
 
+`isPubliclyVisible` (default `true`) is current state only, not a change history — set by
+the Node's own owner via `PATCH /node-operators/nodes/:nodeId/visibility`, for a Node
+that only dispatches its own parcels through the network and doesn't want public
+drop-offs. `false` excludes it here and from `GET /nodes/nearby` below for non-Admin
+callers, **and** is enforced server-side against being targeted by a
+Consumer-initiated `POST /payments/intents` (not just hidden from these two listing
+endpoints — see that endpoint's errors below).
+
 ### `GET /api/v1/nodes/nearby`
 
-Any authenticated role. Proximity search — always `active`-only regardless of caller,
-since its entire purpose is "where can I actually drop off a parcel right now." Backed
-by a PostGIS `ST_DWithin`/`ST_Distance` query against a GiST-indexed geography column.
+Any authenticated role. Proximity search — always `active` and publicly-visible only
+regardless of caller, since its entire purpose is "where can I actually drop off a
+parcel right now." Backed by a PostGIS `ST_DWithin`/`ST_Distance` query against a
+GiST-indexed geography column.
 
 Query params (all required except pagination): `latitude`, `longitude`, `radiusKm`
 (0.1–100), plus `page`/`limit`.
@@ -559,7 +574,12 @@ Errors: `400 VALIDATION_FAILED` (missing/out-of-range lat/lng/radius).
 
 Any authenticated role. Non-Admins get `404 NOT_FOUND` for a Node that exists but isn't
 `active` — same shape as "doesn't exist," so pending/suspended Nodes can't be
-fingerprinted by ID. Admins can fetch any Node regardless of status.
+fingerprinted by ID. Admins can fetch any Node regardless of status. Unlike the two list
+endpoints above, this one does **not** additionally check `isPubliclyVisible` — a
+private Node's name/address is still visible here to anyone who already has its id (the
+real enforcement against booking against it lives in `POST /payments/intents`, not this
+read endpoint — deliberate, matching how `GET /nodes/nearby`'s capacity filter has always
+been UX-only, not the actual enforcement).
 
 Response `200`, `data`: same shape as one list item.
 
@@ -575,7 +595,10 @@ endpoint, a Node is never removed, only status-transitioned.
 
 Request (all optional): `name`, `address`, `city`, `state`, `country`, `latitude`,
 `longitude`, `capacity`, `operatingHours`, `status`. `onboardingType` is immutable after
-creation and isn't accepted here.
+creation and isn't accepted here. `isPubliclyVisible` also isn't accepted here — that's
+owner-toggled via `PATCH /node-operators/nodes/:nodeId/visibility` below, not
+Admin-set (Admin still sees the current value through this endpoint's response either
+way).
 
 Response `200`, `data`: the updated Node, same shape as one list item.
 
@@ -586,11 +609,15 @@ Errors: `401 UNAUTHENTICATED`, `403 FORBIDDEN` (non-Admin), `400 VALIDATION_FAIL
 
 **Requires an authenticated NodeOperator session** (role `node_operator` — set via
 `POST /auth/register`'s `role` field). This is the second step of self-registration:
-sets up the operator's Node (location, capacity). Creates the `Node` (`status: pending`,
-`onboardingType: portal`) and links it to your account in one action — the Node stays
-invisible in `/nodes`/`/nodes/nearby` for everyone except Admins until an Admin approves
-it (`PATCH /node-operators/:id/approve` below). One Node per operator — calling this
-twice on the same account returns `409`.
+sets up the operator's *first* Node (location, capacity). Creates the `Node` (`status:
+pending`, `onboardingType: portal`) and links it to your account, as `owner`, in one
+action — the Node stays invisible in `/nodes`/`/nodes/nearby` for everyone except Admins
+until an Admin approves it (`PATCH /node-operators/:id/approve` below).
+
+**One operator can run more than one Node** — this endpoint is specifically for your
+*first* one; calling it again once you've already onboarded returns `409
+NODE_OPERATOR_ALREADY_ONBOARDED` pointing you at `POST /node-operators/nodes` below for
+a 2nd/3rd location instead.
 
 Request: same fields as `POST /nodes` **except no `onboardingType`** (forced to `portal`
 server-side, not client-settable):
@@ -614,6 +641,7 @@ Response `201`, `data`:
 ```json
 {
   "profileId": "uuid",
+  "roleAtNode": "owner",
   "node": { "...": "same Node shape as GET /nodes/:id, status will be \"pending\"" },
   "payoutAccountConfigured": false,
   "payoutBankCode": null,
@@ -624,7 +652,7 @@ Response `201`, `data`:
 ```
 
 `payoutAccountConfigured`/`payoutBank*`/`payoutAccount*` are always unset at this point —
-see `PATCH /node-operators/me/payout-account` below. Frontend: use
+see `PATCH /node-operators/nodes/:nodeId/payout-account` below. Frontend: use
 `payoutAccountConfigured: false` to drive a "set up your payout account" prompt on the
 operator's dashboard.
 
@@ -635,20 +663,36 @@ it isn't set yet.
 Errors: `401 UNAUTHENTICATED`, `403 FORBIDDEN` (not a NodeOperator),
 `400 VALIDATION_FAILED`, `400 PROFILE_INCOMPLETE`, `409 NODE_OPERATOR_ALREADY_ONBOARDED`.
 
-### `GET /api/v1/node-operators/me`
+### `POST /api/v1/node-operators/nodes`
 
-**Requires an authenticated NodeOperator session.** Returns your own profile + Node —
-use this to check whether your Node has been approved yet (`data.node.status`).
-`404 NOT_FOUND` if you haven't completed onboarding yet (call the endpoint above first).
+**Requires an authenticated NodeOperator session who has already completed `POST
+/node-operators/onboarding`** — this is how the *same* account adds a 2nd, 3rd, ...
+location, without a second registration or login. Identical request/response shape to
+`POST /node-operators/onboarding` above (`roleAtNode: "owner"`, `node.status: "pending"`,
+same Admin-approval gate per Node). `400 NODE_OPERATOR_NOT_ONBOARDED` if you haven't
+completed your first `POST /node-operators/onboarding` yet — do that first.
 
-Response `200`, `data`: same shape as the onboarding response.
+Errors: `401 UNAUTHENTICATED`, `403 FORBIDDEN` (not a NodeOperator),
+`400 VALIDATION_FAILED`, `400 PROFILE_INCOMPLETE`, `400 NODE_OPERATOR_NOT_ONBOARDED`.
 
-### `PATCH /api/v1/node-operators/me/payout-account`
+### `GET /api/v1/node-operators/me/nodes`
 
-**Requires an authenticated NodeOperator session.** Sets (or replaces) your Node's payout
-bank account. Verified against the real bank at
-submission time via Paystack — you never type the account holder name yourself; it's
-resolved server-side and that's what gets stored.
+**Requires an authenticated NodeOperator session.** Every Node you have a membership at —
+an array now, not a single object, since one operator can run several. Each item is the
+same shape `POST /node-operators/onboarding` returns, tagged with `roleAtNode` . Empty array if you haven't onboarded yet — this replaced
+the old singular `GET /node-operators/me`, which used to `404` in that case; check for an
+empty array instead.
+
+Response `200`, `data`: array of the onboarding-response shape.
+
+### `PATCH /api/v1/node-operators/nodes/:nodeId/payout-account`
+
+**Requires an authenticated NodeOperator session who owns `:nodeId`** (an `owner`
+membership specifically). Sets (or replaces) that Node's
+payout bank account. Verified against the real bank at submission time via Paystack — you
+never type the account holder name yourself; it's resolved server-side and that's what
+gets stored. Payout accounts are per-Node, not shared across every Node you run — set it
+separately for each one.
 
 First call `GET /api/v1/payments/banks` to get a `bankCode` to submit (see below).
 
@@ -662,20 +706,23 @@ Request:
 the bank list you already fetched — not itself verified, only `accountNumber`+`bankCode`
 are checked against Paystack.
 
-Response `200`, `data`: same shape as `GET /node-operators/me`, with the new payout fields
-populated (`payoutAccountConfigured: true`, `payoutAccountName` set to whatever Paystack
-resolved — never what you sent).
+Response `200`, `data`: same shape as one `GET /node-operators/me/nodes` item, with the
+new payout fields populated (`payoutAccountConfigured: true`, `payoutAccountName` set to
+whatever Paystack resolved — never what you sent).
 
 Errors: `401 UNAUTHENTICATED`, `403 FORBIDDEN` (not a NodeOperator), `400 VALIDATION_FAILED`,
-`404 NOT_FOUND` (you haven't onboarded yet), `400 BANK_ACCOUNT_VERIFICATION_FAILED`
-(Paystack couldn't resolve that account number at that bank — nothing is saved; any
-previously-verified payout account on file is left untouched).
+`404 NOT_FOUND` (`:nodeId` doesn't exist, or you don't have an owner membership there —
+same "hide as not found" treatment as elsewhere, whether the Node exists at all isn't
+revealed), `400 BANK_ACCOUNT_VERIFICATION_FAILED` (Paystack couldn't resolve that account
+number at that bank — nothing is saved; any previously-verified payout account on file is
+left untouched).
 
 ### `GET /api/v1/node-operators/pending`
 
-**Requires an authenticated Admin session.** The review queue — NodeOperators who have
-registered and completed onboarding but aren't approved yet. Paginated (see the
-pagination section above).
+**Requires an authenticated Admin session.** The review queue — Nodes still awaiting
+approval, regardless of whether the owning operator's *account* has already been
+approved before (an already-active operator's 2nd/3rd Node still needs its own review).
+Paginated (see the pagination section above).
 
 Response `200`, `data.items[]` each:
 
@@ -695,17 +742,167 @@ Errors: `401 UNAUTHENTICATED`, `403 FORBIDDEN` (non-Admin).
 ### `PATCH /api/v1/node-operators/:id/approve`
 
 **Requires an authenticated Admin session.** `:id` is the `profileId` from the pending
-queue above (not the Node id or the user id). Approves the operator — flips the User's
-status to `active` and the Node's status to `active` together, in one transaction. After
-this, the Node shows up in `/nodes`/`/nodes/nearby` for everyone.
+queue above (not the Node id or the user id) — approving one Node, not "the operator" as
+a whole. Flips the User's status to `active` and that Node's status to `active` together,
+in one transaction (re-approving an already-active operator's account here is harmless —
+it's a no-op on the User side, only the Node changes). After this, the Node shows up in
+`/nodes`/`/nodes/nearby` for everyone.
 
 No request body.
 
-Response `200`, `data`: same shape as the onboarding response, with `node.status:
-"active"`.
+Response `200`, `data`: same shape as one `GET /node-operators/me/nodes` item, with
+`node.status: "active"`.
 
 Errors: `401 UNAUTHENTICATED`, `403 FORBIDDEN` (non-Admin), `404 NOT_FOUND`
-(no profile with that id).
+(no membership with that id).
+
+### `POST /api/v1/node-operators/nodes/:nodeId/staff/invite`
+
+**Requires an authenticated NodeOperator session who owns `:nodeId`** (an `owner`
+membership specifically — a `staff` member inviting more staff is rejected the same way a
+non-member is, `403 FORBIDDEN`, before this route's own logic even runs). `:nodeId` must
+already be `active` 
+
+Provisions a new `NODE_STAFF` account, invite-only just like Admin-provisioned accounts
+(never self-registerable) — this is the *first* non-Admin invite path in the API, but it
+goes through the exact same underlying mechanism: an email with an `/accept-invite?token=`
+link, confirmed via the unchanged `POST /auth/invite/confirm` below. Staff can then log in
+and perform handoff-scan operations at this Node (and any other Node they're later invited
+to), but can't touch payout accounts, invite further staff, or see this Node's earnings —
+those stay owner-only.
+
+Request:
+
+```json
+{
+  "firstName": "Chidi",
+  "lastName": "Okafor",
+  "email": "chidi@example.com",
+  "phone": "+2348012345678"
+}
+```
+
+Response `201`, `data`: same `UserResponseDto` shape `POST /users/invite` returns
+(`status: "invited"`, `role: "node_staff"`, no `passwordHash`).
+
+Errors: `401 UNAUTHENTICATED`, `403 FORBIDDEN` (not a NodeOperator, or not this Node's
+owner), `400 VALIDATION_FAILED`, `403 NODE_NOT_ACTIVE`, `404 NOT_FOUND` (`:nodeId` doesn't
+exist, or you're not a member of it — same hide-as-not-found treatment as the
+payout-account route), `409 EMAIL_ALREADY_REGISTERED`.
+
+### `GET /api/v1/node-operators/nodes/:nodeId/staff`
+
+**Requires an authenticated NodeOperator session who owns `:nodeId`.** The currently
+active staff at this Node — there's no other way to see a staff member's `userId` again
+after the initial invite response above, which `DELETE .../staff/:userId` below needs.
+Removed staff don't appear here.
+
+Response `200`, `data`, an array:
+
+```json
+[
+  {
+    "userId": "uuid",
+    "firstName": "Chidi",
+    "lastName": "Okafor",
+    "email": "chidi@example.com",
+    "joinedAt": "2026-07-22T09:14:00.000Z"
+  }
+]
+```
+
+Errors: `401 UNAUTHENTICATED`, `403 FORBIDDEN` (not a NodeOperator), `404 NOT_FOUND`
+(`:nodeId` doesn't exist, or you don't have an owner membership there — same
+hide-as-not-found treatment as the payout-account route).
+
+### `DELETE /api/v1/node-operators/nodes/:nodeId/staff/:userId`
+
+**Requires an authenticated NodeOperator session who owns `:nodeId`.** Revokes that
+staff member's access to this Node — a soft removal (the membership row's `status`
+flips to `removed`), never a hard delete, so a Node's staffing history stays inspectable
+at the DB level. Doesn't touch the staff
+member's account or any other Node they're a member of — if they were invited to more
+than one Node, those memberships are unaffected. Takes effect on their very next
+request; there's no session/token to separately revoke.
+
+`:userId` is a User id, not a membership id — the same `userId` `GET .../staff` above
+returns.
+
+No request body.
+
+Response `204`, no body.
+
+Errors: `401 UNAUTHENTICATED`, `403 FORBIDDEN` (not a NodeOperator), `404 NOT_FOUND`
+(`:nodeId` doesn't exist or you don't own it, or `:userId` has no active membership at
+this Node — including one already removed), `400 CANNOT_REMOVE_OWNER_MEMBERSHIP`
+(`:userId` refers to an owner membership, not staff — not reachable through the normal
+flow since `GET .../staff` only ever lists staff, but rejected directly if attempted).
+
+### `PATCH /api/v1/node-operators/nodes/:nodeId/visibility`
+
+**Requires an authenticated NodeOperator session who owns `:nodeId`** (an `owner`
+membership specifically — same treatment as payout-account/staff-invite, `staff` gets the
+same hide-as-not-found rejection as a non-member). `:nodeId` must already be `active`.
+
+Toggles whether this Node appears in `GET /nodes` / `GET /nodes/nearby` for the general
+public, and whether a Consumer can target it in `POST /payments/intents` at all (as
+either the origin or the destination) — for a Node that only wants to dispatch its own
+already-collected parcels through the network via `POST
+/node-operators/nodes/:nodeId/dispatch` below, not accept public drop-offs. Setting this
+doesn't touch any order already placed — same "enforced only at new-booking time, not
+retroactively" precedent as the destination-Node-full behavior.
+
+Request:
+
+```json
+{ "isPubliclyVisible": false }
+```
+
+Response `200`, `data`: same shape as one `GET /node-operators/me/nodes` item, with
+`node.isPubliclyVisible` updated.
+
+Errors: `401 UNAUTHENTICATED`, `403 FORBIDDEN` (not a NodeOperator), `400
+VALIDATION_FAILED`, `403 NODE_NOT_ACTIVE`, `404 NOT_FOUND` (`:nodeId` doesn't exist, or
+you don't have an owner membership there — same hide-as-not-found treatment as the
+payout-account route).
+
+### `POST /api/v1/node-operators/nodes/:nodeId/dispatch`
+
+**Requires an authenticated NodeOperator or NodeStaff session with a membership at
+`:nodeId`** (owner or staff — this is operational work, same as handoff scan/confirm, not
+gated to owners only). `:nodeId` must already be `active`.
+
+Places an order with `:nodeId` as the origin, on behalf of the operator's own business —
+no Consumer account or app interaction on the sending side at all. Reuses the exact same
+checkout flow `POST /payments/intents` uses underneath (Paystack hosted-redirect
+checkout, the same capacity-reservation transaction, the same fee calculation), just
+without a free-typed `originNodeId` — the origin is always `:nodeId` from the URL, so a
+dispatching operator can never point an order at a Node they don't run. Unlike Consumer
+bookings, the destination can be **any** active Node regardless of its own
+`isPubliclyVisible` value — dispatching to another private Node (e.g. a partner's
+internal station) is legitimate.
+
+Request: same as `POST /payments/intents` **except no `originNodeId`**:
+
+```json
+{
+  "destinationNodeId": "uuid",
+  "receiverFullName": "Chinedu Okonkwo",
+  "receiverEmail": "chinedu@example.com",
+  "receiverPhone": "+2348012345678",
+  "parcelDescription": "Documents, sealed envelope",
+  "parcelSize": "small"
+}
+```
+
+Response `201`, `data`: same shape as `POST /payments/intents`'s response (below) —
+`authorizationUrl` is where the operator (or whoever pays) completes checkout, same as a
+Consumer booking.  
+
+Errors: `401 UNAUTHENTICATED`, `403 FORBIDDEN` (not a NodeOperator/NodeStaff), `400
+VALIDATION_FAILED`, `403 NODE_NOT_ACTIVE`, `404 NOT_FOUND` (`:nodeId` doesn't exist, or
+you're not a member of it, or `destinationNodeId` doesn't exist / isn't `active` —
+all hidden the same way), `409 NODE_CAPACITY_UNAVAILABLE`, `502 PAYMENT_PROVIDER_ERROR`.
 
 ### `GET /api/v1/riders/verification/upload-signature`
 
@@ -934,7 +1131,7 @@ Errors: `401 UNAUTHENTICATED`, `403 FORBIDDEN` (non-Admin).
 
 **Requires an authenticated Rider or NodeOperator session.** Paystack's full list of
 supported Nigerian banks — use this to populate a bank picker before calling
-`PATCH /riders/me/payout-account` or `PATCH /node-operators/me/payout-account`.
+`PATCH /riders/me/payout-account` or `PATCH /node-operators/nodes/:nodeId/payout-account`.
 Deliberately **not paginated** (flagged exception, same reasoning as
 `GET /admin/capacity-audit`) — it's a wholesale reference list meant to back one
 client-side dropdown/search, not a growing browsable resource.
@@ -1016,9 +1213,14 @@ confirms that) — land the consumer on a "processing" screen and poll `GET
 /payments/intents/:id` until `status` leaves `"pending"`.
 
 Errors: `401 UNAUTHENTICATED`, `403 FORBIDDEN` (non-Consumer), `400 VALIDATION_FAILED`,
-`404 NOT_FOUND` (either Node doesn't exist or isn't active), `409
-NODE_CAPACITY_UNAVAILABLE`, `429 RATE_LIMITED`, `502 PAYMENT_PROVIDER_ERROR`, `503
-PRICING_NOT_CONFIGURED`.
+`404 NOT_FOUND` (either Node doesn't exist, isn't active, or is `isPubliclyVisible:
+false` — a private Node is hidden from a Consumer the same way a nonexistent one is, not
+a `403`), `409 NODE_CAPACITY_UNAVAILABLE`, `429 RATE_LIMITED`, `502
+PAYMENT_PROVIDER_ERROR`, `503 PRICING_NOT_CONFIGURED`.
+
+Node-operators dispatching their own parcels (no Consumer involved) use `POST
+/node-operators/nodes/:nodeId/dispatch` instead, not this endpoint — see that section
+above for why it's a separate route rather than this one gaining more roles.
 
 ### `GET /api/v1/payments/intents/:id`
 
@@ -1205,11 +1407,13 @@ Errors: `401 UNAUTHENTICATED`, `403 FORBIDDEN` (non-Rider).
 
 ### `GET /api/v1/handoffs/my-node/orders`
 
-**Requires an authenticated NodeOperator session.** The counterpart to `my-orders`, for
-the other side of the counter — every order that's ever touched your Node, either as
-origin or destination, current and past, newest first. `myRole` on each item tells you
-which side your Node played on that particular order (a Node is an origin for some orders
-and a destination for others). Paginated (see [Pagination](#pagination-list-endpoints)).
+**Requires an authenticated NodeOperator or NodeStaff session** — operating a Node's
+handoffs isn't owner-only, so staff invited to a Node get the same access here as its
+owner. The counterpart to `my-orders`, for the other side of the counter — every order
+that's ever touched **any** Node you have a membership at, either as origin or
+destination, current and past, newest first. `myRole` on each item tells you which side
+that order's Node played (a Node is an origin for some orders and a destination for
+others). Paginated (see [Pagination](#pagination-list-endpoints)).
 
 Response `200`, `data`:
 
@@ -1239,14 +1443,15 @@ Response `200`, `data`:
 No receiver details here either — same reasoning as `by-tracking-code` below, this is a
 history/overview view, not the collection step itself.
 
-Errors: `401 UNAUTHENTICATED`, `403 FORBIDDEN` (non-NodeOperator).
+Errors: `401 UNAUTHENTICATED`, `403 FORBIDDEN` (non-NodeOperator/NodeStaff).
 
 ### `GET /api/v1/handoffs/orders/by-tracking-code/:code`
 
-**Requires an authenticated NodeOperator session**, and only returns orders whose
-`originNodeId` is *your* Node (`404 NOT_FOUND` otherwise — not-found-not-forbidden, same
-pattern as everywhere else). This is what your app calls after scanning/typing a
-consumer's QR/tracking code at drop-off, to preview the parcel before confirming receipt.
+**Requires an authenticated NodeOperator or NodeStaff session**, and only returns orders
+whose `originNodeId` is one of *your* Nodes (`404 NOT_FOUND` otherwise —
+not-found-not-forbidden, same pattern as everywhere else). This is what your app calls
+after scanning/typing a consumer's QR/tracking code at drop-off, to preview the parcel
+before confirming receipt.
 
 Response `200`, `data`:
 
@@ -1267,19 +1472,19 @@ Response `200`, `data`:
 No receiver PII here either — that's only relevant at the destination Node, at
 collection.
 
-Errors: `401 UNAUTHENTICATED`, `403 FORBIDDEN` (non-NodeOperator), `404 NOT_FOUND`.
+Errors: `401 UNAUTHENTICATED`, `403 FORBIDDEN` (non-NodeOperator/NodeStaff), `404 NOT_FOUND`.
 
 ### `POST /api/v1/handoffs/orders/:id/drop-off`
 
-**Requires an authenticated NodeOperator session**, ownership-scoped the same way as the
-lookup above. Confirms the consumer has physically handed over the parcel —
+**Requires an authenticated NodeOperator or NodeStaff session**, ownership-scoped the same
+way as the lookup above. Confirms the consumer has physically handed over the parcel —
 `awaiting_drop_off → parcel_received_at_origin`. Idempotent: calling this twice for the
 same order is a safe no-op the second time, same response either way.
 
 Response `200`, `data`: same shape as the accept response above, `status:
 "parcel_received_at_origin"`.
 
-Errors: `401 UNAUTHENTICATED`, `403 FORBIDDEN` (non-NodeOperator), `404 NOT_FOUND` (not
+Errors: `401 UNAUTHENTICATED`, `403 FORBIDDEN` (non-NodeOperator/NodeStaff), `404 NOT_FOUND` (not
 your Node), `409 ILLEGAL_ORDER_TRANSITION` (order isn't at `awaiting_drop_off`).
 
 ### `POST /api/v1/handoffs/orders/:id/request-code`
@@ -1315,10 +1520,10 @@ Errors: `401 UNAUTHENTICATED`, `403 FORBIDDEN` (non-Rider), `403 RIDER_NOT_ACTIV
 
 ### `POST /api/v1/handoffs/orders/:id/confirm-handoff`
 
-**Requires an authenticated NodeOperator session, ownership-scoped to the correct side**
-— `type: "rider_pickup"` must come from the *origin* Node's operator, `type:
-"rider_arrival"` from the *destination* Node's operator (`404 NOT_FOUND` from the wrong
-one, same not-found-not-forbidden pattern as everything else). This is what you call
+**Requires an authenticated NodeOperator or NodeStaff session, ownership-scoped to the
+correct side** — `type: "rider_pickup"` must come from someone with a membership at the
+*origin* Node, `type: "rider_arrival"` from the *destination* Node (`404 NOT_FOUND` from
+the wrong one, same not-found-not-forbidden pattern as everything else). This is what you call
 after the rider shows/states their code. Rate-limited (10/min) on top of a per-code
 lockout — 5 wrong guesses locks that code out permanently; the rider has to request a
 new one, they aren't blocked from trying again.
@@ -1333,13 +1538,13 @@ Response `200`, `data`: same shape as the accept response, `status` becomes `in_
 (pickup) or `arrived_at_destination` (arrival). Idempotent — a retried confirm with the
 same already-used code returns the same success, not an error.
 
-Errors: `401 UNAUTHENTICATED`, `403 FORBIDDEN` (non-NodeOperator), `404 NOT_FOUND` (wrong
+Errors: `401 UNAUTHENTICATED`, `403 FORBIDDEN` (non-NodeOperator/NodeStaff), `404 NOT_FOUND` (wrong
 Node for this `type`), `401 INVALID_HANDOFF_CODE`, `429 RATE_LIMITED`,
 `400 VALIDATION_FAILED`.
 
 ### `POST /api/v1/handoffs/orders/:id/intake`
 
-**Requires an authenticated NodeOperator session**, ownership-scoped to the
+**Requires an authenticated NodeOperator or NodeStaff session**, ownership-scoped to the
 *destination* Node (`404 NOT_FOUND` otherwise). Destination-side equivalent of drop-off —
 confirms the parcel has physically arrived at your counter (the rider already moved it to
 `arrived_at_destination` via `confirm-handoff`). `arrived_at_destination →
@@ -1350,13 +1555,13 @@ calling this twice is a safe no-op the second time.
 Response `200`, `data`: same shape as the accept response above, `status:
 "ready_for_collection"`.
 
-Errors: `401 UNAUTHENTICATED`, `403 FORBIDDEN` (non-NodeOperator), `404 NOT_FOUND` (not
+Errors: `401 UNAUTHENTICATED`, `403 FORBIDDEN` (non-NodeOperator/NodeStaff), `404 NOT_FOUND` (not
 your Node), `409 ILLEGAL_ORDER_TRANSITION` (order isn't at `arrived_at_destination`).
 
 ### `POST /api/v1/handoffs/orders/:id/collection-code/resend`
 
-**Requires an authenticated NodeOperator session**, ownership-scoped to the destination
-Node. Use this when the receiver is standing at the counter but says they never got the
+**Requires an authenticated NodeOperator or NodeStaff session**, ownership-scoped to the
+destination Node. Use this when the receiver is standing at the counter but says they never got the
 email, or their original code expired (1 hour TTL) — mints a fresh code, superseding the
 prior one, and re-emails it. Rate-limited (5/min) since it sends a real email each time.
 
@@ -1370,14 +1575,14 @@ The code itself is never in this response — it only ever goes to the receiver'
 never to the operator's session or any API response, the mirror image of the rider
 pickup/arrival codes (which are only ever shown to the rider, never emailed).
 
-Errors: `401 UNAUTHENTICATED`, `403 FORBIDDEN` (non-NodeOperator), `404 NOT_FOUND` (not
+Errors: `401 UNAUTHENTICATED`, `403 FORBIDDEN` (non-NodeOperator/NodeStaff), `404 NOT_FOUND` (not
 your Node), `409 ORDER_NOT_READY_FOR_COLLECTION` (intake hasn't run yet, or the order's
 already `completed`), `429 RATE_LIMITED`.
 
 ### `POST /api/v1/handoffs/orders/:id/collect`
 
-**Requires an authenticated NodeOperator session**, ownership-scoped to the destination
-Node. Final step — the receiver reads you the code from their email, you ask for and
+**Requires an authenticated NodeOperator or NodeStaff session**, ownership-scoped to the
+destination Node. Final step — the receiver reads you the code from their email, you ask for and
 confirm their name, then call this. `ready_for_collection → completed`. Rate-limited
 (10/min) on top of the same per-code lockout as pickup/arrival (5 wrong guesses locks
 that code out permanently; resend recovers it).
@@ -1398,7 +1603,7 @@ Response `200`, `data`: same shape as the accept response, `status` becomes `com
 Idempotent — a retried confirm with the same already-used code returns the same success,
 not an error.
 
-Errors: `401 UNAUTHENTICATED`, `403 FORBIDDEN` (non-NodeOperator), `404 NOT_FOUND` (wrong
+Errors: `401 UNAUTHENTICATED`, `403 FORBIDDEN` (non-NodeOperator/NodeStaff), `404 NOT_FOUND` (wrong
 Node), `401 INVALID_HANDOFF_CODE`, `429 RATE_LIMITED`, `400 VALIDATION_FAILED`,
 `503 REVENUE_SPLIT_NOT_CONFIGURED` (Admin hasn't set a revenue-split ratio yet — see the
 `earnings` endpoints below).

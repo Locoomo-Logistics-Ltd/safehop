@@ -27,6 +27,7 @@ import type {
   NetworkStatusSummary,
   OnboardNodePayload,
   OrdersTrendPoint,
+  NodeMembership,
   PendingNodeOperator,
   PendingRider,
   PricingRule,
@@ -51,6 +52,13 @@ function mapNodeRecord(node: AdminNodeRecord): AdminNodeStatus {
     operatingHoursLabel: node.operatingHours ?? "Hours not set",
     createdAtLabel: formatDate(node.createdAt),
     location: { lat: node.latitude, lng: node.longitude },
+    // Owner-toggled, Admin-read-only (docs/API.md, 2026-09-03):
+    // `PATCH /nodes/:id` deliberately doesn't accept it. Surfaced so
+    // Admin can tell "this Node isn't in customer listings because its
+    // owner closed it to the public" apart from a status problem —
+    // otherwise the two are indistinguishable from the Network screen.
+    // Missing means `true`, per the documented default.
+    isPubliclyVisible: node.isPubliclyVisible !== false,
   };
 }
 
@@ -245,6 +253,14 @@ const realAdminService = {
   // Real, confirmed routes. Requested at the max page size since
   // neither queue has pagination controls yet — same convention as
   // getNodeStatuses above.
+
+  /**
+   * The Node review queue. Queues **Nodes, not operators** (docs/API.md,
+   * 2026-09-02): one operator can now run several, and an already-active
+   * operator's 2nd or 3rd Node still lands here for its own review — so
+   * the same `userEmail` legitimately appears more than once, each row a
+   * different Node.
+   */
   async getPendingNodeOperators(): Promise<PendingNodeOperator[]> {
     const raw = await httpClient.get<PaginatedList<PendingNodeOperator>>(
       `${ENDPOINTS.nodeOperators.pending}?limit=100`
@@ -252,9 +268,19 @@ const realAdminService = {
     return raw.items;
   },
 
-  /** No request body — flips the User's status and the Node's status to `active` together, in one transaction. */
-  async approveNodeOperator(profileId: string): Promise<PendingNodeOperator> {
-    return httpClient.patch<PendingNodeOperator>(ENDPOINTS.nodeOperators.approve(profileId));
+  /**
+   * No request body — flips the User's status and **that one Node's**
+   * status to `active` together, in one transaction. `profileId` is the
+   * membership from the queue above, not the user or the Node id;
+   * re-approving an already-active operator's account is a harmless
+   * no-op on the User side, only the Node changes.
+   *
+   * Responds with the approved membership (the same shape `GET
+   * /node-operators/me/nodes` returns per item), not the queue row that
+   * was passed in.
+   */
+  async approveNodeOperator(profileId: string): Promise<NodeMembership> {
+    return httpClient.patch<NodeMembership>(ENDPOINTS.nodeOperators.approve(profileId));
   },
 
   async getPendingRiders(): Promise<PendingRider[]> {

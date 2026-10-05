@@ -54,6 +54,18 @@ async function rawRequest<T>(path: string, options: RequestOptions = {}): Promis
 
   const apiResponse = payload as ApiResponse<T> | null;
 
+  // A successful response with a genuinely empty body is a `204 No
+  // Content`, not a malformed one — `DELETE
+  // /node-operators/nodes/:nodeId/staff/:userId` (docs/API.md,
+  // 2026-09-03) is the first route in this API that answers that way,
+  // and it has no envelope to unwrap because it has nothing to return.
+  // Checked before the null-guard below so it can't be mistaken for the
+  // "server sent us something we couldn't parse" case, which is a real
+  // failure and must keep throwing.
+  if (!text && response.ok) {
+    return undefined as T;
+  }
+
   if (!apiResponse) {
     throw new ApiError({
       message: `Unexpected response from server (${response.status}).`,

@@ -19,6 +19,16 @@ import { usePaymentIntentStatus } from "@/modules/user/hooks/use-payment-intent-
  * "get order by payment intent id" route, so it scans the Consumer's
  * own `GET /orders` for a matching `paymentIntentId`) and forwards to
  * the success screen.
+ *
+ * **Two flows land here** (2026-09-03). A Node dispatch
+ * (`POST /node-operators/nodes/:nodeId/dispatch`) redirects to the same
+ * Paystack checkout and back to this same URL — but neither endpoint
+ * above admits a NodeOperator/NodeStaff session, so the polling path is
+ * skipped entirely for it. That's a real backend gap, not a shortcut:
+ * there is no operator-side way to watch an intent settle. The dispatch
+ * branch says where the parcel will show up instead (`GET
+ * /handoffs/my-node/orders` does admit them, and the dashboard's
+ * "Expected" tab reads it), which the operator can go and verify.
  */
 export function PaymentCallbackScreen() {
   const router = useRouter();
@@ -27,7 +37,28 @@ export function PaymentCallbackScreen() {
     return window.sessionStorage.getItem(STORAGE_KEYS.pendingPaymentIntentId);
   });
 
-  const { intent, isLoading, hasTimedOut } = usePaymentIntentStatus(intentId);
+  // Was this checkout a Node dispatch rather than a Consumer booking?
+  // Read once on mount, before the cleanup below can clear it.
+  const [isDispatch] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return window.sessionStorage.getItem(STORAGE_KEYS.pendingDispatch) === "1";
+  });
+
+  // A dispatching operator can poll nothing here: both `GET
+  // /payments/intents/:id` and `GET /orders` are Consumer-only per
+  // docs/API.md, so this screen would just collect 403s on their
+  // session. Disable the poll entirely for that case and tell them
+  // where the parcel will actually appear — which is true and
+  // checkable — rather than spinning on a request that can't succeed.
+  const { intent, isLoading, hasTimedOut } = usePaymentIntentStatus(
+    isDispatch ? null : intentId
+  );
+
+  useEffect(() => {
+    if (!isDispatch) return;
+    sessionStorage.removeItem(STORAGE_KEYS.pendingPaymentIntentId);
+    sessionStorage.removeItem(STORAGE_KEYS.pendingDispatch);
+  }, [isDispatch]);
 
   const shouldLookUpOrder = intent?.status === "paid";
   const orderQuery = useQuery({
@@ -43,6 +74,20 @@ export function PaymentCallbackScreen() {
       router.replace(ROUTES.orderSuccess(matchedOrder.id));
     }
   }, [matchedOrder, router]);
+
+  if (isDispatch) {
+    return (
+      <CenteredMessage
+        title="Payment submitted"
+        description="Once it clears, your parcel appears under Expected on your dashboard — confirm the drop-off there to release it to riders. It usually takes a few seconds."
+        action={
+          <Link href={ROUTES.nodeHome}>
+            <Button size="lg">Go to Dashboard</Button>
+          </Link>
+        }
+      />
+    );
+  }
 
   if (intentId === null) {
     return (

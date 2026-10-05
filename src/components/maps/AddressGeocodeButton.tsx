@@ -121,7 +121,7 @@ export function AddressGeocodeButton({
         <p className="flex items-start gap-1.5 text-[11px] mt-2.5">
           <CheckCircleIcon size={13} className="text-status-success shrink-0 mt-0.5" />
           <span className="text-text-secondary">
-            Matched <span className="font-medium text-text-primary">{matchedAddress}</span> — check
+            Matched <span className="font-medium text-status-warning">{matchedAddress}</span> — check
             this is the right place before saving.
           </span>
         </p>

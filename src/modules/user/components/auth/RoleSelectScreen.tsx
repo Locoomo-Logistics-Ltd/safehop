@@ -50,10 +50,12 @@ export function RoleSelectScreen() {
   // Google account turns out to already be linked to an existing user
   // (a login, not a signup).
   const handleGoogleCredential = (idToken: string) => {
-    // Unreachable in practice — the "admin" radio option is disabled,
-    // so selectedRole can never actually be "admin" here. Narrows the
-    // type for the call below rather than casting.
-    if (selectedRole === "admin") return;
+    // Unreachable in practice — neither invite-only role is offered as
+    // a radio option here ("admin" is disabled; "node_staff" only ever
+    // arrives through a Node owner's invite, never self-registration).
+    // Narrows to `SelfRegisterableRole` for the call below rather than
+    // casting.
+    if (selectedRole === "admin" || selectedRole === "node_staff") return;
     loginWithGoogle({ idToken, role: selectedRole, consentAccepted: true });
   };
 

@@ -31,13 +31,14 @@ export function ApprovalsScreen() {
         <div className="mb-6">
           <h1 className="font-display text-[22px] font-bold text-text-primary">Approvals</h1>
           <p className="text-[13px] text-text-muted mt-0.5">
-            Review self-registered Node Operators and Riders waiting to go active.
+            Review self-registered Nodes and Riders waiting to go active. Approval is per Node —
+            an operator running several has each one reviewed on its own.
           </p>
         </div>
 
         <div className="flex items-center gap-1 mb-4 border-b border-border-default">
           <TabButton active={tab === "node_operators"} onClick={() => setTab("node_operators")}>
-            Node Operators
+            Nodes
             {nodeOperators.pending.length > 0 && <CountBadge count={nodeOperators.pending.length} />}
           </TabButton>
           <TabButton active={tab === "riders"} onClick={() => setTab("riders")}>
@@ -107,7 +108,7 @@ function NodeOperatorApprovalsTable({
   approvingProfileId,
 }: NodeOperatorApprovalsTableProps) {
   if (isLoading) {
-    return <p className="text-[13px] text-text-muted text-center py-10">Loading pending node operators…</p>;
+    return <p className="text-[13px] text-text-muted text-center py-10">Loading pending stations…</p>;
   }
 
   if (pending.length === 0) {
@@ -115,8 +116,8 @@ function NodeOperatorApprovalsTable({
       <Card padding="none">
         <EmptyState
           icon={<MapPinIcon size={22} />}
-          title="No pending node operators"
-          description="Node operators who complete self-service onboarding will show up here, waiting for approval."
+          title="No pending stations"
+          description="Every Node submitted through self-service onboarding shows up here for review — including an existing operator's second or third location."
         />
       </Card>
     );

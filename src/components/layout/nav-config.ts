@@ -63,8 +63,50 @@ export const USER_NAV_ITEMS: NavItem[] = [
 export const NODE_NAV_ITEMS: NavItem[] = [
   { label: "Home", href: ROUTES.nodeHome, icon: HomeIcon },
   { label: "Scan", href: ROUTES.nodeScan, icon: QrCodeIcon },
+  // "Send" (2026-09-03) — the station's own outbound parcel, `POST
+  // /node-operators/nodes/:nodeId/dispatch`. Earns a nav slot rather
+  // than a Home button because it's the *only* way a station that has
+  // switched public drop-offs off still moves parcels, and because
+  // dispatching is routine daily work for that kind of operator, not a
+  // one-off setup action.
+  { label: "Send", href: ROUTES.nodeDispatch, icon: TruckIcon },
   { label: "Activity", href: ROUTES.nodeActivity, icon: ActivityIcon },
   { label: "Earnings", href: ROUTES.nodeEarnings, icon: WalletIcon },
+  // "My Nodes" (2026-09-21) — an owner's stations list used to render
+  // inline inside Node Profile *and* at `/node/setup`, in two places
+  // that could disagree. It's one screen on its own route now, reached
+  // in one tap from here rather than a Profile drill-down, same
+  // promotion "Earnings" got on 2026-08-21.
+  //
+  // Owner-only, deliberately: this is where a station's payout account,
+  // public visibility and team are managed, and all three are
+  // owner-gated server-side. Staff still reach their own (read-only)
+  // stations list from the Profile row — they just don't get a tab for
+  // it, since none of the management actions behind it are theirs.
+  { label: "My Nodes", href: ROUTES.nodeNodes, icon: MapPinIcon },
+];
+
+/**
+ * Node **staff** nav (2026-09-02) — the same counter work, minus
+ * Earnings. Not a styling choice: `GET /earnings/my-node` is documented
+ * NodeOperator-only and answers `403 FORBIDDEN` for a `node_staff`
+ * session, so the tab would lead to an error screen every time. The
+ * owner-only surfaces staff also can't reach (a Node's payout account,
+ * its visibility toggle, its team, adding a Node, My Nodes itself)
+ * were never nav items — they hang off Profile and the per-Node detail
+ * screen, which hide them by `roleAtNode` instead. See
+ * `(node)/layout.tsx` for which list a session gets.
+ *
+ * "Send" **is** here (2026-09-03): `POST
+ * /node-operators/nodes/:nodeId/dispatch` is gated on membership, not
+ * ownership — dispatching is counter work like every handoff step, and
+ * the API says so explicitly.
+ */
+export const NODE_STAFF_NAV_ITEMS: NavItem[] = [
+  { label: "Home", href: ROUTES.nodeHome, icon: HomeIcon },
+  { label: "Scan", href: ROUTES.nodeScan, icon: QrCodeIcon },
+  { label: "Send", href: ROUTES.nodeDispatch, icon: TruckIcon },
+  { label: "Activity", href: ROUTES.nodeActivity, icon: ActivityIcon },
 ];
 
 /**

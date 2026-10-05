@@ -28,14 +28,31 @@ export const ROUTES = {
   trackList: "/track",
   profile: "/profile",
 
-  // Node Operator (manages one Node — a Pickup Station)
+  // Node Operator (runs one *or more* Nodes — Pickup Stations)
   nodeHome: "/node/home",
   nodeScan: "/node-scan",
   nodeActivity: "/node/activity",
   nodeProfile: "/node/profile",
-  /** This Node's revenue-split entries (origin-Node orders only) — `GET /earnings/my-node`. Reached from Profile. */
+  /** This operator's Nodes' revenue-split entries — `GET /earnings/my-node`. One combined ledger: the endpoint returns no node id, so it can't be split per Node. Owner-only (a NodeStaff session gets 403), hence hidden from staff's nav. */
   nodeEarnings: "/node/earnings",
+  /**
+   * "My Nodes" — an owner's stations list (`GET
+   * /node-operators/me/nodes`), on its own page as of 2026-09-21.
+   *
+   * This list used to render inline inside Node Profile; it moved here
+   * and Profile now links to it. Sits next to the `/node/nodes/:id`
+   * detail and `/node/nodes/new` routes it already shares a path with,
+   * and tapping a station here opens that detail page.
+   */
+  nodeNodes: "/node/nodes",
+  /** Station setup + status (`MyNodesScreen`) — where auth-routing sends a brand-new operator to create their first Node, and where the dashboard's empty/pending states and the Node switcher link. Unchanged. */
   nodeSetup: "/node/setup",
+  /** One Node's detail: approval status, its own payout account, and its staff invites — all three per-Node and owner-only. `PATCH /node-operators/nodes/:nodeId/payout-account`, `POST /node-operators/nodes/:nodeId/staff/invite`. */
+  nodeDetail: (nodeId: string) => `/node/nodes/${nodeId}`,
+  /** Add a 2nd, 3rd, … Node — `POST /node-operators/nodes`. Same form as first-Node onboarding, different endpoint (see `nodeService.addNode`). */
+  nodeAddNode: "/node/nodes/new",
+  /** Send a parcel from one of your own stations — `POST /node-operators/nodes/:nodeId/dispatch`. Open to NodeOperator *and* NodeStaff (operational work); origin is the active station, so it isn't in the URL. */
+  nodeDispatch: "/node/dispatch",
   /** Consumer drop-off preview + confirm — `GET /handoffs/orders/by-tracking-code/:code` then `POST .../drop-off`. Reached from the scanner or manual code entry. */
   nodeDropOff: (trackingCode: string) => `/node/drop-off/${trackingCode}`,
   /** Details page for one Awaiting Pickup / Awaiting Arrival order — full order info + the rider's 6-digit code entry, `POST /handoffs/orders/:id/confirm-handoff` (`type` inferred from the order's own `myRole`). Reached from Home's Awaiting Pickup/Awaiting Arrival tabs. Added 2026-08-17 when the standalone Inventory screen was retired — its Pickup/Incoming tabs moved here. */
@@ -84,12 +101,17 @@ export const QUERY_KEYS = {
   /** `GET /payments/banks` — Paystack's bank list, shared by the Rider and NodeOperator payout-account forms. Static reference data, same result regardless of which role fetches it. */
   payoutBanks: ["payments", "banks"] as const,
 
-  nodeOperatorProfile: ["node", "operator-profile"] as const,
+  /** `GET /node-operators/me/nodes` — every Node this account OWNS. Replaced `nodeOperatorProfile` (the singular `GET /node-operators/me`, route removed 2026-09-02); invalidate after onboarding, adding a Node, or setting a payout account. Owner-only — confirmed `403` for `node_staff` 2026-09-08; never fetched for a staff session, see `use-my-nodes.ts`. */
+  nodeOperatorNodes: ["node", "my-nodes"] as const,
+  /** `GET /nodes/:id` — one Node's full record, open to any authenticated role. Used to enrich the node id(s) a `node_staff` session discovers from `nodeMyOrders` into real station details (capacity, status, visibility) — see `use-my-nodes.ts`. */
+  nodeStationDetail: (nodeId: string) => ["node", "station-detail", nodeId] as const,
+  /** `GET /node-operators/nodes/:nodeId/staff` — one Node's active staff roster. Per-Node, so keyed on the id; invalidate after an invite (the invitee appears once they accept) or a removal. */
+  nodeStaff: (nodeId: string) => ["node", "staff", nodeId] as const,
   nodeParcels: ["node", "parcels"] as const,
   nodeActivity: ["node", "activity"] as const,
   /** `GET /handoffs/my-node/orders` — every order that's touched this Node, either side. Source for the rider-handoff pick-lists and the awaiting-collection screen alike; invalidate this after any handoff/intake/collect mutation. */
   nodeMyOrders: ["node", "my-node-orders"] as const,
-  /** `GET /earnings/my-node` — this Node's revenue-split entries (origin-Node orders only). */
+  /** `GET /earnings/my-node` — this operator's Nodes' revenue-split entries, both origin (`node`) and destination (`destination_node`) rows. */
   nodeEarnings: ["node", "earnings"] as const,
 
   riderAvailability: ["rider", "availability"] as const,
@@ -149,4 +171,8 @@ export const STORAGE_KEYS = {
   pendingPaymentIntentId: "locoomo_pending_payment_intent_id",
   /** The persisted-session localStorage key — shared between `auth.service.ts` (writes it) and `core/api/client.ts`'s 401 → refresh → retry interceptor (clears it on a hard sign-out), which can't import `authService` directly (would be a circular import back into `client.ts`). */
   session: "locoomo_session",
+  /** Which of a multi-Node operator's Nodes the counter screens are currently scoped to — `store/active-node.store.ts`. A convenience, not state anything depends on: an unset, stale, or foreign id just falls back to the first active Node. */
+  activeNodeId: "locoomo_active_node_id",
+  /** Set alongside `pendingPaymentIntentId` when the checkout being sent to Paystack is a Node dispatch, not a Consumer booking. `/orders/payment-callback` reads it to pick its branch — a dispatching operator can't poll `GET /payments/intents/:id` (Consumer-only), so that screen must not try. Cleared on arrival. */
+  pendingDispatch: "locoomo_pending_dispatch",
 } as const;

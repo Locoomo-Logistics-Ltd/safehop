@@ -9,6 +9,12 @@ interface TabOption {
 }
 
 const TABS: TabOption[] = [
+  // "Expected" (2026-09-03) — origin-side orders paid for but not yet
+  // received at the counter. Added with dispatch: a station's own
+  // dispatched parcel starts at `awaiting_drop_off` just like a
+  // Consumer's, and without this tab there was no way to reach it and
+  // confirm the drop-off that releases it to riders.
+  { value: "expected", label: "Expected" },
   { value: "awaiting_pickup", label: "Awaiting Pickup" },
   { value: "awaiting_arrival", label: "Awaiting Arrival" },
   { value: "ready_for_collection", label: "Ready for Collection" },
