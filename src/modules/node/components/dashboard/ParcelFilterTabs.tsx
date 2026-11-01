@@ -8,16 +8,12 @@ interface TabOption {
   label: string;
 }
 
-const TABS: TabOption[] = [
-  // "Expected" (2026-09-03) — origin-side orders paid for but not yet
-  // received at the counter. Added with dispatch: a station's own
-  // dispatched parcel starts at `awaiting_drop_off` just like a
-  // Consumer's, and without this tab there was no way to reach it and
-  // confirm the drop-off that releases it to riders.
-  { value: "expected", label: "Expected" },
-  { value: "awaiting_pickup", label: "Awaiting Pickup" },
-  { value: "awaiting_arrival", label: "Awaiting Arrival" },
-  { value: "ready_for_collection", label: "Ready for Collection" },
+/** Server-side work queues, in the order a parcel moves through a station (docs/LOGISTICS_API.md §5.2). */
+export const QUEUE_TABS: TabOption[] = [
+  { value: "to_receive", label: "To receive" },
+  { value: "to_dispatch", label: "To dispatch" },
+  { value: "incoming", label: "Incoming" },
+  { value: "to_collect", label: "To collect" },
 ];
 
 interface ParcelFilterTabsProps {
@@ -29,7 +25,7 @@ interface ParcelFilterTabsProps {
 export function ParcelFilterTabs({ active, onChange }: ParcelFilterTabsProps) {
   return (
     <div className="flex gap-2 overflow-x-auto scrollbar-none -mx-4 px-4 md:mx-0 md:px-0" role="tablist">
-      {TABS.map((tab) => {
+      {QUEUE_TABS.map((tab) => {
         const isActive = active === tab.value;
         return (
           <button

@@ -19,13 +19,14 @@ export const ROUTES = {
   dashboard: "/dashboard",
   newDelivery: "/delivery/new",
   selectNodes: "/delivery/select-nodes",
-  deliveryMethod: "/delivery/method",
   checkout: "/checkout",
   /** Where Paystack redirects after checkout, per docs/API.md's `POST /payments/intents` — polls the intent, then forwards to orderSuccess once an Order exists. */
   paymentCallback: "/orders/payment-callback",
   orderSuccess: (id: string) => `/delivery/${id}/success`,
   track: (id: string) => `/delivery/${id}/track`,
   trackList: "/track",
+  /** Public page — no session. `t` is the access token from the sender's tracking link. */
+  publicTrack: (trackingCode: string) => `/track/${encodeURIComponent(trackingCode)}`,
   profile: "/profile",
 
   // Node Operator (runs one *or more* Nodes — Pickup Stations)
@@ -54,11 +55,10 @@ export const ROUTES = {
   /** Send a parcel from one of your own stations — `POST /node-operators/nodes/:nodeId/dispatch`. Open to NodeOperator *and* NodeStaff (operational work); origin is the active station, so it isn't in the URL. */
   nodeDispatch: "/node/dispatch",
   /** Consumer drop-off preview + confirm — `GET /handoffs/orders/by-tracking-code/:code` then `POST .../drop-off`. Reached from the scanner or manual code entry. */
-  nodeDropOff: (trackingCode: string) => `/node/drop-off/${trackingCode}`,
   /** Details page for one Awaiting Pickup / Awaiting Arrival order — full order info + the rider's 6-digit code entry, `POST /handoffs/orders/:id/confirm-handoff` (`type` inferred from the order's own `myRole`). Reached from Home's Awaiting Pickup/Awaiting Arrival tabs. Added 2026-08-17 when the standalone Inventory screen was retired — its Pickup/Incoming tabs moved here. */
-  nodeHandoffDetail: (orderId: string) => `/node/handoff/${orderId}`,
   /** Receiver collection: complete collection info, the check-in/"Send" action (`POST .../intake`) when the parcel hasn't been checked in yet, or code entry + identity attestation (`POST .../collect`) once it has. Reached from Home's Ready for Collection tab. */
-  nodeCollect: (orderId: string) => `/node/awaiting-collection/${orderId}/collect`,
+  nodeCounter: "/node/counter",
+  nodeCounterOrder: (trackingCode: string) => `/node/counter?code=${encodeURIComponent(trackingCode)}`,
 
   // Rider
   riderHome: "/rider/home",
@@ -89,6 +89,9 @@ export const ROUTES = {
   adminCapacityAudit: "/admin/capacity-audit",
   adminSettings: "/admin/settings",
   adminProfile: "/admin/profile",
+  adminLogistics: "/admin/logistics",
+  adminLogisticsDeliveries: "/admin/logistics/deliveries",
+  adminLogisticsEconomics: "/admin/logistics/economics",
 } as const;
 
 export const QUERY_KEYS = {
@@ -154,6 +157,19 @@ export const QUERY_KEYS = {
   adminRevenueSplitRatios: ["admin", "revenue-split-ratios"] as const,
   adminRevenueSplitEntries: ["admin", "revenue-split-entries"] as const,
   adminCapacityAudit: ["admin", "capacity-audit"] as const,
+
+  deliveryOptions: ["delivery-options"] as const,
+  orderTimeline: (id: string) => ["deliveries", id, "timeline"] as const,
+  publicTracking: (code: string, credential: string) => ["public-tracking", code, credential] as const,
+  nodeQueue: (queue: string) => ["node", "queue", queue] as const,
+  nodeQueuesRoot: ["node", "queue"] as const,
+
+  adminLogisticsProviders: ["admin", "logistics", "providers"] as const,
+  adminLogisticsWallet: (key: string) => ["admin", "logistics", "wallet", key] as const,
+  adminLogisticsVehicleRules: ["admin", "logistics", "vehicle-rules"] as const,
+  adminLogisticsRoutes: ["admin", "logistics", "routes"] as const,
+  adminLogisticsDeliveries: ["admin", "logistics", "deliveries"] as const,
+  adminLogisticsEconomics: ["admin", "logistics", "economics"] as const,
 };
 
 /** Business rules shared between UI validation and quote calculation */

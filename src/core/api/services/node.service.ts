@@ -8,8 +8,9 @@ import type {
   CollectParcelPayload,
   CollectionCodeResendResult,
   ConfirmHandoffPayload,
+  CourierHandover,
+  NodeQueue,
   DispatchParcelPayload,
-  HandoffOrderPreview,
   HandoffOrderSummary,
   MyRevenueSplitEntry,
   NodeMembership,
@@ -318,8 +319,8 @@ const realNodeService = {
    * which is what lets the operator eyeball the parcel against the
    * description first.
    */
-  async lookupOrderByTrackingCode(trackingCode: string): Promise<HandoffOrderPreview> {
-    return httpClient.get<HandoffOrderPreview>(
+  async lookupOrderByTrackingCode(trackingCode: string): Promise<NodeOrderSummary> {
+    return httpClient.get<NodeOrderSummary>(
       ENDPOINTS.handoffs.byTrackingCode(trackingCode)
     );
   },
@@ -342,6 +343,53 @@ const realNodeService = {
       `${ENDPOINTS.handoffs.myNodeOrders}?limit=100`
     );
     return raw.items;
+  },
+
+  /**
+   * One page of a server-side work queue (`to_receive`, `to_dispatch`,
+   * `incoming`, `to_collect`) — docs/LOGISTICS_API.md §5.2. Replaces
+   * deriving the same tabs client-side from `myRole` + `status`, which
+   * silently dropped parcels past the first 100 orders. Omit `queue`
+   * for the full history.
+   */
+  async getNodeQueue(params: {
+    queue?: NodeQueue;
+    page?: number;
+    limit?: number;
+  } = {}): Promise<PaginatedList<NodeOrderSummary>> {
+    const query = new URLSearchParams();
+    if (params.queue) query.set("queue", params.queue);
+    query.set("page", String(params.page ?? 1));
+    query.set("limit", String(params.limit ?? 20));
+    return httpClient.get<PaginatedList<NodeOrderSummary>>(
+      `${ENDPOINTS.handoffs.myNodeOrders}?${query.toString()}`
+    );
+  },
+
+  /**
+   * The code staff read aloud to an external courier (pickup at the
+   * origin, delivery at the destination, or a return coming back).
+   * It's a credential: show it, never log, cache or persist it. Then
+   * poll `lookupOrderByTrackingCode` until `nextAction` changes — the
+   * backend hears about the courier entering it via webhook.
+   * `409 COURIER_HANDOVER_NOT_AVAILABLE` → re-scan; `502
+   * LOGISTICS_PROVIDER_ERROR` → try again.
+   */
+  async getCourierHandover(orderId: string): Promise<CourierHandover> {
+    return httpClient.get<CourierHandover>(ENDPOINTS.handoffs.courierHandover(orderId));
+  },
+
+  /** Origin Node, on a return: the courier has brought the parcel back. Emails the sender a collection code (valid 60 min). Idempotent. */
+  async confirmReturnIntake(orderId: string): Promise<HandoffOrderSummary> {
+    return httpClient.post<HandoffOrderSummary>(ENDPOINTS.handoffs.returnIntake(orderId));
+  },
+
+  /** Origin Node, on a return: the sender shows their emailed code. Same body as `collectParcel`. */
+  async returnCollectParcel(
+    orderId: string,
+    payload: CollectParcelPayload
+  ): Promise<HandoffOrderSummary> {
+    return httpClient.post<HandoffOrderSummary>(ENDPOINTS.handoffs.returnCollect(orderId), payload);
   },
 
   /**

@@ -1,10 +1,11 @@
 "use client";
 
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { nodeService, nodesService } from "@/core/api/services";
+import { deliveryService, nodeService, nodesService } from "@/core/api/services";
 import { QUERY_KEYS, STORAGE_KEYS } from "@/core/config/constants";
 import { useNodeProfile } from "./use-node-profile";
-import type { DispatchParcelPayload } from "@/core/types";
+import { isSafePaymentUrl } from "@/lib/safe-url";
+import type { DeliveryQuoteRequest, DispatchParcelPayload } from "@/core/types";
 
 /**
  * `POST /node-operators/nodes/:nodeId/dispatch` — real, confirmed
@@ -50,22 +51,32 @@ export function useDispatchParcel() {
     (candidate) => candidate.id !== node?.id
   );
 
+  // Quote first (docs/LOGISTICS_API.md §5.10): staff see the price and the
+  // vehicle before anything is reserved. `POST /delivery-quotes` accepts
+  // the station's own private destinations.
+  const quoteMutation = useMutation({
+    mutationFn: (request: Omit<DeliveryQuoteRequest, "originNodeId">) =>
+      deliveryService.quote({ ...request, originNodeId: node!.id }),
+  });
+
+  // Creating the dispatch is what holds a slot (~15 min) and returns the
+  // Paystack link, so it only runs when staff tap Pay, then redirects.
   const mutation = useMutation({
     mutationFn: (payload: DispatchParcelPayload) =>
       nodeService.dispatchParcel(node!.id, payload),
+    onSuccess: (intent) => {
+      // Never navigate to anything but Paystack's hosted checkout.
+      if (!isSafePaymentUrl(intent.authorizationUrl)) {
+        throw new Error("We couldn't open the payment page safely. Please try again.");
+      }
+      // Same stash as Checkout. The dispatch marker is what stops the
+      // callback screen polling a Consumer-only endpoint on an
+      // operator's session.
+      sessionStorage.setItem(STORAGE_KEYS.pendingPaymentIntentId, intent.id);
+      sessionStorage.setItem(STORAGE_KEYS.pendingDispatch, "1");
+      window.location.href = intent.authorizationUrl;
+    },
   });
-
-  const redirectToPaystack = () => {
-    const intent = mutation.data;
-    if (!intent?.authorizationUrl) return;
-    // Same stash as Checkout — Paystack's redirect query string shape
-    // isn't documented, so the callback screen can't recover the intent
-    // id from it. The extra dispatch marker is what stops that screen
-    // polling a Consumer-only endpoint on an operator's session.
-    sessionStorage.setItem(STORAGE_KEYS.pendingPaymentIntentId, intent.id);
-    sessionStorage.setItem(STORAGE_KEYS.pendingDispatch, "1");
-    window.location.href = intent.authorizationUrl;
-  };
 
   return {
     originNode: node,
@@ -73,10 +84,16 @@ export function useDispatchParcel() {
     isLoadingDestinations: destinationsQuery.isLoading,
     destinationsError: destinationsQuery.error,
 
+    requestQuote: quoteMutation.mutate,
+    quote: quoteMutation.data,
+    isQuoting: quoteMutation.isPending,
+    quoteError: quoteMutation.error,
+    clearQuote: quoteMutation.reset,
+
     dispatch: mutation.mutate,
-    intent: mutation.data,
-    isDispatching: mutation.isPending,
+    // Stays true after success: the page is navigating to Paystack.
+    isDispatching: mutation.isPending || mutation.isSuccess,
     dispatchError: mutation.error,
-    redirectToPaystack,
+    clearDispatchError: mutation.reset,
   };
 }

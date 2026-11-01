@@ -6,3 +6,4 @@ export * from "./node.types";
 export * from "./rider.types";
 export * from "./admin.types";
 export * from "./earnings.types";
+export * from "./logistics.types";

@@ -188,6 +188,12 @@ return (
             Sign up
           </Link>
         </p>
+        <p className="text-center text-[13px] text-text-secondary mt-2">
+          Waiting on a parcel?{" "}
+          <Link href="/find-parcel" className="text-brand-blue font-semibold">
+            Track it without an account
+          </Link>
+        </p>
 
       </div>
     </OnboardingLayout>

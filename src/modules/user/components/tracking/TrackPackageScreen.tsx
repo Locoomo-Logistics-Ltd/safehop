@@ -4,11 +4,15 @@ import { useParams } from "next/navigation";
 import { Card } from "@/components/ui";
 import { CopyIcon } from "@/components/icons";
 import { TopBar } from "@/components/layout";
-import { useDelivery } from "@/modules/user/hooks/use-delivery";
+import { useDelivery, useOrderTimeline } from "@/modules/user/hooks/use-delivery";
+import { isReturnStatus } from "@/lib/order-status";
 import { useNotificationStore } from "@/store/notification.store";
 import { OrderStatusBadge } from "./OrderStatusBadge";
 import { DeliveryJourneyCard } from "./DeliveryJourneyCard";
 import { OrderDetailsCard } from "./OrderDetailsCard";
+import { OrderTimelineCard } from "./OrderTimelineCard";
+import { DeliveryInfoCard } from "./DeliveryInfoCard";
+import { ShareTrackingButton } from "./ShareTrackingButton";
 
 /**
  * Tracking screen — animated journey card + a captivating order-details
@@ -31,6 +35,7 @@ export function TrackPackageScreen() {
   const params = useParams<{ id: string }>();
   const { delivery, isLoading, isError } = useDelivery(params.id);
   const showNotification = useNotificationStore((s) => s.showNotification);
+  const { data: timeline, isLoading: timelineLoading } = useOrderTimeline(params.id, delivery?.status);
 
   if (isLoading) {
     return (
@@ -92,18 +97,92 @@ export function TrackPackageScreen() {
           <OrderStatusBadge status={delivery.status} className="shrink-0" />
         </Card>
 
-        <div className="animate-locoomo-fade-up" style={{ animationDelay: "80ms" }}>
-          <DeliveryJourneyCard
-            originLabel={delivery.originNodeName}
-            destinationLabel={delivery.destinationNodeName}
+        {isReturnStatus(delivery.status) ? (
+          <ReturnBanner
             status={delivery.status}
+            nodeName={delivery.originNodeName}
+            nodeAddress={delivery.originNodeAddress}
           />
-        </div>
+        ) : (
+          <div className="animate-locoomo-fade-up" style={{ animationDelay: "80ms" }}>
+            <DeliveryJourneyCard
+              originLabel={delivery.originNodeName}
+              destinationLabel={delivery.destinationNodeName}
+              status={delivery.status}
+            />
+          </div>
+        )}
+
+        {delivery.status === "awaiting_drop_off" && (
+          <Card padding="md" className="mb-4">
+            <p className="text-[13px] font-semibold text-text-primary mb-1">Drop-off pending</p>
+            <p className="text-[12.5px] text-text-secondary leading-[1.6]">
+              Write <span className="font-mono font-semibold">{delivery.trackingCode}</span> and the destination on
+              your parcel, then take it to {delivery.originNodeName}, {delivery.originNodeAddress}.
+            </p>
+          </Card>
+        )}
+
+        {delivery.delivery && delivery.delivery.status !== "cancelled" && (
+          <div className="animate-locoomo-fade-up" style={{ animationDelay: "120ms" }}>
+            <DeliveryInfoCard delivery={delivery.delivery} />
+          </div>
+        )}
+
+        <OrderTimelineCard entries={timeline} isLoading={timelineLoading} />
 
         <div className="animate-locoomo-fade-up" style={{ animationDelay: "160ms" }}>
           <OrderDetailsCard order={delivery} />
         </div>
+
+        {delivery.trackingUrl && (
+          <ShareTrackingButton
+            className="mt-4"
+            trackingUrl={delivery.trackingUrl}
+            trackingCode={delivery.trackingCode}
+          />
+        )}
       </div>
     </div>
+  );
+}
+
+/**
+ * A failed delivery comes back to the **origin** station, where the sender
+ * collects it with an emailed code. Same wording as the API's own return
+ * statuses; the copy only decides what the sender should do next.
+ */
+function ReturnBanner({
+  status,
+  nodeName,
+  nodeAddress,
+}: {
+  status: string;
+  nodeName: string;
+  nodeAddress: string;
+}) {
+  const ready = status === "ready_for_sender_collection";
+  const done = status === "return_completed";
+
+  return (
+    <Card padding="md" className="mb-4 border border-status-warning">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-status-warning mb-1">
+        Delivery couldn&apos;t be completed
+      </p>
+      <p className="text-[14px] font-semibold text-text-primary mb-1">
+        {done
+          ? "You collected your parcel"
+          : ready
+            ? `Collect your parcel from ${nodeName}`
+            : `Your parcel is coming back to ${nodeName}`}
+      </p>
+      <p className="text-[12.5px] text-text-secondary leading-[1.6]">
+        {done
+          ? "This order is closed."
+          : ready
+            ? `${nodeAddress}. We've emailed you a collection code — bring it and an ID. The code is valid for 60 minutes; ask the station to resend it if it lapses.`
+            : "We'll email you a collection code once it's back and checked in."}
+      </p>
+    </Card>
   );
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { safeHttpUrl } from "@/lib/safe-url";
 import { useState } from "react";
 import Link from "next/link";
 import { TopBar } from "@/components/layout";
@@ -263,7 +264,7 @@ function VerificationStatusView({
             </p>
             <div className="flex flex-col gap-3">
               {profile.documents.map((doc) => (
-                <a key={doc.documentType} href={doc.viewUrl} target="_blank" rel="noreferrer" className="block">
+                <a key={doc.documentType} href={safeHttpUrl(doc.viewUrl)} target="_blank" rel="noopener noreferrer" className="block">
                   <Card padding="sm" interactive className="overflow-hidden">
                     <div className="flex items-center gap-2 px-1 pb-2">
                       <CameraIcon size={14} className="text-text-muted" />
@@ -271,7 +272,7 @@ function VerificationStatusView({
                     </div>
                     {/* eslint-disable-next-line @next/next/no-img-element -- signed, short-lived Cloudinary URL; next/image needs a configured remote domain this project doesn't have */}
                     <img
-                      src={doc.viewUrl}
+                      src={safeHttpUrl(doc.viewUrl)}
                       alt="Uploaded rider verification document"
                       className="w-full max-h-[320px] object-cover rounded-[10px] bg-bg-subtle"
                     />

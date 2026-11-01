@@ -396,7 +396,7 @@ export function getFriendlyError(error: unknown) {
         message:
           "It's incorrect, expired, or already been used.",
         action:
-          "Ask the rider to request a new code, then try again.",
+          "Ask for a fresh code, then try again.",
         type: "error",
       };
 
@@ -412,6 +412,71 @@ export function getFriendlyError(error: unknown) {
           "It hasn't been checked in at your counter, or it's already been collected.",
         action:
           "Confirm intake first — that's what emails the receiver their code.",
+        type: "warning",
+      };
+
+
+    case "NO_DELIVERY_OPTION":
+      return {
+        title: "We can't send that parcel",
+        message:
+          "It's too big or heavy for our vehicles, or no courier covers this route.",
+        action:
+          "Try different parcel details or another station.",
+        type: "warning",
+      };
+
+
+    case "COURIER_HANDOVER_NOT_AVAILABLE":
+      return {
+        title: "Nothing to hand over right now",
+        message:
+          "This parcel isn't waiting on a courier at this step.",
+        action:
+          "Scan the parcel again to see where it is now.",
+        type: "warning",
+      };
+
+
+    case "LOGISTICS_PROVIDER_ERROR":
+      return {
+        title: "Courier service unavailable",
+        message:
+          "We couldn't reach the courier just now.",
+        action:
+          "Try again in a moment.",
+        type: "error",
+      };
+
+
+    case "ILLEGAL_DELIVERY_ACTION":
+      return {
+        title: "That action isn't allowed",
+        message: error.message,
+        action:
+          "Refresh and check the delivery's current state.",
+        type: "warning",
+      };
+
+
+    case "REVENUE_SPLIT_NOT_CONFIGURED":
+      return {
+        title: "Payouts aren't set up yet",
+        message:
+          "The revenue split hasn't been configured, so this parcel can't be completed.",
+        action:
+          "Ask an Admin to set the revenue split, then try again.",
+        type: "error",
+      };
+
+
+    case "NOT_FOUND":
+      return {
+        title: "We couldn't find that",
+        message:
+          "It doesn't exist, or it isn't yours to see.",
+        action:
+          "Check the details and try again.",
         type: "warning",
       };
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { Suspense } from "react";
 import { AuthGuard } from "@/components/layout";
 import { PaymentCallbackScreen } from "@/modules/user/components/tracking";
 
@@ -26,7 +27,10 @@ import { PaymentCallbackScreen } from "@/modules/user/components/tracking";
 export default function PaymentCallbackPage() {
   return (
     <AuthGuard>
-      <PaymentCallbackScreen />
+      {/* `useSearchParams` (the `reference` the Paystack redirect carries) needs a Suspense boundary. */}
+      <Suspense fallback={null}>
+        <PaymentCallbackScreen />
+      </Suspense>
     </AuthGuard>
   );
 }

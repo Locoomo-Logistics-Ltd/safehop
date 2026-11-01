@@ -115,6 +115,9 @@ export function useAuth() {
     mutationFn: () => authService.logout(),
     onSuccess: () => {
       setSession(null);
+      // Drop every cached screen (orders, receiver details…) so the next
+      // person on a shared device never sees the last user's data.
+      queryClient.clear();
       queryClient.setQueryData(QUERY_KEYS.session, null);
       router.push(ROUTES.login);
     },

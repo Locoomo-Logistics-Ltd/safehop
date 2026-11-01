@@ -40,6 +40,7 @@
  *     one in any API response, not even from `resend`. 1-hour TTL.
  */
 
+import type { OrderDelivery, NextAction, Parcel } from "./logistics.types";
 import type { OrderParcelSize, OrderStatus } from "./payment.types";
 
 /**
@@ -114,6 +115,8 @@ export interface HandoffOrderSummary {
   status: OrderStatus;
   originNodeId: string;
   destinationNodeId: string;
+  /** Present on counter actions (`OrderTransition`); show "Put it on shelf N" after drop-off. */
+  shelfNumber?: number | null;
 }
 
 /**
@@ -167,6 +170,15 @@ export interface NodeOrderSummary {
   parcelSize: OrderParcelSize;
   createdAt: string;
   myRole: NodeOrderRole;
+  parcel?: Parcel;
+  /** The one thing staff at *this* Node should do now — build the counter UI off it, not off `status`. */
+  nextAction?: NextAction;
+  /** Where the parcel sits on this Node's shelf; `null` when it isn't on a shelf here. */
+  shelfNumber?: number | null;
+  /** Enough to match a person at the counter, e.g. `T. B. · ***5678`. */
+  receiverMasked?: string;
+  /** `null` before drop-off. */
+  delivery?: OrderDelivery | null;
 }
 
 export interface RequestHandoffCodePayload {

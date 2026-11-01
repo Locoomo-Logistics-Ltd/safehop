@@ -32,13 +32,11 @@ const {
 
 
 const handleRequestReset = () => {
-  console.log("RESET CLICKED", email);
 
   requestPasswordReset(
     { email },
     {
       onSuccess: () => {
-        console.log("RESET SUCCESS");
       },
       onError: (error) => {
         console.error("RESET ERROR", error);

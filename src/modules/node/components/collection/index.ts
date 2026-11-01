@@ -1,1 +1,0 @@
-export { CollectParcelScreen } from "./CollectParcelScreen";

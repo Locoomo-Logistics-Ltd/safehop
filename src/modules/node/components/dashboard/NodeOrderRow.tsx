@@ -2,111 +2,61 @@
 
 import Link from "next/link";
 import { Card } from "@/components/ui";
+import { HandoffStatusPill } from "@/components/ui/HandoffStatusPill";
 import { PackageIcon, ChevronRightIcon } from "@/components/icons";
 import { formatRelativeDateTime } from "@/lib/format";
 import { ROUTES } from "@/core/config/constants";
-import type { NodeOrderSummary } from "@/core/types";
-import { HandoffStatusPill } from "@/modules/node/components/handoff/HandoffStatusPill";
-
-interface NodeOrderRowProps {
-  order: NodeOrderSummary;
-  /**
-   * Where the row navigates. Defaults to `HandoffDetailScreen`, which
-   * is right for the two rider-code tabs. The "Expected" tab overrides
-   * it with the drop-off preview (`/node/drop-off/[trackingCode]`)
-   * instead — those parcels haven't been received yet, so the action
-   * they need is "confirm it arrived," not "enter a rider's code."
-   */
-  href?: string;
-}
+import { HANDLING_LABELS, type NodeOrderSummary } from "@/core/types";
+import { NEXT_ACTION_COPY } from "@/modules/node/lib/next-action";
 
 /**
- * One order row on Home's Expected / Awaiting Pickup / Awaiting Arrival
- * tabs — tracking code, status, and which side of the trip it's on
- * (outgoing to a destination, or incoming from an origin). Home is a
- * summary: the row itself carries no action, it only navigates —
- * by default to `HandoffDetailScreen` (`ROUTES.nodeHandoffDetail`),
- * which has the full order info and the rider-code entry. Ready for
- * Collection has its own row shape (`CollectionSummaryList`) since it
- * needs its two sub-states (needs check-in vs. ready) and links to the
- * existing collect screen instead.
+ * One parcel in a work queue — tracking code, what to do with it next,
+ * its shelf and any handling warnings. Home is a summary: the row only
+ * navigates, to the counter (`/node/counter?code=…`), where the one
+ * action for this parcel lives.
  */
-export function NodeOrderRow({ order, href }: NodeOrderRowProps) {
+export function NodeOrderRow({ order }: { order: NodeOrderSummary }) {
   const isOutgoing = order.myRole === "origin";
+  const action = order.nextAction && order.nextAction !== "none" ? NEXT_ACTION_COPY[order.nextAction].title : null;
 
   return (
-    // <Link href={ROUTES.nodeHandoffDetail(order.id)}>
-    //   <Card interactive padding="md" className="flex items-center gap-3">
-    //     <span className="w-9 h-9 rounded-[10px] bg-status-info-bg text-brand-blue flex items-center justify-center shrink-0">
-    //       <PackageIcon size={16} />
-    //     </span>
+    <Link href={ROUTES.nodeCounterOrder(order.trackingCode)}>
+      <Card interactive padding="md" className="flex items-center gap-3">
+        <span className="w-9 h-9 rounded-[10px] bg-status-info-bg text-brand-blue flex items-center justify-center shrink-0">
+          <PackageIcon size={16} />
+        </span>
 
-    //     <div className="flex-1 min-w-0">
-    //       <div className="flex items-center justify-between gap-2 mb-1">
-    //         <p className="text-[13px] font-bold text-text-primary font-mono tracking-tight">
-    //           {order.trackingCode}
-    //         </p>
-    //         {/* <span className="text-[11px] text-text-muted shrink-0">
-    //           {formatRelativeDateTime(order.createdAt)}
-    //         </span> */}
-    //       </div>
-    //       <p className="text-[12px] text-text-secondary truncate">
-    //         {order.parcelDescription}
-    //         {isOutgoing ? ` → ${order.destinationNodeName}` : ` ← ${order.originNodeName}`}
-    //       </p>
-    //     </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-[13px] font-bold text-text-primary font-mono tracking-tight truncate">
+            {order.trackingCode}
+          </p>
+          <p className="mt-1 text-[12px] text-text-secondary truncate">{order.parcelDescription}</p>
+          <p className="mt-1 text-[11px] text-text-muted truncate">
+            {isOutgoing ? `To ${order.destinationNodeName}` : `From ${order.originNodeName}`}
+            {order.receiverMasked ? ` · ${order.receiverMasked}` : ""}
+          </p>
+          {action && <p className="mt-1.5 text-[11.5px] font-semibold text-brand-blue">{action}</p>}
+          {!!order.parcel?.handling.length && (
+            <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-status-warning">
+              {order.parcel.handling.map((h) => HANDLING_LABELS[h]).join(" · ")}
+            </p>
+          )}
+        </div>
 
-    //     <div>
-          
-    //       <HandoffStatusPill status={order.status} />
-    //     </div>
-    //     <ChevronRightIcon size={16} className="text-text-muted shrink-0" />
-    //   </Card>
-    // </Link>
+        <div className="flex flex-col items-end gap-1.5 shrink-0">
+          {order.shelfNumber != null && (
+            <span className="text-[11px] font-bold text-brand-blue bg-status-info-bg px-2 py-0.5 rounded-full">
+              Shelf {order.shelfNumber}
+            </span>
+          )}
+          <span className="text-[10px] text-text-muted whitespace-nowrap">
+            {formatRelativeDateTime(order.createdAt)}
+          </span>
+          <HandoffStatusPill status={order.status} />
+        </div>
 
-  <Link href={href ?? ROUTES.nodeHandoffDetail(order.id)}>
-  <Card
-    interactive
-    padding="md"
-    className="flex items-center gap-3"
-  >
-    {/* Package icon */}
-    <span className="w-9 h-9 rounded-[10px] bg-status-info-bg text-brand-blue flex items-center justify-center shrink-0">
-      <PackageIcon size={16} />
-    </span>
-
-    {/* Main content */}
-    <div className="flex-1 min-w-0">
-      <p className="text-[13px] font-bold text-text-primary font-mono tracking-tight truncate">
-        {order.trackingCode}
-      </p>
-
-      <p className="mt-1 text-[12px] text-text-secondary truncate">
-        {order.parcelDescription}
-      </p>
-
-      <p className="mt-1 text-[11px] text-text-muted truncate">
-        {isOutgoing
-          ? `To ${order.destinationNodeName}`
-          : `From ${order.originNodeName}`}
-      </p>
-    </div>
-
-    {/* Meta */}
-    <div className="flex flex-col items-end gap-1.5 shrink-0">
-      <span className="text-[10px] text-text-muted whitespace-nowrap">
-        {formatRelativeDateTime(order.createdAt)}
-      </span>
-
-      <HandoffStatusPill status={order.status} />
-    </div>
-
-    {/* Arrow */}
-    <ChevronRightIcon
-      size={16}
-      className="text-text-muted shrink-0"
-    />
-  </Card>
-</Link>
+        <ChevronRightIcon size={16} className="text-text-muted shrink-0" />
+      </Card>
+    </Link>
   );
 }

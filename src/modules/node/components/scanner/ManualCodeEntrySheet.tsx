@@ -28,11 +28,11 @@ export function ManualCodeEntrySheet({ onSubmit, onClose, isSubmitting, error }:
           Enter code manually
         </h2>
         <p className="text-[13px] text-text-muted mb-4">
-          Type the tracking code printed on the parcel label.
+          Type the tracking code written on the parcel. Capitals, spaces or a missing “LCM-” are fine.
         </p>
 
         <Input
-          placeholder="e.g. LC-482TX"
+          placeholder="LCM-7K3M-Q9TD"
           value={code}
           onChange={(e) => setCode(e.target.value.toUpperCase())}
           autoFocus
@@ -47,7 +47,7 @@ export function ManualCodeEntrySheet({ onSubmit, onClose, isSubmitting, error }:
           isLoading={isSubmitting}
           onClick={() => onSubmit(code.trim())}
         >
-          Look Up Parcel
+          Find parcel
         </Button>
       </div>
     </div>

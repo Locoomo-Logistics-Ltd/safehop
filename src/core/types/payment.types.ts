@@ -1,3 +1,12 @@
+import type {
+  HandlingFlag,
+  KnownOrderStatus,
+  LabelInstructions,
+  OrderDelivery,
+  Parcel,
+  VehicleClass,
+} from "./logistics.types";
+
 /**
  * Real payments + orders domain — POST/GET /payments/intents and
  * GET /orders(/:id), added to docs/API.md 2026-08-12. This is the
@@ -26,13 +35,26 @@ export interface CreatePaymentIntentPayload {
   receiverPhone: string;
   parcelDescription: string;
   parcelSize: OrderParcelSize;
+  /** 0.1 – 1000, max 1 decimal. Optional. */
+  weightKg?: number;
+  /** All three dimensions or none. Integer 1 – 500. */
+  lengthCm?: number;
+  widthCm?: number;
+  heightCm?: number;
+  handling?: HandlingFlag[];
 }
 
 export interface PaymentIntentFeeBreakdown {
   pricingRuleId: string;
+  vehicleClass?: VehicleClass;
   baseFeeKobo: number;
   perKmRateKobo: number;
   distanceKm: number;
+  /** `route` = measured road distance; `estimate` = straight line × factor. */
+  distanceSource?: "route" | "estimate";
+  straightLineKm?: number;
+  deliveryFeeKobo?: number;
+  destinationFeeKobo?: number;
   totalKobo: number;
 }
 
@@ -48,6 +70,7 @@ export interface PaymentIntent {
   receiverPhone: string;
   parcelDescription: string;
   parcelSize: OrderParcelSize;
+  parcel?: Parcel;
   feeBreakdown: PaymentIntentFeeBreakdown;
   amountKobo: number;
   status: PaymentIntentStatus;
@@ -56,14 +79,11 @@ export interface PaymentIntent {
 }
 
 /**
- * Only `"awaiting_drop_off"` is confirmed against docs/API.md — the
- * full lifecycle enum isn't documented. Typed as `string` (not a
- * union) so unrecognized values render gracefully instead of being a
- * type error; UI status-label/progress logic (`use-orders.ts`) treats
- * unknown values with a neutral fallback rather than guessing the rest
- * of the enum.
+ * The documented lifecycle (docs/LOGISTICS_API.md §2) plus an open
+ * `string` arm, so a status the backend adds later still type-checks
+ * and renders through the neutral fallback instead of breaking a screen.
  */
-export type OrderStatus = string;
+export type OrderStatus = KnownOrderStatus | (string & {});
 
 /** GET /orders and GET /orders/:id response shape — real, confirmed per docs/API.md. */
 export interface Order {
@@ -81,7 +101,14 @@ export interface Order {
   receiverPhone: string;
   parcelDescription: string;
   parcelSize: OrderParcelSize;
+  parcel?: Parcel;
   amountKobo: number;
   status: OrderStatus;
   createdAt: string;
+  /** Public tracking page link, including its access token — share as is. */
+  trackingUrl?: string;
+  /** What the sender hand-writes on the parcel (no printers, no QR). */
+  labelInstructions?: LabelInstructions;
+  /** `null` until the parcel is dropped off. */
+  delivery?: OrderDelivery | null;
 }

@@ -2,21 +2,17 @@
 
 import { useMemo, useState } from "react";
 import { useNodeProfile } from "./use-node-profile";
+import type { NodeQueue } from "@/core/types";
 import {
   isAwaitingPickup,
-  isAwaitingArrival,
-  isExpectedAtOrigin,
   myNodeId,
   needsIntake,
   isReadyForCollection,
   useMyNodeOrders,
 } from "./use-my-node-orders";
 
-export type DashboardFilterTab =
-  | "expected"
-  | "awaiting_pickup"
-  | "awaiting_arrival"
-  | "ready_for_collection";
+/** The server-side work queues (docs/LOGISTICS_API.md §5.2) the dashboard tabs map onto. */
+export type DashboardFilterTab = NodeQueue;
 
 /** Matches the 60% threshold the old mock Node dashboard used for its "High Full" warning. */
 const HIGH_FULL_THRESHOLD = 0.6;
@@ -72,7 +68,7 @@ export function useNodeDashboard() {
     error: nodeError,
   } = useNodeProfile();
   const { orders: allOrders, isLoading: isOrdersLoading } = useMyNodeOrders();
-  const [activeTab, setActiveTab] = useState<DashboardFilterTab>("awaiting_pickup");
+  const [activeTab, setActiveTab] = useState<DashboardFilterTab>("to_receive");
 
   // Scope to the counter this member is actually standing at. Owners
   // and staff alike resolve a real active station now (see
@@ -84,12 +80,13 @@ export function useNodeDashboard() {
     return allOrders.filter((order) => myNodeId(order) === node.id);
   }, [allOrders, node]);
 
-  const expected = useMemo(() => orders.filter(isExpectedAtOrigin), [orders]);
   const awaitingPickup = useMemo(() => orders.filter(isAwaitingPickup), [orders]);
-  const awaitingArrival = useMemo(() => orders.filter(isAwaitingArrival), [orders]);
   const needsIntakeOrders = useMemo(() => orders.filter(needsIntake), [orders]);
   const readyForCollection = useMemo(() => orders.filter(isReadyForCollection), [orders]);
 
+  // Derived from status, as before. The server's `shelfNumber` is not a
+  // reliable occupancy signal yet: staging sends `null` even for a parcel
+  // waiting on the shelf for a rider.
   const onSite = useMemo(
     () => [...awaitingPickup, ...needsIntakeOrders, ...readyForCollection],
     [awaitingPickup, needsIntakeOrders, readyForCollection]
@@ -115,10 +112,5 @@ export function useNodeDashboard() {
     isHighFull,
     activeTab,
     setActiveTab,
-    expected,
-    awaitingPickup,
-    awaitingArrival,
-    needsIntakeOrders,
-    readyForCollection,
   };
 }

@@ -264,10 +264,20 @@ export interface SuperAdminOverview {
 // part of the rider/origin-Node/platform percentage split. See the
 // `destination_node` party type in `earnings.types.ts`.
 
+export interface VehicleRateInput {
+  baseFeeNaira: number;
+  perKmRateNaira: number;
+}
+
 export interface CreatePricingRulePayload {
+  /** The base and per-km fields are the motorbike rate. */
   baseFeeNaira: number;
   perKmRateNaira: number;
   destinationFeeNaira: number;
+  /** Straight-line km × this = estimated road km, until a route is measured. */
+  roadDistanceFactor?: number;
+  /** Overrides for other vehicles (`bicycle`, `car`, `van`, `truck`); the rest use default multipliers. */
+  vehicleRates?: Partial<Record<"bicycle" | "car" | "van" | "truck", VehicleRateInput>>;
 }
 
 export interface PricingRule {
@@ -278,6 +288,13 @@ export interface PricingRule {
   perKmRateKobo: number;
   destinationFeeNaira: number;
   destinationFeeKobo: number;
+  roadDistanceFactor?: number;
+  vehicleRates?: Partial<
+    Record<
+      "bicycle" | "car" | "van" | "truck",
+      { baseFeeNaira: number; baseFeeKobo: number; perKmRateNaira: number; perKmRateKobo: number }
+    >
+  >;
   effectiveFrom: string;
   createdByAdminId: string;
 }

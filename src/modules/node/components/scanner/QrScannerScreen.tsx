@@ -14,9 +14,9 @@ import { ManualCodeEntrySheet } from "./ManualCodeEntrySheet";
  * manual code entry if the camera is denied/unavailable or the
  * operator taps "Having trouble?".
  *
- * The scan itself no longer hits the API — it hands the tracking code
- * to the drop-off preview screen, which resolves it and owns both the
- * "no such parcel here" case and the confirm. See use-scan-parcel.ts.
+ * The scan itself doesn't hit the API — it hands the tracking code to
+ * the counter screen, which looks it up and owns both the "no such
+ * parcel here" case and the next action. See use-scan-parcel.ts.
  */
 export function QrScannerScreen() {
   const router = useRouter();
@@ -40,7 +40,7 @@ export function QrScannerScreen() {
           <XIcon size={18} />
         </button>
         <p className="text-white font-semibold text-[15px] text-center flex-1">
-          Scan the parcel&apos;s QR code
+          Scan a code
         </p>
         <span className="w-9" aria-hidden="true" />
       </div>
@@ -64,7 +64,7 @@ export function QrScannerScreen() {
           onClick={() => setShowManualEntry(true)}
           className="w-full h-12 rounded-full border border-white/30 text-white text-[14px] font-medium"
         >
-          Having trouble? Enter code manually
+          Type the code instead
         </button>
       </div>
 

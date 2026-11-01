@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { LogoMark, LogOutIcon } from "@/components/icons";
 import { ADMIN_NAV_ITEMS, ADMIN_SETTINGS_NAV_ITEM } from "./nav-config";
@@ -23,11 +23,13 @@ export function AdminSidebar() {
   const router = useRouter();
   const user = useCurrentUser();
   const setSession = useAuthStore((s) => s.setSession);
+  const queryClient = useQueryClient();
 
   const logoutMutation = useMutation({
     mutationFn: () => authService.logout(),
     onSuccess: () => {
       setSession(null);
+      queryClient.clear();
       router.push(ROUTES.adminLogin);
     },
   });

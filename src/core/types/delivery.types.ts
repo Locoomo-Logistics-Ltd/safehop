@@ -1,3 +1,5 @@
+import type { HandlingFlag, OpeningHours } from "./logistics.types";
+
 /**
  * Core logistics domain types.
  * A "Node" is a Pickup Station (shop, pharmacy, etc.) in the network.
@@ -66,7 +68,10 @@ export interface PickupNode {
   state: string;
   location: GeoPoint;
   capacity: number;
+  /** Legacy free text, usually `null` — display `openingHours`. */
   operatingHours: string | null;
+  openingHours?: OpeningHours | null;
+  contactPhone?: string | null;
   /** Only present from `GET /nodes/nearby` (`distanceMeters` / 1000), not `GET /nodes/:id`. */
   distanceKm?: number;
 }
@@ -74,7 +79,13 @@ export interface PickupNode {
 export interface ParcelDetails {
   description: string;
   size: ParcelSize;
-  estimatedWeightKg?: number;
+  /** Optional. When weight/dimensions are given they decide the vehicle (and the price). */
+  weightKg?: number;
+  /** Dimensions are all three or none. */
+  lengthCm?: number;
+  widthCm?: number;
+  heightCm?: number;
+  handling?: HandlingFlag[];
 }
 
 export interface ReceiverDetails {

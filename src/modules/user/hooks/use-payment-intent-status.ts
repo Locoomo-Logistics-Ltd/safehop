@@ -5,8 +5,8 @@ import { useQuery } from "@tanstack/react-query";
 import { deliveryService } from "@/core/api/services";
 import { QUERY_KEYS } from "@/core/config/constants";
 
-const POLL_INTERVAL_MS = 2500;
-const MAX_POLL_ATTEMPTS = 36; // ~90s — comfortably past normal card/webhook latency without polling forever
+const POLL_INTERVAL_MS = 2000;
+const MAX_POLL_ATTEMPTS = 60; // ~2 min, per docs/LOGISTICS_API.md §4.1 — past normal card/webhook latency without polling forever
 
 /**
  * Polls `GET /payments/intents/:id` after the Paystack redirect lands

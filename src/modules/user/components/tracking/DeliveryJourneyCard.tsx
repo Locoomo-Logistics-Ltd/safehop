@@ -17,13 +17,11 @@ const STAGES = [
 const COLUMN_WIDTH = "w-[54px]";
 
 /**
- * Maps the real `Order.status` (bare `string` per docs/API.md — the
- * full lifecycle enum isn't confirmed on the Orders endpoint itself,
- * only inferable from the Handoffs module's `HANDOFF_STATUS`
- * constant) onto one of the 5 stages above. Any status this doesn't
- * recognize falls back to `getOrderProgress`'s coarser 0/0.5/1
- * heuristic rather than defaulting to "just placed," which would look
- * like regression for a real but unmapped mid-lifecycle value.
+ * Maps the documented forward lifecycle (docs/LOGISTICS_API.md §2) onto
+ * one of the 5 stages above. Return statuses never reach this card — the
+ * tracking screen shows a return banner instead. Any other status falls
+ * back to `getOrderProgress` rather than defaulting to "just placed,"
+ * which would look like a regression for a real but unmapped value.
  */
 function getStageIndex(status: OrderStatus): number {
   switch (status) {

@@ -36,7 +36,7 @@ export const ENDPOINTS = {
 
   // ── Nodes Infrastructure Module ───────────────────────────────
   nodes: {
-    nearby: "/nodes/nearby", // ?latitude&longitude&radiusInMeters
+    nearby: "/nodes/nearby", // ?latitude&longitude&radiusKm
   },
 
   // ── Node Operators (self-service onboarding, multi-Node) ────────
@@ -121,6 +121,33 @@ export const ENDPOINTS = {
   orders: {
     list: "/orders",
     detail: (id: string) => `/orders/${id}`,
+    /** Consumer (own orders). Oldest first; labels are rendered as is. */
+    timeline: (id: string) => `/orders/${id}/timeline`,
+  },
+
+  // ── Logistics (docs/LOGISTICS_API.md) ────────────────────────────
+  logistics: {
+    /** Any signed-in user. Builds the parcel form; cache per session. */
+    deliveryOptions: "/delivery-options",
+    /** Consumer, NodeOperator or NodeStaff. Price preview — reserves nothing. 30/min. */
+    deliveryQuotes: "/delivery-quotes",
+    /** Public — no session. `?t=<token>` or `?phoneLast4=1234`, exactly one. 10/min per IP. */
+    track: (trackingCode: string) => `/track/${encodeURIComponent(trackingCode)}`,
+  },
+
+  adminLogistics: {
+    providers: "/admin/logistics/providers",
+    provider: (key: string) => `/admin/logistics/providers/${encodeURIComponent(key)}`,
+    providerWallet: (key: string) =>
+      `/admin/logistics/providers/${encodeURIComponent(key)}/wallet`,
+    vehicleRules: "/admin/logistics/vehicle-rules",
+    vehicleRule: (vehicleClass: string) => `/admin/logistics/vehicle-rules/${vehicleClass}`,
+    routeDistances: "/admin/logistics/route-distances",
+    routeDistancesRefresh: "/admin/logistics/route-distances/refresh",
+    deliveries: "/admin/logistics/deliveries",
+    deliveryAction: (id: string, action: "retry" | "fallback" | "reconcile") =>
+      `/admin/logistics/deliveries/${id}/${action}`,
+    economics: "/admin/logistics/economics",
   },
 
   // ── Handoffs Module (custody chain: drop-off → rider → arrival) ─
@@ -157,6 +184,12 @@ export const ENDPOINTS = {
       `/handoffs/orders/${orderId}/collection-code/resend`,
     /** NodeOperator or NodeStaff (destination). Final step: ready_for_collection → completed. */
     collect: (orderId: string) => `/handoffs/orders/${orderId}/collect`,
+    /** NodeOperator or NodeStaff. The 6-digit code staff read to an external courier (pickup, delivery or return). 20/min. Never log or persist the code. */
+    courierHandover: (orderId: string) => `/handoffs/orders/${orderId}/courier-handover`,
+    /** NodeOperator or NodeStaff (origin, on a return). returned_to_origin → ready_for_sender_collection; emails the sender a code. */
+    returnIntake: (orderId: string) => `/handoffs/orders/${orderId}/return-intake`,
+    /** NodeOperator or NodeStaff (origin, on a return). Final step: ready_for_sender_collection → return_completed. Same body as `collect`. */
+    returnCollect: (orderId: string) => `/handoffs/orders/${orderId}/return-collect`,
   },
 
   // `riderOps.*` (job-board, accept-job, manifest, scan-pickup,

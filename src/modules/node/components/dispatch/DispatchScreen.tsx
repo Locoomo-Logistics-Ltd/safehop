@@ -19,7 +19,9 @@ import {
 import { getFriendlyError } from "@/core/api/errors";
 import { ROUTES } from "@/core/config/constants";
 import { formatCurrency } from "@/lib/format";
+import { formatNigerianPhone } from "@/lib/phone";
 import { toOrderParcelSize } from "@/core/types";
+import type { DispatchParcelPayload } from "@/core/types";
 import { ParcelSizeSelector } from "@/modules/user/components/delivery/ParcelSizeSelector";
 import { NodeListItem } from "@/modules/user/components/delivery/NodeListItem";
 import { useDispatchParcel } from "@/modules/node/hooks/use-dispatch-parcel";
@@ -47,11 +49,10 @@ import {
  * funnel designed for a first-time sender. It ends the same way
  * Checkout does — a fee breakdown, then a redirect to Paystack.
  *
- * **The fee only exists after the intent is created.** There's no
- * quote endpoint; `POST .../dispatch` calculates the fee, reserves
- * capacity for ~15 minutes and returns the Paystack link in one call
- * — exactly as `POST /payments/intents` does — so this screen submits
- * first and shows the price second, with "Pay" as a separate tap.
+ * **Quote first** (docs/LOGISTICS_API.md §5.10): "See price" calls
+ * `POST /delivery-quotes`, which reserves nothing, and shows the fee and
+ * vehicle. Only the "Pay" tap calls `POST .../dispatch` (which holds a
+ * slot for ~15 minutes) and goes straight to Paystack.
  *
  * **Validation** is react-hook-form + zod, same as the Consumer's
  * `NewDeliveryScreen` — see `dispatchParcelSchema` for why the email
@@ -64,12 +65,19 @@ export function DispatchScreen() {
     originNode,
     destinations,
     isLoadingDestinations,
+    requestQuote,
+    quote,
+    isQuoting,
+    quoteError,
+    clearQuote,
     dispatch,
-    intent,
     isDispatching,
     dispatchError,
-    redirectToPaystack,
+    clearDispatchError,
   } = useDispatchParcel();
+
+  // The body to send once the quote has been seen and accepted.
+  const [pendingPayload, setPendingPayload] = useState<DispatchParcelPayload | null>(null);
 
   // Not part of the form — it filters the destination list, it isn't
   // a value that gets submitted.
@@ -104,11 +112,24 @@ export function DispatchScreen() {
   // `values` arrives already trimmed by the schema, so the only thing
   // left to do is map the UI's "xl" onto the API's "extra_large".
   const onSubmit = (values: DispatchParcelFormValues) => {
-    setDispatchedToId(values.destinationNodeId);
-    dispatch({
+    const payload: DispatchParcelPayload = {
       ...values,
+      // The API wants `+` optional and 7–15 digits — no spaces.
+      receiverPhone: formatNigerianPhone(values.receiverPhone.replace(/[\s-]/g, "")),
       parcelSize: toOrderParcelSize(values.parcelSize),
+    };
+    setDispatchedToId(values.destinationNodeId);
+    setPendingPayload(payload);
+    requestQuote({
+      destinationNodeId: payload.destinationNodeId,
+      parcelSize: payload.parcelSize,
     });
+  };
+
+  const backToForm = () => {
+    clearQuote();
+    clearDispatchError();
+    setPendingPayload(null);
   };
 
   if (!originNode) {
@@ -144,10 +165,22 @@ export function DispatchScreen() {
     );
   }
 
-  // Intent created: the fee is known and Paystack is one tap away. The
-  // form stays mounted behind this so a "back" from Paystack doesn't
-  // lose what was typed.
-  if (intent) {
+  // Quote in hand: the price and vehicle are known and nothing is
+  // reserved yet. The form stays mounted behind this so "Edit details"
+  // doesn't lose what was typed.
+  if (quote && pendingPayload) {
+    // The price may lapse while this screen sits open; "now" is read at
+    // the tap, not at render, and a lapsed quote is re-fetched first.
+    const handlePay = () => {
+      if (Date.now() > new Date(quote.validUntil).getTime()) {
+        requestQuote({
+          destinationNodeId: pendingPayload.destinationNodeId,
+          parcelSize: pendingPayload.parcelSize,
+        });
+        return;
+      }
+      dispatch(pendingPayload);
+    };
     return (
       <div className="min-h-screen bg-bg-canvas">
         <TopBar title="Confirm & Pay" showBack />
@@ -157,22 +190,31 @@ export function DispatchScreen() {
               Delivery Fee
             </p>
             <p className="font-display text-[28px] font-bold text-text-primary">
-              {formatCurrency(intent.amountKobo / 100)}
+              {formatCurrency(quote.amountKobo / 100)}
             </p>
             <p className="text-[12px] text-text-muted mt-1">
-              {intent.feeBreakdown.distanceKm.toFixed(1)}km ·{" "}
+              {quote.distanceKm.toFixed(1)}km ·{" "}
               {originNode.name} → {destinations.find((n) => n.id === dispatchedToId)?.name ?? "destination"}
+            </p>
+            <p className="text-[12.5px] text-text-secondary mt-3">
+              Goes by <span className="font-semibold text-text-primary">{quote.vehicleClass}</span>, about{" "}
+              {quote.estimatedDeliveryMinutes} min after drop-off.
             </p>
           </Card>
 
           <p className="text-[12px] text-text-secondary leading-[1.6]">
-            Your slot is held for about 15 minutes. After paying you&apos;ll find this
-            parcel under <span className="font-semibold text-text-primary">Expected</span>{" "}
-            on your dashboard — confirm the drop-off there to release it to riders.
+            Your slot is held for about 15 minutes once you tap Pay. After paying you&apos;ll find this
+            parcel under <span className="font-semibold text-text-primary">To receive</span>{" "}
+            on your dashboard — confirm the drop-off there to release it to a courier.
           </p>
 
-          <Button fullWidth size="lg" onClick={redirectToPaystack}>
-            Pay {formatCurrency(intent.amountKobo / 100)}
+          {dispatchError != null && <ErrorAlert {...getFriendlyError(dispatchError)} />}
+
+          <Button fullWidth size="lg" isLoading={isDispatching || isQuoting} onClick={handlePay}>
+            Pay {formatCurrency(quote.amountKobo / 100)}
+          </Button>
+          <Button fullWidth variant="ghost" onClick={backToForm}>
+            Edit details
           </Button>
         </div>
       </div>
@@ -290,7 +332,7 @@ export function DispatchScreen() {
             />
             <Input
               label="Phone"
-              placeholder="+2348012345678"
+              placeholder="0801 234 5678"
               inputMode="tel"
               leftElement={<PhoneIcon size={16} />}
               error={errors.receiverPhone?.message}
@@ -310,7 +352,7 @@ export function DispatchScreen() {
                 Parcel
               </h2>
               <p className="text-[12px] text-text-muted">
-                Size is for the receiving station — it doesn&apos;t change the fee
+                Larger parcels may go by a bigger vehicle, which changes the price
               </p>
             </div>
           </div>
@@ -338,20 +380,10 @@ export function DispatchScreen() {
           </div>
         </Card>
 
-        {dispatchError != null &&
-          (() => {
-            const friendly = getFriendlyError(dispatchError);
-            return (
-              <ErrorAlert
-                title={friendly.title}
-                message={friendly.message}
-                action={friendly.action}
-              />
-            );
-          })()}
+        {quoteError != null && <ErrorAlert {...getFriendlyError(quoteError)} />}
 
-        <Button type="submit" fullWidth size="lg" isLoading={isDispatching}>
-          Continue
+        <Button type="submit" fullWidth size="lg" isLoading={isQuoting}>
+          See price
         </Button>
       </form>
     </div>

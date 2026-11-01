@@ -31,7 +31,7 @@ interface AddressSearchState {
 const EMPTY_SEARCH: AddressSearchState = { point: null, label: null, isSearching: false, error: null };
 
 /**
- * Step 2 of the New Delivery flow: pick the origin Pickup Station
+ * Step 2 of 3 in the New Delivery flow (details → stations → checkout): pick the origin Pickup Station
  * (where the sender drops the parcel off) and the destination Pickup
  * Station (where the receiver collects it).
  *
@@ -124,7 +124,7 @@ export function SelectNodesScreen() {
     if (!canProceed) return;
     setOriginNode(selectedOriginId);
     setDestinationNode(selectedDestinationId);
-    router.push(ROUTES.deliveryMethod);
+    router.push(ROUTES.checkout);
   };
 
   const searchAddress = async (
@@ -155,7 +155,7 @@ export function SelectNodesScreen() {
           </p>
         </div>
 
-        <ProgressSteps total={4} current={2} className="mb-5" />
+        <ProgressSteps total={3} current={2} className="mb-5" />
 
         <NodeMapView
           nodes={nodesWithLiveDistance}
@@ -189,7 +189,7 @@ export function SelectNodesScreen() {
         </div>
 
         <p className="text-[11px] text-text-muted mt-4 leading-[1.6]">
-          Parcel must be under ₦100,000 in value and 8kg in weight for drop &amp; pick.
+          You&apos;ll see the exact price on the next step, before you pay.
         </p>
       </div>
 

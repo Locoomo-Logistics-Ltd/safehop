@@ -6,3 +6,5 @@ export { deliveryService} from "./delivery.service";
 export { nodeService } from "./node.service";
 export { riderService } from "./rider.service";
 export { adminService } from "./admin.service";
+export { publicTrackingService, adminLogisticsService } from "./logistics.service";
+export type { TrackingCredential } from "./logistics.service";

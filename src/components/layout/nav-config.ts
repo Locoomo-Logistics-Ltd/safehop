@@ -62,7 +62,7 @@ export const USER_NAV_ITEMS: NavItem[] = [
  */
 export const NODE_NAV_ITEMS: NavItem[] = [
   { label: "Home", href: ROUTES.nodeHome, icon: HomeIcon },
-  { label: "Scan", href: ROUTES.nodeScan, icon: QrCodeIcon },
+  { label: "Counter", href: ROUTES.nodeCounter, icon: QrCodeIcon },
   // "Send" (2026-09-03) — the station's own outbound parcel, `POST
   // /node-operators/nodes/:nodeId/dispatch`. Earns a nav slot rather
   // than a Home button because it's the *only* way a station that has
@@ -104,7 +104,7 @@ export const NODE_NAV_ITEMS: NavItem[] = [
  */
 export const NODE_STAFF_NAV_ITEMS: NavItem[] = [
   { label: "Home", href: ROUTES.nodeHome, icon: HomeIcon },
-  { label: "Scan", href: ROUTES.nodeScan, icon: QrCodeIcon },
+  { label: "Counter", href: ROUTES.nodeCounter, icon: QrCodeIcon },
   { label: "Send", href: ROUTES.nodeDispatch, icon: TruckIcon },
   { label: "Activity", href: ROUTES.nodeActivity, icon: ActivityIcon },
 ];
@@ -157,6 +157,7 @@ export const ADMIN_NAV_ITEMS: NavItem[] = [
   { label: "Team", href: ROUTES.adminTeam, icon: UsersIcon },
   { label: "Approvals", href: ROUTES.adminApprovals, icon: ShieldCheckIcon },
   { label: "Pricing", href: ROUTES.adminPricing, icon: CreditCardIcon },
+  { label: "Logistics", href: ROUTES.adminLogistics, icon: TruckIcon },
   { label: "Disputes", href: ROUTES.adminDisputes, icon: AlertTriangleIcon },
   { label: "Analytics", href: ROUTES.adminAnalytics, icon: BarChartIcon },
   { label: "Revenue Split", href: ROUTES.adminRevenueSplit, icon: WalletIcon },

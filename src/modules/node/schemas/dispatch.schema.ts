@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isValidPhone } from "@/lib/phone";
 
 /**
  * `POST /node-operators/nodes/:nodeId/dispatch` form validation.
@@ -29,10 +30,13 @@ import { z } from "zod";
  */
 export const dispatchParcelSchema = z.object({
   destinationNodeId: z.string().min(1, "Choose a destination station"),
-  receiverFullName: z.string().trim().min(2, "Enter the receiver's full name"),
+  receiverFullName: z.string().trim().min(1, "Enter the receiver's full name").max(100, "Keep the name under 100 characters"),
   receiverEmail: z.string().trim().email("Enter a valid email address"),
-  receiverPhone: z.string().trim().min(7, "Enter a valid phone number"),
-  parcelDescription: z.string().trim().min(2, "Describe what you're sending"),
+  receiverPhone: z
+    .string()
+    .trim()
+    .refine((v) => isValidPhone(v.replace(/[\s-]/g, "")), "Enter a valid phone number, e.g. 0801 234 5678"),
+  parcelDescription: z.string().trim().min(1, "Describe what you're sending").max(500, "Keep the description under 500 characters"),
   parcelSize: z.enum(["small", "medium", "large", "xl"], {
     required_error: "Pick a parcel size",
   }),

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { TopBar } from "@/components/layout";
 import { Card, Button } from "@/components/ui";
 import { MailIcon, PhoneIcon } from "@/components/icons";
@@ -22,11 +22,13 @@ export function AdminProfileScreen() {
   const user = useCurrentUser();
   const router = useRouter();
   const setSession = useAuthStore((s) => s.setSession);
+  const queryClient = useQueryClient();
 
   const logoutMutation = useMutation({
     mutationFn: () => authService.logout(),
     onSuccess: () => {
       setSession(null);
+      queryClient.clear();
       router.push(ROUTES.adminLogin);
     },
   });

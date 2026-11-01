@@ -6,7 +6,12 @@ import { ROUTES } from "@/core/config/constants";
 import { decodeQrPayload } from "@/core/types";
 
 /**
- * Turns a scanned QR (or a manually typed code) into a drop-off
+ * Turns a scanned QR (or a manually typed code) into the counter screen
+ * for that parcel (`/node/counter?code=…`), which looks it up and shows
+ * what to do next. Typing is the primary path now — senders hand-write the
+ * code, so there's nothing to scan — and the camera is a secondary option.
+ *
+ * Earlier history: turns a scanned QR (or a manually typed code) into a drop-off
  * preview.
  *
  * This used to call `nodeService.checkIn()` → the undocumented
@@ -37,7 +42,7 @@ export function useScanParcel() {
       // Held true through the route transition so the camera stays
       // paused and repeat frames don't fire a second navigation.
       setIsProcessing(true);
-      router.push(ROUTES.nodeDropOff(encodeURIComponent(trackingCode)));
+      router.push(ROUTES.nodeCounterOrder(trackingCode));
     },
     [router]
   );

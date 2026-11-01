@@ -9,11 +9,11 @@ import { PayoutReminderBanner } from "@/components/payout";
 import { getFriendlyError } from "@/core/api/errors";
 import { ROUTES } from "@/core/config/constants";
 import { useNodeDashboard } from "@/modules/node/hooks/use-node-dashboard";
+import { useNodeQueue } from "@/modules/node/hooks/use-node-queue";
 import { NodeSwitcher } from "@/modules/node/components/nodes";
 import { CapacityBar } from "./CapacityBar";
 import { ParcelFilterTabs } from "./ParcelFilterTabs";
 import { NodeOrderRow } from "./NodeOrderRow";
-import { CollectionSummaryList } from "./CollectionSummaryList";
 
 /**
  * Node Dashboard — the Node operator's (and, in full, their invited
@@ -68,12 +68,10 @@ export function NodeHomeScreen() {
     isHighFull,
     activeTab,
     setActiveTab,
-    expected,
-    awaitingPickup,
-    awaitingArrival,
-    needsIntakeOrders,
-    readyForCollection,
   } = useNodeDashboard();
+  // Server-side work queue for the selected tab, scoped to the station
+  // in the switcher. Hooks must run before the early returns below.
+  const queue = useNodeQueue(activeTab, node?.id);
 
   if (isLoading) {
     return (
@@ -168,18 +166,11 @@ export function NodeHomeScreen() {
     );
   }
 
-  const listedOrders =
-    activeTab === "expected"
-      ? expected
-      : activeTab === "awaiting_pickup"
-        ? awaitingPickup
-        : awaitingArrival;
-
-  const emptyCopy: Record<Exclude<typeof activeTab, "ready_for_collection">, string> = {
-    expected:
-      "Parcels paid for but not yet handed in at your counter — including ones you send yourself — show up here.",
-    awaiting_pickup: "Parcels waiting for a rider to collect will show up here.",
-    awaiting_arrival: "Parcels a rider is bringing to your Node will show up here.",
+  const emptyCopy: Record<typeof activeTab, string> = {
+    to_receive: "Parcels paid for but not yet handed in at your counter — including ones you send yourself — show up here.",
+    to_dispatch: "Parcels on your shelf waiting for a courier or rider to collect them will show up here.",
+    incoming: "Parcels on their way to your station — deliveries, and returns coming back — will show up here.",
+    to_collect: "Parcels waiting for their receiver (or, on a return, the sender) to collect will show up here.",
   };
 
   return (
@@ -240,12 +231,11 @@ export function NodeHomeScreen() {
           <ParcelFilterTabs active={activeTab} onChange={setActiveTab} />
         </div>
 
-        {activeTab === "ready_for_collection" ? (
-          <CollectionSummaryList
-            needsIntakeOrders={needsIntakeOrders}
-            readyOrders={readyForCollection}
-          />
-        ) : listedOrders.length === 0 ? (
+        {queue.isLoading ? (
+          <p className="text-[13px] text-text-muted text-center py-10">Loading parcels…</p>
+        ) : queue.isError ? (
+          <ErrorAlert {...getFriendlyError(queue.error)} />
+        ) : queue.orders.length === 0 ? (
           <EmptyState
             icon={<PackageIcon size={24} />}
             title="Nothing here"
@@ -253,28 +243,22 @@ export function NodeHomeScreen() {
           />
         ) : (
           <div className="flex flex-col gap-2.5">
-            {listedOrders.map((order) => (
-              <NodeOrderRow
-                key={order.id}
-                order={order}
-                // Expected parcels haven't been received yet, so the
-                // action they need is the drop-off preview + confirm,
-                // not the rider-code entry every other tab links to.
-                href={
-                  activeTab === "expected"
-                    ? ROUTES.nodeDropOff(order.trackingCode)
-                    : undefined
-                }
-              />
+            {queue.orders.map((order) => (
+              <NodeOrderRow key={`${order.id}-${order.myRole}`} order={order} />
             ))}
+            {queue.hasMore && (
+              <Button variant="outline" onClick={() => queue.loadMore()} isLoading={queue.isLoadingMore}>
+                Load more
+              </Button>
+            )}
           </div>
         )}
       </div>
 
       {/* Floating scan action — the Figma orange circular QR button */}
       <Link
-        href={ROUTES.nodeScan}
-        aria-label="Scan a parcel"
+        href={ROUTES.nodeCounter}
+        aria-label="Open the counter"
         className="fixed bottom-[84px] right-5 md:bottom-8 md:right-8 z-30 w-14 h-14 rounded-full bg-brand-blue text-white flex items-center justify-center shadow-[var(--shadow-raised)] transition-transform active:scale-95"
       >
         <QrCodeIcon size={24} />

@@ -1,5 +1,6 @@
 "use client";
 
+import { safeHttpUrl } from "@/lib/safe-url";
 import { useState } from "react";
 import { RootTopBar } from "@/components/layout";
 import { ROUTES } from "@/core/config/constants";
@@ -233,7 +234,7 @@ function RiderApprovalsTable({ pending, isLoading, onApprove, isApproving, appro
                   <td className="px-5 py-3 whitespace-nowrap">
                     {document ? (
                       <a
-                        href={document.viewUrl}
+                        href={safeHttpUrl(document.viewUrl)}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-[12px] font-semibold text-admin-accent hover:underline"

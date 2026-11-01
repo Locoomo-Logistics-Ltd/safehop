@@ -49,7 +49,7 @@ export function PricingScreen() {
             <EmptyState
               icon={<CreditCardIcon size={22} />}
               title="No pricing rule configured"
-              description="Consumer checkout can't calculate a delivery fee until a pricing rule exists — add one to get started."
+              description="Senders can't get a delivery price until a pricing rule exists — add one to get started."
             />
           </Card>
         ) : (
@@ -58,9 +58,11 @@ export function PricingScreen() {
               <table className="w-full text-left">
                 <thead>
                   <tr className="text-[11px] uppercase tracking-wide text-text-muted bg-bg-subtle">
-                    <th className="font-medium px-5 py-2.5">Base Fee</th>
+                    <th className="font-medium px-5 py-2.5">Motorbike Base</th>
                     <th className="font-medium px-5 py-2.5">Per-Km Rate</th>
                     <th className="font-medium px-5 py-2.5">Destination Fee</th>
+                    <th className="font-medium px-5 py-2.5">Road Factor</th>
+                    <th className="font-medium px-5 py-2.5">Vehicle Overrides</th>
                     <th className="font-medium px-5 py-2.5">Effective From</th>
                     <th className="px-5 py-2.5" />
                   </tr>
@@ -76,6 +78,19 @@ export function PricingScreen() {
                       </td>
                       <td className="px-5 py-3 text-[13px] text-text-secondary whitespace-nowrap">
                         {formatCurrency(rule.destinationFeeNaira)}
+                      </td>
+                      <td className="px-5 py-3 text-[13px] text-text-secondary whitespace-nowrap">
+                        {rule.roadDistanceFactor ?? "—"}
+                      </td>
+                      <td className="px-5 py-3 text-[12px] text-text-secondary">
+                        {rule.vehicleRates && Object.keys(rule.vehicleRates).length > 0
+                          ? Object.entries(rule.vehicleRates).map(([vehicle, rate]) => (
+                              <span key={vehicle} className="block whitespace-nowrap">
+                                <span className="capitalize">{vehicle}</span>: {formatCurrency(rate.baseFeeNaira)} +{" "}
+                                {formatCurrency(rate.perKmRateNaira)}/km
+                              </span>
+                            ))
+                          : "Default multipliers"}
                       </td>
                       <td className="px-5 py-3 text-[12px] text-text-muted whitespace-nowrap">
                         {new Date(rule.effectiveFrom).toLocaleString("en-US", {

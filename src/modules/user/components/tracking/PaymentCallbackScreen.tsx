@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui";
@@ -9,10 +9,14 @@ import { CheckCircleIcon } from "@/components/icons";
 import { deliveryService } from "@/core/api/services";
 import { ROUTES, STORAGE_KEYS } from "@/core/config/constants";
 import { usePaymentIntentStatus } from "@/modules/user/hooks/use-payment-intent-status";
+import { useDeliveryDraftStore } from "@/store/delivery-draft.store";
 
 /**
- * Where Paystack redirects after checkout (`{FRONTEND_URL}/orders/payment-callback`,
- * per docs/API.md). The redirect itself is UI-only and doesn't mean
+ * Where Paystack redirects after checkout
+ * (`{FRONTEND_URL}/orders/payment-callback?reference=<intentId>`, per
+ * docs/LOGISTICS_API.md §4.1 — `trxref` carries the same value). The
+ * intent id comes from `reference`; the sessionStorage copy `useCheckout`
+ * leaves is only a fallback for a URL that lost its query. The redirect itself is UI-only and doesn't mean
  * payment succeeded — only the server-to-server webhook confirms that
  * — so this screen polls `GET /payments/intents/:id` until `status`
  * leaves `"pending"`, then looks up the resulting Order (there's no
@@ -32,7 +36,11 @@ import { usePaymentIntentStatus } from "@/modules/user/hooks/use-payment-intent-
  */
 export function PaymentCallbackScreen() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const resetDraft = useDeliveryDraftStore((s) => s.reset);
+  const referenceParam = searchParams.get("reference") ?? searchParams.get("trxref");
   const [intentId] = useState<string | null>(() => {
+    if (referenceParam) return referenceParam;
     if (typeof window === "undefined") return null;
     return window.sessionStorage.getItem(STORAGE_KEYS.pendingPaymentIntentId);
   });
@@ -60,26 +68,39 @@ export function PaymentCallbackScreen() {
     sessionStorage.removeItem(STORAGE_KEYS.pendingDispatch);
   }, [isDispatch]);
 
+  // The intent doesn't carry the order id, and the order can land a beat
+  // after the intent flips to `paid` — so keep looking for a short while
+  // instead of showing "Finalizing…" forever.
   const shouldLookUpOrder = intent?.status === "paid";
+  const [orderLookupTimedOut, setOrderLookupTimedOut] = useState(false);
+  useEffect(() => {
+    if (!shouldLookUpOrder) return;
+    const timer = setTimeout(() => setOrderLookupTimedOut(true), 30_000);
+    return () => clearTimeout(timer);
+  }, [shouldLookUpOrder]);
+
   const orderQuery = useQuery({
     queryKey: ["orders-for-intent", intentId],
-    queryFn: () => deliveryService.list(),
+    queryFn: () => deliveryService.findOrderByPaymentIntent(intentId!),
     enabled: shouldLookUpOrder,
+    refetchInterval: (q) => (q.state.data || orderLookupTimedOut ? false : 2000),
   });
-  const matchedOrder = orderQuery.data?.find((o) => o.paymentIntentId === intentId);
+  const matchedOrder = orderQuery.data;
 
   useEffect(() => {
     if (matchedOrder) {
       sessionStorage.removeItem(STORAGE_KEYS.pendingPaymentIntentId);
+      // The sender has paid; the draft must not leak into the next delivery.
+      resetDraft();
       router.replace(ROUTES.orderSuccess(matchedOrder.id));
     }
-  }, [matchedOrder, router]);
+  }, [matchedOrder, router, resetDraft]);
 
   if (isDispatch) {
     return (
       <CenteredMessage
         title="Payment submitted"
-        description="Once it clears, your parcel appears under Expected on your dashboard — confirm the drop-off there to release it to riders. It usually takes a few seconds."
+        description="Once it clears, your parcel appears under To receive on your dashboard — confirm the drop-off there to release it to a courier. It usually takes a few seconds."
         action={
           <Link href={ROUTES.nodeHome}>
             <Button size="lg">Go to Dashboard</Button>
@@ -108,6 +129,19 @@ export function PaymentCallbackScreen() {
   }
 
   if (intent?.status === "paid") {
+    if (!matchedOrder && orderLookupTimedOut) {
+      return (
+        <CenteredMessage
+          title="Payment received"
+          description="Your order is still being set up. It will appear under Track in a moment."
+          action={
+            <Link href={ROUTES.trackList}>
+              <Button size="lg">Go to Track</Button>
+            </Link>
+          }
+        />
+      );
+    }
     return <CenteredSpinner label={orderQuery.isLoading ? "Finding your order…" : "Finalizing your order…"} />;
   }
 
@@ -128,8 +162,8 @@ export function PaymentCallbackScreen() {
   if (intent?.status === "expired") {
     return (
       <CenteredMessage
-        title="This checkout session expired"
-        description="Your ~15 minute reservation lapsed before payment completed. Start again to reserve a fresh slot."
+        title="Your checkout timed out"
+        description="Your ~15 minute hold on the drop-off station lapsed before payment completed. Start again to get a fresh slot."
         action={
           <Link href={ROUTES.checkout}>
             <Button size="lg">Start Again</Button>

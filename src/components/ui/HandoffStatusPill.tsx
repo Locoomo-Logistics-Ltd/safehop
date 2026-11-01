@@ -31,7 +31,7 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }
     bg: "var(--status-info-bg)",
   },
   [HANDOFF_STATUS.riderAssigned]: {
-    label: "Rider Assigned",
+    label: "Courier Assigned",
     color: "var(--status-info)",
     bg: "var(--status-info-bg)",
   },
@@ -59,6 +59,15 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }
     color: "var(--status-success)",
     bg: "var(--status-success-bg)",
   },
+  // Return track (docs/LOGISTICS_API.md §2): a courier couldn't deliver and
+  // is bringing the parcel back to the origin Node.
+  return_initiated: { label: "Return Started", color: "var(--status-warning)", bg: "var(--status-warning-bg)" },
+  return_in_transit: { label: "Returning", color: "var(--status-warning)", bg: "var(--status-warning-bg)" },
+  returned_to_origin: { label: "Back at Origin", color: "var(--status-warning)", bg: "var(--status-warning-bg)" },
+  ready_for_sender_collection: { label: "Sender to Collect", color: "var(--status-info)", bg: "var(--status-info-bg)" },
+  return_completed: { label: "Returned", color: "var(--status-success)", bg: "var(--status-success-bg)" },
+  cancelled: { label: "Cancelled", color: "var(--status-danger)", bg: "var(--status-danger-bg)" },
+  disputed: { label: "Disputed", color: "var(--status-danger)", bg: "var(--status-danger-bg)" },
 };
 
 /** Turns `some_unknown_status` into "Some Unknown Status" so an unmapped value still reads as English. */

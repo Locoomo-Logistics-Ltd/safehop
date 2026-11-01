@@ -2,6 +2,7 @@
 
 import { cn } from "@/lib/utils";
 import { MapPinIcon } from "@/components/icons";
+import { getTodayHoursText } from "@/lib/opening-hours";
 import type { PickupNode } from "@/core/types";
 
 interface NodeListItemProps {
@@ -35,7 +36,9 @@ export function NodeListItem({ node, isSelected, onSelect }: NodeListItemProps) 
         <p className="text-[12px] text-text-muted truncate">
           {node.distanceKm !== undefined ? `${node.distanceKm.toFixed(1)}km away · ` : ""}
           {node.city}, {node.state}
-          {node.operatingHours ? ` · ${node.operatingHours}` : ""}
+          {getTodayHoursText(node.openingHours) ?? node.operatingHours
+            ? ` · ${getTodayHoursText(node.openingHours) ?? node.operatingHours}`
+            : ""}
         </p>
       </div>
     </button>
