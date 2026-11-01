@@ -325,19 +325,7 @@ const realNodeService = {
     );
   },
 
-  /**
-   * Every order that's ever touched **any** Node the caller is a member
-   * of, either as origin or destination, current and past, newest first
-   * — `myRole` on each item says which side. Real, confirmed route per
-   * docs/API.md (2026-08-17; widened to all your Nodes 2026-09-02).
-   *
-   * This is what resolves the order uuid `confirm-handoff` needs for
-   * both `rider_pickup` and `rider_arrival`, and what the awaiting-
-   * collection/collect screens use to find a parcel by id. Requested at
-   * the max page size, same convention as `getPendingRiders`/
-   * `getPricingRules` elsewhere, since no screen built on this has
-   * pagination controls yet.
-   */
+
   async getMyNodeOrders(): Promise<NodeOrderSummary[]> {
     const raw = await httpClient.get<PaginatedList<NodeOrderSummary>>(
       `${ENDPOINTS.handoffs.myNodeOrders}?limit=100`
