@@ -24,7 +24,7 @@ function parseNullable(raw: string): number | null | undefined {
 export function ProviderCard({ provider, nodes }: ProviderCardProps) {
   const isInHouse = provider.key === "in_house";
   const [editing, setEditing] = useState(false);
-  const { wallet, unreachable, isLoading: walletLoading, refetch } = useProviderWallet(
+  const { wallet, unreachable, reference, isRefetching, isLoading: walletLoading, refetch } = useProviderWallet(
     provider.key,
     !!provider.capabilities?.prepaidWallet
   );
@@ -35,34 +35,40 @@ export function ProviderCard({ provider, nodes }: ProviderCardProps) {
         <div>
           <div className="flex items-center gap-2 flex-wrap">
             <h2 className="font-display text-[17px] font-bold text-text-primary">{provider.label}</h2>
-            <Badge tone={provider.enabled ? "success" : "neutral"}>{provider.enabled ? "Enabled" : "Disabled"}</Badge>
-            {!provider.registered && <Badge tone="warning">Not configured</Badge>}
+            <Badge tone={provider.enabled ? "success" : "neutral"}>{provider.enabled ? "Taking parcels" : "Switched off"}</Badge>
+            <Badge tone={provider.registered ? "success" : "warning"}>
+              {provider.registered ? "Account set up" : "Not set up yet"}
+            </Badge>
           </div>
-          <p className="text-[12px] text-text-muted mt-0.5 font-mono">{provider.key}</p>
+          <p className="text-[12.5px] text-text-muted mt-0.5">
+            {isInHouse ? "Our own riders — always the backup if a courier can't take a parcel" : "External courier partner"}
+          </p>
         </div>
         <div className="text-right">
-          <p className="text-[11px] text-text-muted">In progress now</p>
+          <p className="text-[11px] text-text-muted">Parcels on the road</p>
           <p className="font-display text-[22px] font-bold text-text-primary leading-none">{provider.activeDeliveries}</p>
         </div>
       </div>
 
       {!provider.registered && (
         <p className="text-[12.5px] text-status-warning bg-status-warning-bg rounded-[10px] px-3 py-2" role="alert">
-          The server isn&apos;t configured for this courier (no API key), so it can&apos;t take bookings even when enabled.
+          {provider.label} isn&apos;t connected to Locoomo yet, so it can&apos;t take parcels even if you switch it on.
+          Ask your tech team to add the {provider.label} account details on the server.
         </p>
       )}
 
       {provider.capabilities && (
-        <p className="text-[12px] text-text-muted">
-          Vehicles: {provider.capabilities.vehicleClasses.join(", ")} · Handover: {provider.capabilities.handover} ·
-          Updates: {provider.capabilities.updates}
-        </p>
+        <dl className="grid grid-cols-1 sm:grid-cols-3 gap-x-4 gap-y-2 text-[12.5px]">
+          <Fact label="Carries by" value={describeVehicles(provider.capabilities.vehicleClasses)} />
+          <Fact label="Parcel handover" value={describeHandover(provider.capabilities.handover)} />
+          <Fact label="Delivery updates" value={describeUpdates(provider.capabilities.updates)} />
+        </dl>
       )}
 
       {provider.capabilities?.prepaidWallet && (
         <div className="rounded-[12px] border border-border-default p-3.5">
           <div className="flex items-center justify-between mb-2">
-            <p className="text-[12px] font-semibold uppercase tracking-wide text-text-muted">Wallet</p>
+            <p className="text-[12px] font-semibold uppercase tracking-wide text-text-muted">{provider.label} wallet</p>
             <button type="button" onClick={() => refetch()} className="text-[12px] text-admin-accent font-semibold">
               Refresh
             </button>
@@ -70,14 +76,31 @@ export function ProviderCard({ provider, nodes }: ProviderCardProps) {
           {walletLoading ? (
             <p className="text-[13px] text-text-muted">Loading wallet…</p>
           ) : unreachable ? (
-            <p className="text-[13px] text-status-danger" role="alert">
-              Couldn&apos;t reach {provider.label}. Try again in a moment.
-            </p>
+            <div className="rounded-[10px] bg-status-danger-bg px-3 py-2.5" role="alert">
+              <p className="text-[13px] font-semibold text-status-danger">
+                We can&apos;t see the {provider.label} wallet right now
+              </p>
+              <p className="text-[12.5px] text-text-secondary mt-1">
+                Locoomo couldn&apos;t connect to {provider.label}, so we can&apos;t show the balance, and new parcels may not
+                be booked with them until it&apos;s fixed. Parcels will go to Locoomo riders in the meantime.
+              </p>
+              <p className="text-[12.5px] text-text-secondary mt-1">
+                Try again in a moment. If it keeps happening, ask your tech team to check the {provider.label} connection.
+              </p>
+              {reference && (
+                <p className="text-[11px] text-text-muted mt-1.5">
+                  Support reference: <span className="font-mono select-all">{reference}</span>
+                </p>
+              )}
+              <Button variant="outline" size="sm" className="mt-2.5" isLoading={isRefetching} onClick={() => refetch()}>
+                Try again
+              </Button>
+            </div>
           ) : wallet ? (
             <>
               {wallet.lowBalance && (
                 <p className="text-[13px] font-semibold text-status-danger bg-status-danger-bg rounded-[10px] px-3 py-2 mb-3" role="alert">
-                  Top up the {provider.label} wallet — the balance is below the alert threshold.
+                  Top up the {provider.label} wallet — the balance is running low.
                 </p>
               )}
               <p className="text-[11px] text-text-muted">Spendable on new jobs</p>
@@ -89,27 +112,27 @@ export function ProviderCard({ provider, nodes }: ProviderCardProps) {
                 <dd className="text-right text-text-primary">{kobo(wallet.balanceKobo)}</dd>
                 <dt className="text-text-muted">Held for live jobs</dt>
                 <dd className="text-right text-text-primary">{kobo(wallet.heldKobo)}</dd>
-                <dt className="text-text-muted">Available</dt>
+                <dt className="text-text-muted">Not tied up</dt>
                 <dd className="text-right text-text-primary">{kobo(wallet.availableKobo)}</dd>
-                <dt className="text-text-muted">Reserved for surcharges</dt>
+                <dt className="text-text-muted">Kept for extra charges</dt>
                 <dd className="text-right text-text-primary">{kobo(wallet.reservedForSurchargesKobo)}</dd>
               </dl>
             </>
           ) : (
-            <p className="text-[13px] text-text-muted">No wallet information.</p>
+            <p className="text-[13px] text-text-muted">No wallet to show.</p>
           )}
         </div>
       )}
 
       <dl className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2 text-[12.5px]">
-        <Fact label="Priority" value={provider.priority} help={isInHouse ? "Always the fallback" : "Lower is tried first"} />
-        <Fact label="Attempts per order" value={provider.maxAttempts} />
+        <Fact label="Order of preference" value={provider.priority} help={isInHouse ? "Always the backup" : "Lower number goes first"} />
+        <Fact label="Tries per parcel" value={provider.maxAttempts} />
         <Fact
-          label="Wait for a driver"
-          value={provider.assignTimeoutMinutes === null ? "Indefinitely" : `${provider.assignTimeoutMinutes} min`}
+          label="Waits for a driver"
+          value={provider.assignTimeoutMinutes === null ? "As long as it takes" : `${provider.assignTimeoutMinutes} min`}
         />
         <Fact
-          label="Road distance"
+          label="Distance covered"
           value={
             provider.minDistanceKm === null && provider.maxDistanceKm === null
               ? "No limit"
@@ -117,15 +140,15 @@ export function ProviderCard({ provider, nodes }: ProviderCardProps) {
           }
         />
         <Fact
-          label="Cost cap"
-          value={provider.maxCostShare === null ? "No cap" : `${Math.round(provider.maxCostShare * 100)}% of fee`}
+          label="Price limit"
+          value={provider.maxCostShare === null ? "No cap" : `Up to ${Math.round(provider.maxCostShare * 100)}% of delivery fee`}
         />
         <Fact
-          label="Pilot stations"
-          value={provider.pilotNodeIds === null ? "All stations" : `${provider.pilotNodeIds.length} station(s)`}
+          label="Stations using it"
+          value={provider.pilotNodeIds === null ? "All stations" : `${provider.pilotNodeIds.length} chosen ${provider.pilotNodeIds.length === 1 ? "station" : "stations"}`}
         />
         {provider.lowBalanceAlertKobo !== null && (
-          <Fact label="Low-balance alert" value={kobo(provider.lowBalanceAlertKobo)} />
+          <Fact label="Warn me when below" value={kobo(provider.lowBalanceAlertKobo)} />
         )}
       </dl>
 
@@ -230,28 +253,28 @@ function ProviderForm({
       ) : (
         <label className="flex items-center gap-2.5 text-[13px] font-medium text-text-primary">
           <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} className="w-4 h-4" />
-          Receives new jobs
+          Send new parcels to this courier
         </label>
       )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {!isInHouse && (
-          <Input label="Priority (lower is tried first)" type="number" value={priority} onChange={(e) => setPriority(e.target.value)} />
+          <Input label="Order of preference (lower number goes first)" type="number" value={priority} onChange={(e) => setPriority(e.target.value)} />
         )}
-        <Input label="Attempts per order (1–10)" type="number" value={maxAttempts} onChange={(e) => setMaxAttempts(e.target.value)} />
+        <Input label="Tries per parcel before using riders (1–10)" type="number" value={maxAttempts} onChange={(e) => setMaxAttempts(e.target.value)} />
         {!isInHouse && (
           <>
             <Input
-              label="Give up if no driver accepts (minutes)"
+              label="Switch to riders if no driver accepts within (minutes)"
               type="number"
-              placeholder="Blank = wait indefinitely"
+              placeholder="Leave empty to keep waiting"
               value={timeout}
               onChange={(e) => setTimeoutMin(e.target.value)}
             />
-            <Input label="Minimum road distance (km)" type="number" placeholder="No limit" value={minKm} onChange={(e) => setMinKm(e.target.value)} />
-            <Input label="Maximum road distance (km)" type="number" placeholder="No limit" value={maxKm} onChange={(e) => setMaxKm(e.target.value)} />
+            <Input label="Shortest trip (km)" type="number" placeholder="No limit" value={minKm} onChange={(e) => setMinKm(e.target.value)} />
+            <Input label="Longest trip (km)" type="number" placeholder="No limit" value={maxKm} onChange={(e) => setMaxKm(e.target.value)} />
             <Input
-              label="Cost cap (share of delivery fee)"
+              label="Highest courier price (share of delivery fee)"
               type="number"
               step="0.05"
               placeholder="e.g. 0.75 = 75%"
@@ -262,9 +285,9 @@ function ProviderForm({
         )}
         {provider.capabilities?.prepaidWallet && (
           <Input
-            label="Low-balance alert (₦)"
+            label="Warn me when the wallet drops below (₦)"
             type="number"
-            placeholder="No alert"
+            placeholder="No warning"
             value={alertNaira}
             onChange={(e) => setAlertNaira(e.target.value)}
           />
@@ -273,7 +296,7 @@ function ProviderForm({
 
       {!isInHouse && (
         <fieldset className="flex flex-col gap-2">
-          <legend className="text-[12px] font-medium text-text-secondary mb-1">Pilot stations (orders from these only)</legend>
+          <legend className="text-[12px] font-medium text-text-secondary mb-1">Which stations can use this courier</legend>
           <label className="flex items-center gap-2.5 text-[13px] text-text-primary">
             <input type="checkbox" checked={allStations} onChange={(e) => setAllStations(e.target.checked)} className="w-4 h-4" />
             All stations
@@ -340,4 +363,25 @@ function Badge({ tone, children }: { tone: "success" | "warning" | "neutral"; ch
       {children}
     </span>
   );
+}
+
+const VEHICLE_NAMES: Record<string, string> = { bicycle: "bicycles", motorbike: "motorbikes", car: "cars", van: "vans", truck: "trucks" };
+
+function describeVehicles(classes: string[]): string {
+  if (classes.length === 0) return "—";
+  const names = classes.map((c) => VEHICLE_NAMES[c] ?? c.replace(/_/g, " "));
+  const text = names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}` : names[0];
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+function describeHandover(handover: string): string {
+  if (handover === "provider_code") return "Station gives the courier a code";
+  if (handover === "locoomo_code") return "Rider shows a code to the station";
+  return handover.replace(/_/g, " ");
+}
+
+function describeUpdates(updates: string): string {
+  if (updates === "webhook") return "Sent to us automatically";
+  if (updates === "internal") return "Tracked inside Locoomo";
+  return updates.replace(/_/g, " ");
 }

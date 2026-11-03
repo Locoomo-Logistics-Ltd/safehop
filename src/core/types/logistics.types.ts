@@ -294,10 +294,11 @@ export interface RouteDistances {
     originNodeName: string;
     destinationNodeId: string;
     destinationNodeName: string;
-    straightLineKm: number;
-    roadDistanceKm: number;
-    source: string;
-    updatedAt: string;
+    /** Staging returns `null` for pairs that haven't been measured yet. */
+    straightLineKm: number | null;
+    roadDistanceKm: number | null;
+    source: string | null;
+    updatedAt: string | null;
   }[];
 }
 

@@ -98,12 +98,16 @@ export function RouteDistancesScreen() {
                         <td className="px-5 py-3 text-[13px] text-text-primary">{r.originNodeName}</td>
                         <td className="px-5 py-3 text-[13px] text-text-primary">{r.destinationNodeName}</td>
                         <td className="px-5 py-3 text-[13px] text-text-secondary text-right whitespace-nowrap">
-                          {r.straightLineKm.toFixed(1)} km
+                          {r.straightLineKm === null ? "—" : `${r.straightLineKm.toFixed(1)} km`}
                         </td>
                         <td className="px-5 py-3 text-[13px] font-semibold text-text-primary text-right whitespace-nowrap">
-                          {r.roadDistanceKm.toFixed(1)} km
+                          {r.roadDistanceKm === null ? (
+                            <span className="font-normal text-text-muted">Not measured yet</span>
+                          ) : (
+                            `${r.roadDistanceKm.toFixed(1)} km`
+                          )}
                         </td>
-                        <td className="px-5 py-3 text-[12px] text-text-muted">{r.source}</td>
+                        <td className="px-5 py-3 text-[12px] text-text-muted">{r.source ?? "Estimate"}</td>
                       </tr>
                     ))
                   )}

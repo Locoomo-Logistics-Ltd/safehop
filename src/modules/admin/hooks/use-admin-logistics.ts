@@ -52,12 +52,17 @@ export function useProviderWallet(key: string, enabled: boolean) {
     enabled,
     retry: false,
   });
+  const error = query.error;
+  // 404 = this courier has no wallet; any other failure (502 and friends) = we couldn't read it.
+  const failed = isApiError(error) && error.status !== 404;
   return {
     wallet: query.data,
     isLoading: query.isLoading,
-    // 502 = the courier couldn't be reached; anything else (404) = no wallet.
-    unreachable: isApiError(query.error) && query.error.code === "LOGISTICS_PROVIDER_ERROR",
+    unreachable: failed,
+    /** Support reference the backend team can look up in their logs. */
+    reference: failed ? error.correlationId : undefined,
     refetch: query.refetch,
+    isRefetching: query.isFetching,
   };
 }
 
