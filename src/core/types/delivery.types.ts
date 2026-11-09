@@ -8,6 +8,8 @@
  */
 
 /** UI offers 4 tiers; the real API only has SMALL/MEDIUM/LARGE — "xl" maps to LARGE when sent to the server (see delivery.service.ts). */
+import type { OpeningHours } from "./logistics.types";
+
 export type ParcelSize = "small" | "medium" | "large" | "xl";
 
 export type DeliveryMethod = "drop_and_pick" | "express";
@@ -67,6 +69,8 @@ export interface PickupNode {
   location: GeoPoint;
   capacity: number;
   operatingHours: string | null;
+    openingHours?: OpeningHours | null;
+  contactPhone?: string | null;
   /** Only present from `GET /nodes/nearby` (`distanceMeters` / 1000), not `GET /nodes/:id`. */
   distanceKm?: number;
 }

@@ -14,3 +14,9 @@ export function formatNigerianPhone(value: string): string {
 export function isValidPhone(value: string): boolean {
   return /^\+?\d{7,15}$/.test(value);
 }
+
+/** E.164: "+", then 7–15 digits, first digit non-zero. Nigerian numbers are +234 plus exactly 10 digits. */
+export function isValidE164(value: string): boolean {
+  if (!/^\+[1-9]\d{6,14}$/.test(value)) return false;
+  return value.startsWith("+234") ? value.length === 14 : true;
+}

@@ -2,7 +2,7 @@
 import { httpClient } from "@/core/api/client";
 import { ENDPOINTS } from "@/core/api/endpoints";
 import type { PaginatedList } from "@/core/api/types";
-import type { GeoPoint, PickupNode } from "@/core/types";
+import type { GeoPoint, OpeningHours, PickupNode } from "@/core/types";
 
 /**
  * Nodes service — Pickup Station directory for the Consumer's node
@@ -27,6 +27,8 @@ interface RawNode {
   longitude: number;
   capacity: number;
   operatingHours: string | null;
+  openingHours?: OpeningHours | null;
+  contactPhone?: string | null;
 }
 
 interface RawNearbyNode extends RawNode {
@@ -43,6 +45,8 @@ function mapNode(raw: RawNode): PickupNode {
     location: { lat: raw.latitude, lng: raw.longitude },
     capacity: raw.capacity,
     operatingHours: raw.operatingHours,
+    openingHours: raw.openingHours ?? null,
+    contactPhone: raw.contactPhone ?? null,
   };
 }
 

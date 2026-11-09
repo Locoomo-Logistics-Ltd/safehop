@@ -15,6 +15,7 @@
 
 import type { PayoutAccountFields } from "./earnings.types";
 import type { CreatePaymentIntentPayload } from "./payment.types";
+import type { OpeningHours } from "./logistics.types";
 
 export type ActivityEventType =
   | "handoff_to_rider"
@@ -59,7 +60,9 @@ export interface NodeOperatorOnboardingPayload {
   latitude: number;
   longitude: number;
   capacity: number;
-  operatingHours?: string;
+    /** E.164, e.g. +2348031234567 */
+  contactPhone: string;
+  openingHours: OpeningHours;
 }
 
 export type NodeOperatorNodeStatus = "pending" | "active" | "inactive" | "suspended";
@@ -88,6 +91,8 @@ export interface NodeOperatorNode {
   status: NodeOperatorNodeStatus;
   onboardingType: string;
   operatingHours: string | null;
+  openingHours?: OpeningHours | null;
+  contactPhone?: string | null;
   /**
    * Whether this Node is publicly discoverable (default `true`) —
    * toggled by its owner via `PATCH

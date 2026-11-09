@@ -12,6 +12,8 @@
 
 import type { DeliveryStatus, GeoPoint, TrackingEvent } from "./delivery.types";
 import type { RiderVerificationDocument } from "./rider.types";
+import type { OpeningHours } from "./logistics.types";
+
 
 // ── Dashboard ────────────────────────────────────────────────────
 
@@ -96,6 +98,8 @@ export interface AdminNodeRecord {
   status: NodeLifecycleStatus;
   onboardingType: string;
   operatingHours: string | null;
+  openingHours?: OpeningHours | null;
+  contactPhone?: string | null;
   /**
    * Owner-toggled public discoverability (docs/API.md, 2026-09-03) —
    * `PATCH /nodes/:id` deliberately doesn't accept it, but Admin does
@@ -133,6 +137,8 @@ export interface OnboardNodePayload {
   longitude: number;
   capacity: number;
   operatingHours?: string;
+  openingHours?: OpeningHours | null;
+  contactPhone?: string | null;
 }
 
 /** PATCH /nodes/:id request body — every field optional per docs/API.md. This is also how an Admin approves a pending Node (`{status: "active"}`) or retires one (`inactive`/`suspended`) — there's no delete endpoint, only status transitions. The "Manage" panel only ever sends `status` today; the other fields are here because the real route accepts them, not because any screen uses them yet. */

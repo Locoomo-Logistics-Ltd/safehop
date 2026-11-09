@@ -14,6 +14,7 @@ import { useNodeSetup } from "@/modules/node/hooks/use-node-setup";
 import { NodeStaffCard } from "./NodeStaffCard";
 import { NodeStatusBadge } from "./NodeStatusBadge";
 import { NodeVisibilityCard } from "./NodeVisibilityCard";
+import { summarizeOpeningHours } from "@/lib/format-opening-hours";
 
 /**
  * One station's detail page (`/node/nodes/[nodeId]`) — new 2026-09-02,
@@ -129,12 +130,12 @@ export function NodeDetailScreen() {
                   <PackageIcon size={13} />
                   {node.capacity} parcels
                 </span>
-                {node.operatingHours && (
-                  <span className="inline-flex items-center gap-1.5">
-                    <ClockIcon size={13} />
-                    {node.operatingHours}
-                  </span>
-                )}
+               {(summarizeOpeningHours(node.openingHours) ?? node.operatingHours) && (
+  <span className="inline-flex items-center gap-1.5">
+    <ClockIcon size={13} />
+    {summarizeOpeningHours(node.openingHours) ?? node.operatingHours}
+  </span>
+)}
               </div>
             </div>
           </div>

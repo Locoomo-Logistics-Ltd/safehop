@@ -2,6 +2,7 @@ import { httpClient } from "@/core/api/client";
 import { ENDPOINTS } from "@/core/api/endpoints";
 import { ApiError } from "@/core/api/errors";
 import type { PaginatedList } from "@/core/api/types";
+import { summarizeOpeningHours } from "@/lib/format-opening-hours";
 
 import { formatDate } from "@/lib/format";
 
@@ -49,7 +50,8 @@ function mapNodeRecord(node: AdminNodeRecord): AdminNodeStatus {
     onboardingType: node.onboardingType,
     status: node.status,
     capacity: node.capacity,
-    operatingHoursLabel: node.operatingHours ?? "Hours not set",
+    // operatingHoursLabel: node.operatingHours ?? "Hours not set",
+    operatingHoursLabel:summarizeOpeningHours(node.openingHours) ?? node.operatingHours ?? "Hours not set",
     createdAtLabel: formatDate(node.createdAt),
     location: { lat: node.latitude, lng: node.longitude },
     // Owner-toggled, Admin-read-only (docs/API.md, 2026-09-03):

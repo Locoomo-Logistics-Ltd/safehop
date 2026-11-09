@@ -4,9 +4,16 @@ import { useState } from "react";
 import { Button, Card, Input } from "@/components/ui";
 import { ErrorAlert } from "@/components/ui/error-alert";
 import { AddressGeocodeButton } from "@/components/maps/AddressGeocodeButton";
-import { ClockIcon, MapPinIcon, HomeIcon, PackageIcon, NavigationIcon } from "@/components/icons";
+import { MapPinIcon, HomeIcon, PackageIcon, NavigationIcon, PhoneIcon } from "@/components/icons";
 import { getFriendlyError } from "@/core/api/errors";
 import type { NodeOperatorOnboardingPayload } from "@/core/types";
+import { formatNigerianPhone, isValidE164 } from "@/lib/phone";
+import {
+  NodeHoursEditor,
+  defaultHoursDraft,
+  isHoursDraftValid,
+  toOpeningHours,
+} from "@/components/forms/NodeHoursEditor";
 
 interface NodeOnboardingFormProps {
   onSubmit: (payload: NodeOperatorOnboardingPayload) => void;
@@ -47,30 +54,38 @@ export function NodeOnboardingForm({
   const [capacity, setCapacity] = useState("");
   const [latitude, setLatitude] = useState("");
   const [longitude, setLongitude] = useState("");
-  const [operatingHours, setOperatingHours] = useState("");
+  // const [operatingHours, setOperatingHours] = useState("");
+  const [contactPhone, setContactPhone] = useState("");
+const [hours, setHours] = useState(defaultHoursDraft);
 
-  const isValid =
-    name.trim() &&
-    address.trim() &&
-    city.trim() &&
-    state.trim() &&
-    capacity.trim() &&
-    latitude.trim() &&
-    longitude.trim();
+const phoneE164 = formatNigerianPhone(contactPhone);
+const phoneOk = isValidE164(phoneE164);
 
-  const handleSubmit = () => {
-    onSubmit({
-      name,
-      address,
-      city,
-      state,
-      capacity: Number(capacity),
-      latitude: Number(latitude),
-      longitude: Number(longitude),
-      operatingHours: operatingHours.trim() || undefined,
-    });
-  };
+ const isValid =
+  name.trim() &&
+  address.trim() &&
+  city.trim() &&
+  state.trim() &&
+  capacity.trim() &&
+  latitude.trim() &&
+  longitude.trim() &&
+  phoneOk &&
+  isHoursDraftValid(hours);
 
+ const handleSubmit = () => {
+  if (!phoneOk) return;
+  onSubmit({
+    name,
+    address,
+    city,
+    state,
+    capacity: Number(capacity),
+    latitude: Number(latitude),
+    longitude: Number(longitude),
+    contactPhone: phoneE164,
+    openingHours: toOpeningHours(hours),
+  });
+};
   return (
     <div className="px-4 md:px-6 pt-4 pb-10 max-w-[480px] mx-auto">
       <h1 className="font-display text-[18px] font-bold text-text-primary mb-1">
@@ -182,12 +197,19 @@ export function NodeOnboardingForm({
               onChange={(e) => setCapacity(e.target.value)}
             />
             <Input
-              label="Operating Hours (optional)"
-              placeholder="Mon-Sat 8am-7pm"
-              leftElement={<ClockIcon size={16} />}
-              value={operatingHours}
-              onChange={(e) => setOperatingHours(e.target.value)}
-            />
+  label="Contact Phone"
+  type="tel"
+  placeholder="0803 123 4567"
+  hint="Customers and riders will call this number"
+  leftElement={<PhoneIcon size={16} />}
+  value={contactPhone}
+  onChange={(e) => setContactPhone(e.target.value)}
+  error={contactPhone && !phoneOk ? "Enter a valid phone number" : undefined}
+/>
+<div>
+  <p className="text-[13px] font-medium text-text-secondary mb-2">Opening Hours</p>
+  <NodeHoursEditor value={hours} onChange={setHours} />
+</div>
           </div>
         </Card>
       </div>

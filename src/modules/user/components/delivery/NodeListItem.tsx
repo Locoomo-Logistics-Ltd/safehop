@@ -3,6 +3,7 @@
 import { cn } from "@/lib/utils";
 import { MapPinIcon } from "@/components/icons";
 import type { PickupNode } from "@/core/types";
+import { summarizeOpeningHours } from "@/lib/format-opening-hours";
 
 interface NodeListItemProps {
   node: PickupNode;
@@ -35,7 +36,10 @@ export function NodeListItem({ node, isSelected, onSelect }: NodeListItemProps) 
         <p className="text-[12px] text-text-muted truncate">
           {node.distanceKm !== undefined ? `${node.distanceKm.toFixed(1)}km away · ` : ""}
           {node.city}, {node.state}
-          {node.operatingHours ? ` · ${node.operatingHours}` : ""}
+          {(() => {
+  const hoursText = summarizeOpeningHours(node.openingHours) ?? node.operatingHours;
+  return hoursText ? ` · ${hoursText}` : "";
+})()}
         </p>
       </div>
     </button>
